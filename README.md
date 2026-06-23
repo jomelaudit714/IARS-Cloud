@@ -1,4 +1,14 @@
-# Internal Audit Report System (IARS) v3.1
+# Internal Audit Report System (IARS) v3.2
+
+
+## Exact Master Data labels
+
+- **Findings** now stores only the exact `Classification_Matrix → Category` value.
+- The classification score is stored only in the separate **Score** column.
+- **Reaction/Response** values use the exact spelling, capitalization, and internal spacing from `Response_Master → Response`.
+- **Frequency** values use the exact spelling, capitalization, and internal spacing from `Frequency_Master → Frequency`.
+- **Audited By1** and Uploaded By dropdown values preserve the exact auditor name from `Auditors → Auditor`.
+- If a Findings category is changed in the generated-record editor, Score, Improve Score, Net Score, User, and canonical labels are refreshed from the current Master Data before download.
 
 ## New archive controls
 
@@ -29,13 +39,9 @@ The PDF archive is already configured, but the new Add New Auditor feature needs
 
 The main `SUPABASE_SETUP.sql` was also updated for new Supabase projects.
 
-## Repaired Master Data workbook
+## Current Master Data workbook
 
-The uploaded `Master_Data(3).xlsx` was fully imported and re-exported as a clean `.xlsx` package. All 15 sheets and the key Employees, Auditors, and Classification Matrix contents were preserved. The cleaned workbook is included as:
-
-`data/Master_Data.xlsx`
-
-Replace the previous GitHub `data/Master_Data.xlsx` with the file included in this ZIP. Keep your original workbook as a backup until the clean version is confirmed in Excel.
+The package includes the user's validated current workbook as `data/Master_Data.xlsx`. The workbook was copied without altering its data.
 
 ## Existing features preserved
 - Multiple PDF extraction and consolidated Excel output

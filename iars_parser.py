@@ -24,7 +24,7 @@ AUDITORS = [
     "Joshua Christopher Catis",
 ]
 
-FINDINGS_DROPDOWN = [
+FINDING_RULE_LABELS = [
     "Stock Overage (₱3,000.00 and above) -4",
     "Stock Overage (below ₱3,000.00) -2",
     "Stock Shortage (₱3,000.00 and above) -8",
@@ -65,6 +65,13 @@ FINDINGS_DROPDOWN = [
     "Delivery and/or Computation, Reporting Error(s) -2",
     "Immaterial Findings 3",
     "No Findings 10",
+]
+
+# User-facing finding choices contain only the exact category name.
+# The numeric score is stored separately in the Score column.
+FINDINGS_DROPDOWN = [
+    re.sub(r"\s+(-?\d+)\s*$", "", value).strip()
+    for value in FINDING_RULE_LABELS
 ]
 
 REACTION_OPTIONS = [
@@ -160,6 +167,109 @@ def clean_cell_preserve(value):
         return ""
     lines = [clean_text(x) for x in str(value).replace("\r", "\n").split("\n")]
     return "\n".join([x for x in lines if x])
+
+
+def master_display_text(value):
+    """Return a Master Data label exactly as stored, except outer blank space."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    return str(value).strip()
+
+
+def _master_match_key(value):
+    """Case/spacing-insensitive key used only for matching Master Data values."""
+    text = str(value or "").upper()
+    # Treat P3,000.00, ₱3,000.00 and PHP 3,000.00 as the same category text.
+    text = re.sub(r"(?:PHP|₱|P)\s*(?=\d)", "", text)
+    return re.sub(r"[^A-Z0-9]+", " ", text).strip()
+
+
+def _find_master_column(df, candidates):
+    if df is None or getattr(df, "empty", True):
+        return None
+    wanted = {_master_match_key(candidate) for candidate in candidates}
+    for column in df.columns:
+        if _master_match_key(column) in wanted:
+            return column
+    return None
+
+
+def master_option_values(df, value_columns, fallback=()):
+    """Read enabled display values from a Master Data sheet without changing case/spaces."""
+    value_col = _find_master_column(df, value_columns)
+    if value_col is None:
+        return list(fallback)
+
+    enabled_col = _find_master_column(df, ["Enabled"])
+    status_col = _find_master_column(df, ["Status"])
+    values = []
+    seen = set()
+
+    for _, row in df.iterrows():
+        if enabled_col is not None:
+            enabled = clean_text(row.get(enabled_col, "Yes")).casefold()
+            if enabled in {"no", "false", "0", "disabled", "inactive"}:
+                continue
+        if status_col is not None:
+            status = clean_text(row.get(status_col, "Active")).casefold()
+            if status and status not in {"active", "enabled"}:
+                continue
+
+        value = master_display_text(row.get(value_col, ""))
+        key = _master_match_key(value)
+        if value and key not in seen:
+            values.append(value)
+            seen.add(key)
+
+    return values or list(fallback)
+
+
+def canonical_master_option(value, options, default=None):
+    """Return the exact Master Data display value matching a normalized input."""
+    raw = master_display_text(value)
+    key = _master_match_key(raw)
+    if key:
+        for option in options or []:
+            if _master_match_key(option) == key:
+                return option
+    return raw if default is None else default
+
+
+def master_sheet_options(master_sheets, sheet_name, value_columns, fallback=()):
+    sheet = (master_sheets or {}).get(sheet_name, pd.DataFrame())
+    return master_option_values(sheet, value_columns, fallback)
+
+
+def master_finding_options(master_sheets=None):
+    return master_sheet_options(
+        master_sheets,
+        "Classification_Matrix",
+        ["Category", "Findings Category", "Finding Category"],
+        FINDINGS_DROPDOWN,
+    )
+
+
+def master_response_options(master_sheets=None):
+    return [""] + master_sheet_options(
+        master_sheets,
+        "Response_Master",
+        ["Response", "Reaction", "Response Category"],
+        [value for value in REACTION_OPTIONS if value],
+    )
+
+
+def master_frequency_options(master_sheets=None):
+    return [""] + master_sheet_options(
+        master_sheets,
+        "Frequency_Master",
+        ["Frequency", "Frequency Rate", "Frequency Category"],
+        [value for value in FREQUENCY_OPTIONS if value],
+    )
 
 
 def find_after_label(text, labels):
@@ -342,7 +452,7 @@ def load_auditor_records(auditors_df=None):
 
     if auditors_df is not None and not getattr(auditors_df, "empty", True):
         for _, r in auditors_df.iterrows():
-            auditor = clean_text(r.get("Auditor", ""))
+            auditor = master_display_text(r.get("Auditor", ""))
             if not auditor:
                 continue
 
@@ -350,7 +460,7 @@ def load_auditor_records(auditors_df=None):
             if status and status.lower() not in ["active", ""]:
                 continue
 
-            user = clean_text(r.get("User", ""))
+            user = master_display_text(r.get("User", ""))
             records.append({
                 "auditor": auditor,
                 "user": user or auditor.split()[0],
@@ -1368,6 +1478,46 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     return "Ignore or Disregard Office/Operation Best Practices -3"
 
 
+def canonical_response_label(value, response_df=None, default="Do Some Adjustment"):
+    """Return the exact Response_Master label, preserving its case and spacing."""
+    options = master_option_values(
+        response_df,
+        ["Response", "Reaction", "Response Category"],
+        [item for item in REACTION_OPTIONS if item],
+    )
+    matched = canonical_master_option(value, options, "")
+    if matched:
+        return matched
+    return canonical_master_option(default, options, default)
+
+
+def _master_numeric_rate(df, label, value_columns, rate_columns, fallback=0):
+    value_col = _find_master_column(df, value_columns)
+    rate_col = _find_master_column(df, rate_columns)
+    target = _master_match_key(label)
+    if value_col is not None and rate_col is not None and target:
+        for _, row in df.iterrows():
+            if _master_match_key(row.get(value_col, "")) != target:
+                continue
+            try:
+                return int(float(row.get(rate_col, fallback)))
+            except (TypeError, ValueError):
+                break
+    return fallback
+
+
+def response_rate_value(value, response_df=None):
+    exact = canonical_response_label(value, response_df)
+    fallback = RESPONSE_RATE.get(value, RESPONSE_RATE.get(exact, 0))
+    return _master_numeric_rate(
+        response_df,
+        exact,
+        ["Response", "Reaction", "Response Category"],
+        ["Rate", "Response Rate", "Score"],
+        fallback,
+    )
+
+
 def detect_reaction(issue, narrative, recommendation):
     text = f"{issue} {narrative} {recommendation}".lower()
     if "uncooperative" in text:
@@ -1383,8 +1533,8 @@ def detect_reaction(issue, narrative, recommendation):
     return "Do Some Adjustment"
 
 
-def normalize_frequency_label(value):
-    """Normalize typed/OCR frequency labels to the exact IARS dropdown values."""
+def normalize_frequency_label(value, frequency_df=None):
+    """Normalize OCR frequency text and return the exact Frequency_Master label."""
     raw = clean_text(value)
     if not raw:
         return ""
@@ -1393,42 +1543,59 @@ def normalize_frequency_label(value):
     text = re.sub(r"[^a-z0-9]+", " ", text).strip()
 
     if text in ["not applicable", "n a", "na"]:
-        return "Not Applicable"
+        semantic = "Not Applicable"
+    else:
+        ordinal_map = {
+            "1": "First Time", "1st": "First Time", "first": "First Time",
+            "2": "Second Time", "2nd": "Second Time", "second": "Second Time",
+            "3": "Third Time", "3rd": "Third Time", "third": "Third Time",
+            "4": "Fourth Time", "4th": "Fourth Time", "fourth": "Fourth Time",
+            "5": "Fifth Time", "5th": "Fifth Time", "fifth": "Fifth Time",
+            "6": "Sixth Time", "6th": "Sixth Time", "sixth": "Sixth Time",
+            "7": "Seventh Time", "7th": "Seventh Time", "seventh": "Seventh Time",
+        }
+        semantic = ""
+        tokens = text.split()
+        for token in tokens:
+            if token in ordinal_map:
+                semantic = ordinal_map[token]
+                break
 
-    ordinal_map = {
-        "1": "First Time", "1st": "First Time", "first": "First Time",
-        "2": "Second Time", "2nd": "Second Time", "second": "Second Time",
-        "3": "Third Time", "3rd": "Third Time", "third": "Third Time",
-        "4": "Fourth Time", "4th": "Fourth Time", "fourth": "Fourth Time",
-        "5": "Fifth Time", "5th": "Fifth Time", "fifth": "Fifth Time",
-        "6": "Sixth Time", "6th": "Sixth Time", "sixth": "Sixth Time",
-        "7": "Seventh Time", "7th": "Seventh Time", "seventh": "Seventh Time",
-    }
+        if not semantic:
+            compact = text.replace(" ", "")
+            for token, canonical in ordinal_map.items():
+                if compact in [f"{token}time", token]:
+                    semantic = canonical
+                    break
 
-    tokens = text.split()
-    for token in tokens:
-        if token in ordinal_map:
-            return ordinal_map[token]
+        if not semantic:
+            semantic = raw
 
-    compact = text.replace(" ", "")
-    for token, canonical in ordinal_map.items():
-        if compact in [f"{token}time", token]:
-            return canonical
-
-    # Preserve an already-canonical value when possible.
-    for option in FREQUENCY_OPTIONS:
-        if clean_text(option).lower() == raw.lower():
-            return option
-
-    return raw
+    options = master_option_values(
+        frequency_df,
+        ["Frequency", "Frequency Rate", "Frequency Category"],
+        [item for item in FREQUENCY_OPTIONS if item],
+    )
+    matched = canonical_master_option(semantic, options, "")
+    if matched:
+        return matched
+    return semantic
 
 
-def is_repeat_frequency(value):
-    return normalize_frequency_label(value) in {
-        "Second Time", "Third Time", "Fourth Time", "Fifth Time",
-        "Sixth Time", "Seventh Time",
-    }
+def frequency_rate_value(value, frequency_df=None):
+    exact = normalize_frequency_label(value, frequency_df)
+    fallback = FREQUENCY_RATE.get(value, FREQUENCY_RATE.get(exact, 1))
+    return _master_numeric_rate(
+        frequency_df,
+        exact,
+        ["Frequency", "Frequency Rate", "Frequency Category"],
+        ["Rate", "Frequency Value", "Score"],
+        fallback,
+    )
 
+
+def is_repeat_frequency(value, frequency_df=None):
+    return frequency_rate_value(value, frequency_df) > 1
 
 def detect_frequency(issue, narrative, recommendation):
     text = clean_text(f"{issue} {narrative} {recommendation}")
@@ -1475,6 +1642,44 @@ def detect_frequency(issue, narrative, recommendation):
 def parse_score(findings):
     m = re.search(r"(-?\d+)\s*$", findings or "")
     return int(m.group(1)) if m else 0
+
+
+def finding_category_name(value):
+    """Remove a trailing classification score from a legacy finding label."""
+    return re.sub(r"\s+(-?\d+)\s*$", "", master_display_text(value)).strip()
+
+
+def resolve_finding_category(value, classification_df=None):
+    """Return exact Master Data category text and its separate numeric score."""
+    category = finding_category_name(value)
+    fallback_score = parse_score(value)
+    category_col = _find_master_column(
+        classification_df,
+        ["Category", "Findings Category", "Finding Category"],
+    )
+    score_col = _find_master_column(
+        classification_df,
+        ["Score", "Finding Score", "Category Score"],
+    )
+    target = _master_match_key(category)
+
+    if category_col is not None and target:
+        for _, row in classification_df.iterrows():
+            if _master_match_key(row.get(category_col, "")) != target:
+                continue
+            exact_category = master_display_text(row.get(category_col, "")) or category
+            try:
+                score = int(float(row.get(score_col, fallback_score))) if score_col is not None else fallback_score
+            except (TypeError, ValueError):
+                score = fallback_score
+            return exact_category, score
+
+    return category, fallback_score
+
+
+def is_no_or_immaterial_category(value):
+    key = _master_match_key(value)
+    return "NO FINDINGS" in key or "IMMATERIAL FINDINGS" in key
 
 
 def find_column(df, candidates):
@@ -2713,13 +2918,38 @@ def infer_row_auditee_from_context(master_df, header_auditee, issue_title, narra
 
     return match_employee(master_df, header_auditee)
 
-def build_records(pdf_file, master_df=None, manual_df=None, auditors_df=None):
+def build_records(
+    pdf_file,
+    master_df=None,
+    manual_df=None,
+    auditors_df=None,
+    master_sheets=None,
+):
     text = extract_all_text(pdf_file)
     header = extract_header(text)
     emp_id, emp_name = match_employee(master_df, header["auditee_name"])
     auditor_default = prepared_by_auditor(text, auditors_df)
     audit_type = classify_audit_type(text)
     items = extract_finding_rows_from_pdf(pdf_file, text, master_df, auditors_df)
+
+    classification_df = (master_sheets or {}).get("Classification_Matrix", pd.DataFrame())
+    response_df = (master_sheets or {}).get("Response_Master", pd.DataFrame())
+    frequency_df = (master_sheets or {}).get("Frequency_Master", pd.DataFrame())
+
+    response_default = canonical_response_label("Do Some Adjustment", response_df)
+    response_repeat = canonical_response_label("Performed SAME offense", response_df)
+    response_status_quo = canonical_response_label("Maintaining Status Quo", response_df)
+    frequency_first = normalize_frequency_label("First Time", frequency_df)
+    frequency_na = normalize_frequency_label("Not Applicable", frequency_df)
+
+    auditor_options = [record["auditor"] for record in load_auditor_records(auditors_df)]
+
+    def exact_auditor(value):
+        direct = canonical_master_option(value, auditor_options, "")
+        if direct:
+            return direct
+        guessed, _ = canonical_auditor_name(auditors_df, value)
+        return canonical_master_option(guessed, auditor_options, "None")
 
     manual_map = {}
     if manual_df is not None and not manual_df.empty:
@@ -2733,7 +2963,7 @@ def build_records(pdf_file, master_df=None, manual_df=None, auditors_df=None):
     for row_no, item in enumerate(items, 1):
         manual = manual_map.get(item["issue_no"])
         task_id = clean_text(item.get("task_id_override", "")) or header["task_id"]
-        auditor = clean_text(item.get("auditor_override", "")) or auditor_default
+        auditor_raw = master_display_text(item.get("auditor_override", "")) or auditor_default
 
         issue_title = infer_issue_title_from_narrative(item["issue"], item["narrative"])
         issue_title = enhance_issue_title_details(issue_title, item["narrative"])
@@ -2744,19 +2974,23 @@ def build_records(pdf_file, master_df=None, manual_df=None, auditors_df=None):
         explanation = make_sentence(item.get("explanation", "None"))
         correction = concise_text(item.get("correction", "None"), 24, "correction")
 
-        reaction = detect_reaction(issue_title, item["narrative"], recommendation1)
-        frequency = detect_frequency(issue_title, item["narrative"], recommendation1)
+        reaction_raw = detect_reaction(issue_title, item["narrative"], recommendation1)
+        frequency_raw = detect_frequency(issue_title, item["narrative"], recommendation1)
 
         if item.get("reaction_override"):
-            reaction = clean_text(item.get("reaction_override", "")) or reaction
+            reaction_raw = master_display_text(item.get("reaction_override", "")) or reaction_raw
         if item.get("frequency_override"):
-            frequency = normalize_frequency_label(item.get("frequency_override", "")) or frequency
+            frequency_raw = master_display_text(item.get("frequency_override", "")) or frequency_raw
 
         if manual is not None:
             task_id = clean_text(manual.get("Task ID", "")) or task_id
-            auditor = clean_text(manual.get("Auditor", "")) or auditor
-            reaction = clean_text(manual.get("Reaction", "")) or reaction
-            frequency = normalize_frequency_label(manual.get("Frequency", "")) or frequency
+            auditor_raw = master_display_text(manual.get("Auditor", "")) or auditor_raw
+            reaction_raw = master_display_text(manual.get("Reaction", "")) or reaction_raw
+            frequency_raw = master_display_text(manual.get("Frequency", "")) or frequency_raw
+
+        auditor = exact_auditor(auditor_raw)
+        reaction = canonical_response_label(reaction_raw, response_df, response_default)
+        frequency = normalize_frequency_label(frequency_raw, frequency_df) or frequency_first
 
         if clean_text(item.get("auditee_name_override", "")):
             row_emp_id = clean_text(item.get("auditee_id_override", "")) or "None"
@@ -2769,27 +3003,32 @@ def build_records(pdf_file, master_df=None, manual_df=None, auditors_df=None):
                 item.get("narrative", ""),
             )
 
-        findings = classify_finding(
+        classified_value = classify_finding(
             issue_title,
             recommendation1,
             item["narrative"],
             header.get("company", ""),
             header.get("audit_title", ""),
         )
+        findings, score = resolve_finding_category(classified_value, classification_df)
 
-        score = parse_score(findings)
+        if is_repeat_frequency(frequency, frequency_df):
+            reaction = response_repeat
 
-        frequency = normalize_frequency_label(frequency) or "First Time"
-        if is_repeat_frequency(frequency):
-            reaction = "Performed SAME offense"
+        no_or_immaterial = is_no_or_immaterial_category(findings)
+        if no_or_immaterial:
+            reaction = response_status_quo
+            frequency = frequency_na
 
-        if "No Findings" in findings or "Immaterial Findings" in findings:
-            reaction = "Maintaining Status Quo"
-            frequency = "Not Applicable"
+        # Re-canonicalize after applying system defaults so the output always uses
+        # the exact capitalization and spacing stored in Master Data.
+        reaction = canonical_response_label(reaction, response_df, response_default)
+        frequency = normalize_frequency_label(frequency, frequency_df) or frequency_first
+        auditor = exact_auditor(auditor)
 
-        improve = RESPONSE_RATE.get(reaction, 0) * FREQUENCY_RATE.get(frequency, 1)
+        improve = response_rate_value(reaction, response_df) * frequency_rate_value(frequency, frequency_df)
         net = score + improve
-        case_status = "No Case/Issue" if ("No Findings" in findings or "Immaterial Findings" in findings) else "Follow-up with HR"
+        case_status = "No Case/Issue" if no_or_immaterial else "Follow-up with HR"
         user = auditor_user(auditor, auditors_df)
 
         row_dicts.append({
@@ -2801,7 +3040,7 @@ def build_records(pdf_file, master_df=None, manual_df=None, auditors_df=None):
                 "", date.today().isoformat(), audit_type, header["date_reported"],
                 header["audit_reference"], row_emp_id, row_emp_name, task_id or "None",
                 header["scope_date"], header["year"], findings,
-                issue_title,  # Issue Detail Issue = exact issue title.
+                issue_title,
                 explanation or "None", recommendation1 or "None",
                 recommendation2 or "None", auditor or "None", "None",
                 reaction, frequency, correction or "None", "", case_status,
@@ -2809,10 +3048,8 @@ def build_records(pdf_file, master_df=None, manual_df=None, auditors_df=None):
             ],
         })
 
-    # Task ID based filter:
-    # - Blank/None Task ID means all findings in the report are same task.
-    # - Different Task IDs are evaluated separately.
-    # - If actual findings exist in a task, No Findings/Immaterial rows are removed for that task.
+    # Blank/None Task ID means all report findings belong to the same task.
+    # Different Task IDs are evaluated independently.
     filtered = filter_rows_by_task_id(row_dicts)
 
     rows = []
@@ -2824,57 +3061,59 @@ def build_records(pdf_file, master_df=None, manual_df=None, auditors_df=None):
     return pd.DataFrame(rows, columns=HEADERS), header, items
 
 
-    manual_map = {}
-    if manual_df is not None and not manual_df.empty:
-        for _, r in manual_df.iterrows():
-            issue_no = clean_text(r.get("Issue No.", ""))
-            if issue_no:
-                manual_map[issue_no] = r
+def normalize_output_with_master(df, master_sheets=None, auditors_df=None):
+    """Canonicalize edited output and refresh scores from the current Master Data."""
+    if df is None:
+        return df
 
-    rows = []
-    for row_no, item in enumerate(items, 1):
-        manual = manual_map.get(item["issue_no"])
-        task_id = clean_text(item.get("task_id_override", "")) or header["task_id"]
-        auditor = clean_text(item.get("auditor_override", "")) or auditor_default
-        reaction = detect_reaction(item["issue"], item["narrative"], item["recommendation1"])
-        frequency = detect_frequency(item["issue"], item["narrative"], item["recommendation1"])
+    result = df.copy()
+    classification_df = (master_sheets or {}).get("Classification_Matrix", pd.DataFrame())
+    response_df = (master_sheets or {}).get("Response_Master", pd.DataFrame())
+    frequency_df = (master_sheets or {}).get("Frequency_Master", pd.DataFrame())
+    auditor_options = [record["auditor"] for record in load_auditor_records(auditors_df)]
 
-        if item.get("reaction_override"):
-            reaction = clean_text(item.get("reaction_override", "")) or reaction
-        if item.get("frequency_override"):
-            frequency = normalize_frequency_label(item.get("frequency_override", "")) or frequency
+    for index in result.index:
+        if "Findings" in result.columns:
+            category, score = resolve_finding_category(result.at[index, "Findings"], classification_df)
+            result.at[index, "Findings"] = category
+            if "Score" in result.columns:
+                result.at[index, "Score"] = score
+        else:
+            score = result.at[index, "Score"] if "Score" in result.columns else 0
 
-        if manual is not None:
-            task_id = clean_text(manual.get("Task ID", "")) or task_id
-            auditor = clean_text(manual.get("Auditor", "")) or auditor
-            reaction = clean_text(manual.get("Reaction", "")) or reaction
-            frequency = normalize_frequency_label(manual.get("Frequency", "")) or frequency
+        if "Reaction" in result.columns:
+            reaction = canonical_response_label(result.at[index, "Reaction"], response_df)
+            result.at[index, "Reaction"] = reaction
+        else:
+            reaction = ""
 
-        findings = classify_finding(item["issue"], item["recommendation1"], item["narrative"], header.get("company", ""), header.get("audit_title", ""))
-        score = parse_score(findings)
-        frequency = normalize_frequency_label(frequency) or "First Time"
-        if is_repeat_frequency(frequency):
-            reaction = "Performed SAME offense"
-        if "No Findings" in findings or "Immaterial Findings" in findings:
-            reaction = "Maintaining Status Quo"
-            frequency = "Not Applicable"
-        improve = RESPONSE_RATE.get(reaction, 0) * FREQUENCY_RATE.get(frequency, 1)
-        net = score + improve
-        case_status = "No Case/Issue" if ("No Findings" in findings or "Immaterial Findings" in findings) else "Follow-up with HR"
-        user = auditor_user(auditor, auditors_df)
+        if "Frequency" in result.columns:
+            frequency = normalize_frequency_label(result.at[index, "Frequency"], frequency_df)
+            result.at[index, "Frequency"] = frequency
+        else:
+            frequency = ""
 
-        rows.append([
-            "", date.today().isoformat(), audit_type, header["date_reported"],
-            header["audit_reference"], emp_id, emp_name, task_id or "None",
-            header["scope_date"], header["year"], findings,
-            make_issue_summary(item["issue"], item["narrative"]),
-            item["explanation"] or "None", item["recommendation1"] or "None",
-            item["recommendation2"] or "None", auditor or "None", "None",
-            reaction, frequency, item["correction"] or "None", "", case_status,
-            score, improve, net, "Individual", user,
-        ])
+        if "Audited By1" in result.columns:
+            raw_auditor = result.at[index, "Audited By1"]
+            auditor = canonical_master_option(raw_auditor, auditor_options, "")
+            if not auditor:
+                guessed, _ = canonical_auditor_name(auditors_df, raw_auditor)
+                auditor = canonical_master_option(guessed, auditor_options, master_display_text(raw_auditor))
+            result.at[index, "Audited By1"] = auditor
+            if "User" in result.columns:
+                result.at[index, "User"] = auditor_user(auditor, auditors_df)
 
-    return pd.DataFrame(rows, columns=HEADERS), header, items
+        improve = response_rate_value(reaction, response_df) * frequency_rate_value(frequency, frequency_df)
+        if "Improve Score" in result.columns:
+            result.at[index, "Improve Score"] = improve
+        if "Net Score" in result.columns:
+            try:
+                numeric_score = int(float(score))
+            except (TypeError, ValueError):
+                numeric_score = 0
+            result.at[index, "Net Score"] = numeric_score + improve
+
+    return result
 
 
 def excel_bytes(df):

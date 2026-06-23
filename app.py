@@ -32,10 +32,11 @@ from iars_archive import (
 
 from iars_parser import (
     AUDITORS,
-    REACTION_OPTIONS,
-    FREQUENCY_OPTIONS,
-    FINDINGS_DROPDOWN,
+    master_finding_options,
+    master_response_options,
+    master_frequency_options,
     build_records,
+    normalize_output_with_master,
     excel_bytes,
 )
 
@@ -240,6 +241,18 @@ def _clean_option(value):
     return " ".join(str(value or "").split()).strip()
 
 
+def _master_display_option(value):
+    """Preserve exact Master Data capitalization and internal spacing."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    return str(value).strip()
+
+
 def get_employee_records(employees_df: pd.DataFrame):
     """Return canonical employee names and aliases from Master Data."""
     if employees_df is None or employees_df.empty:
@@ -346,7 +359,7 @@ def build_auditor_options(master_auditors_df: pd.DataFrame, extra_rows):
             status = _clean_option(row.get("Status", "Active"))
             if status and status.casefold() not in {"active", ""}:
                 continue
-            name = _clean_option(row.get("Auditor", ""))
+            name = _master_display_option(row.get("Auditor", ""))
             if name and name.casefold() not in seen:
                 options.append(name)
                 seen.add(name.casefold())
@@ -355,7 +368,7 @@ def build_auditor_options(master_auditors_df: pd.DataFrame, extra_rows):
         status = _clean_option(row.get("status", "Active"))
         if status.casefold() != "active":
             continue
-        name = _clean_option(row.get("auditor_name", ""))
+        name = _master_display_option(row.get("auditor_name", ""))
         if name and name.casefold() not in seen:
             options.append(name)
             seen.add(name.casefold())
@@ -539,7 +552,7 @@ archive_ready = archive_is_configured(archive_config) and archive_client is not 
 archive_unlocked = archive_access_granted(archive_config)
 
 st.title("Internal Audit Report System (IARS)")
-st.caption("Permanent Master Data + Multiple PDF extraction + PDF Textbox Editor + Private PDF Archive v3.1")
+st.caption("Permanent Master Data + Multiple PDF extraction + PDF Textbox Editor + Private PDF Archive v3.2")
 
 with st.sidebar:
     st.header("Master Data")
@@ -583,6 +596,12 @@ master_df, master_sheets = load_master_data(str(MASTER_DATA_PATH))
 auditors_df = master_sheets.get("Auditors", pd.DataFrame())
 employee_records = get_employee_records(master_df)
 employee_options = sorted({record["name"] for record in employee_records}, key=str.casefold)
+
+# Dropdown labels come directly from Master Data. Findings show category only;
+# Score remains in the separate Score output column.
+finding_options = master_finding_options(master_sheets)
+response_options = master_response_options(master_sheets)
+frequency_options = master_frequency_options(master_sheets)
 
 additional_auditor_rows = []
 additional_auditor_error = ""
@@ -1112,7 +1131,12 @@ with tab_extract:
                 try:
                     status.write(f"Processing {idx} of {len(pdf_files)}: {pdf_file.name}")
                     pdf_file.seek(0)
-                    result_df, header, items = build_records(pdf_file, master_df, auditors_df=auditors_df)
+                    result_df, header, items = build_records(
+                        pdf_file,
+                        master_df,
+                        auditors_df=auditors_df,
+                        master_sheets=master_sheets,
+                    )
                     all_results.append(result_df)
 
                     if archive_after_extract:
@@ -1155,7 +1179,7 @@ with tab_extract:
                     column_config={
                         "Findings": st.column_config.SelectboxColumn(
                             "Findings",
-                            options=FINDINGS_DROPDOWN,
+                            options=finding_options,
                         ),
                         "Audited By1": st.column_config.SelectboxColumn(
                             "Audited By1",
@@ -1163,13 +1187,19 @@ with tab_extract:
                         ),
                         "Reaction": st.column_config.SelectboxColumn(
                             "Reaction",
-                            options=REACTION_OPTIONS,
+                            options=response_options,
                         ),
                         "Frequency": st.column_config.SelectboxColumn(
                             "Frequency",
-                            options=FREQUENCY_OPTIONS,
+                            options=frequency_options,
                         ),
                     },
+                )
+
+                edited_result = normalize_output_with_master(
+                    edited_result,
+                    master_sheets=master_sheets,
+                    auditors_df=auditors_df,
                 )
 
                 st.download_button(
