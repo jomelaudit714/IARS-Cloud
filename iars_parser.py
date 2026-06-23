@@ -86,6 +86,98 @@ FREQUENCY_OPTIONS = [
     "Fifth Time", "Sixth Time", "Seventh Time",
 ]
 
+# Exact dropdown values used by the receiving audit system. These constants are
+# applied only when generating the downloadable Excel file. Master Data and the
+# on-screen IARS values remain unchanged.
+EXTERNAL_FINDINGS_OPTIONS = [
+    "Stock Overage (P3,000.00 and above)",
+    "Stock Overage (below P3,000.00)",
+    "Stock Shortage (P3,000.00 and above)",
+    "Stock Shortage (below P3,000.00)",
+    "Cash/Fund/Collection Overage (P1,000.00 and above)",
+    "Cash/Fund/Collection Overage (below P1,000.00)",
+    "Cash/Fund/Collection Shortage (P3,000.00 and above)",
+    "Cash/Fund/Collection Shortage (below P3,000.00)",
+    "Non-Remittance Of Collection (P3,000.00 and above)",
+    "Non-Remittance Of Collection (below P3,000.00)",
+    "Delayed Deposits",
+    "Late/Non-Issuance Of Receipts",
+    "Damaged and/or Lost Stocks Due To Negligence (P3,000.00 and above)",
+    "Damaged and/or Lost Stocks Due To Negligence (below P3,000.00)",
+    "SOTEX and/or Expired Issues (P3,000.00 and above)",
+    "SOTEX and/or Expired Issues (below P3,000.00)",
+    "Addt'l Credit Term W/ Over Due / Giving Credit Terms To Non-Credit Customer",
+    "Omission & Alteration Of Details in Documents",
+    "Turn Over Sales",
+    "Stock Pull-Out",
+    "Possession and/or Peddling Non-EDL Products",
+    "Denied Invoices (DR, PR, & SI)",
+    "Issuance Of Unofficial/Fabricated Documents",
+    "Uncooperative or failed to produce documents/results on a reasonable time given.",
+    "Overage of Cash Collection",
+    "Unavailable or Unreliable Inventory Records",
+    "Missing, Misused or Lost Of Documents/Asset(s)",
+    "Material Inventory Shortage (P3,000.00 and above)",
+    "Material Inventory Shortage (Below P3,000.00)",
+    "Material Inventory Overage (Variance)",
+    "Nonconformity With The Written Policies, Guidelines, Process And Procedures",
+    "Ignore or Disregard Office/Operation Best Practices",
+    "Manipulate To Deceive or Defraud for Personal Gain",
+    "SUnethical Act or Behavior",
+    "Unobservant/Failure To Follow Instructed Procedures",
+    "Unauthorized Use of Asset(s)",
+    "Delivery and/or Computation, Reporting Error(s)",
+    "Immaterial Findings",
+    "No Findings",
+]
+
+EXTERNAL_AUDITOR_OPTIONS = [
+    "Noel Buena",
+    "Antonio P. Bides",
+    "Antonio Trece J. Generato Jr.",
+    "Philip Jhon Marzon",
+    "Jomel Santiago",
+    "Patrick John Mistiola",
+    "Erna Montesines",
+    "Jed Laserna",
+    "Patricia Anne S. Del Rosario",
+    "Sarina Amuraw",
+    "Cris Canonoy",
+]
+
+EXTERNAL_FREQUENCY_OPTIONS = [
+    "Not Applicable",
+    "FIRST time",
+    "SECOND time",
+    "THIRD time",
+    "FORTH time",
+    "FIFTH time",
+    "SIXTH time",
+    "SEVENTH time",
+]
+
+EXTERNAL_SANCTION_OPTIONS = [
+    "Absolved",
+    "Disregard Offense due to minimal impact",
+    "Reprimanded",
+    "1st wriiten warning",
+    "2nd written warning",
+    "3rd written warning",
+    "3-day suspension",
+    "7-day suspension",
+    "15 day suspension",
+    "30-day suspension",
+    "Suspended with restitution",
+    "Suspended, demoted with restitution",
+    "Demoted",
+    "Demoted with restitution",
+    "Other sanction",
+    "Terminated",
+    "Resigned",
+    "Properly noted",
+    "Received recognition",
+]
+
 RESPONSE_RATE = {
     "Complied with previous recommendation": 4,
     "Established guidelines": 3,
@@ -3116,10 +3208,179 @@ def normalize_output_with_master(df, master_sheets=None, auditors_df=None):
     return result
 
 
+def _external_export_text(value):
+    """Remove only outer/hidden whitespace while preserving case and internal spacing."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+
+    text = str(value)
+    # Spreadsheet/web imports commonly fail on non-breaking spaces and invisible
+    # Unicode marks even when the text looks correct on screen.
+    text = text.replace("\u00a0", " ").replace("\u2007", " ").replace("\u202f", " ")
+    text = text.replace("\u200b", "").replace("\u200c", "").replace("\u200d", "").replace("\ufeff", "")
+    return text.strip(" \t\r\n")
+
+
+def _external_option(value, options, aliases=None):
+    raw = _external_export_text(value)
+    if not raw:
+        return ""
+
+    key = _master_match_key(raw)
+    for option in options:
+        if _master_match_key(option) == key:
+            return option
+
+    alias_map = aliases or {}
+    return alias_map.get(key, raw)
+
+
+def external_finding_label(value):
+    aliases = {
+        _master_match_key("Additional Credit Term With Overdue / Giving Credit Terms To Non-Credit Customer"):
+            "Addt'l Credit Term W/ Over Due / Giving Credit Terms To Non-Credit Customer",
+        _master_match_key("Uncooperative or Failed To Produce Documents/Results Within Reasonable Time"):
+            "Uncooperative or failed to produce documents/results on a reasonable time given.",
+        _master_match_key("Unethical Act or Behavior"): "SUnethical Act or Behavior",
+    }
+    return _external_option(finding_category_name(value), EXTERNAL_FINDINGS_OPTIONS, aliases)
+
+
+def external_auditor_label(value):
+    aliases = {
+        _master_match_key("Antonio Trece Generato Jr."): "Antonio Trece J. Generato Jr.",
+        _master_match_key("Trece Generato Jr."): "Antonio Trece J. Generato Jr.",
+    }
+    return _external_option(value, EXTERNAL_AUDITOR_OPTIONS, aliases)
+
+
+def external_frequency_label(value):
+    raw = _external_export_text(value)
+    if not raw:
+        return ""
+
+    normalized = re.sub(r"[^A-Z0-9]+", " ", raw.upper()).strip()
+    if normalized in {"NOT APPLICABLE", "N A", "NA"}:
+        return "Not Applicable"
+
+    ordinal_targets = [
+        ({"1", "1ST", "FIRST"}, "FIRST time"),
+        ({"2", "2ND", "SECOND"}, "SECOND time"),
+        ({"3", "3RD", "THIRD"}, "THIRD time"),
+        ({"4", "4TH", "FOURTH", "FORTH"}, "FORTH time"),
+        ({"5", "5TH", "FIFTH"}, "FIFTH time"),
+        ({"6", "6TH", "SIXTH"}, "SIXTH time"),
+        ({"7", "7TH", "SEVENTH"}, "SEVENTH time"),
+    ]
+    tokens = set(normalized.split())
+    for accepted, target in ordinal_targets:
+        if tokens & accepted:
+            return target
+
+    return _external_option(raw, EXTERNAL_FREQUENCY_OPTIONS)
+
+
+EXTERNAL_SYSTEM_HEADERS = {
+    "#": "id",
+    "Encoded Date": "date_encoded",
+    "Type": "type",
+    "Date Reported": "date_report",
+    "Audit Reference": "ref_no",
+    "ID No": "id_no",
+    "Name": "client_name",
+    "Task ID": "task_id",
+    "Scope Date": "date_end",
+    "Year": "year_end",
+    "Findings": "findings",
+    "Issue Detail Issue": "issue",
+    "Explanation": "explanation",
+    "Recommendation1": "recom01",
+    "Recommendation2": "recom02",
+    "Audited By1": "by01",
+    "Audited By2": "by02",
+    "Reaction": "improve",
+    "Frequency": "frequency",
+    "Correction": "action",
+    "Sanction": "sanction",
+    "Case Status": "case_status",
+    "Score": "score",
+    "Improve Score": "improve_score",
+    "Net Score": "net_score",
+    "Audit Unit": "audit_unit",
+    "User": "user",
+}
+
+EXTERNAL_SYSTEM_HEADER_ORDER = [
+    "id", "date_encoded", "type", "date_report", "ref_no",
+    "id_no", "client_name", "task_id", "date_end", "year_end",
+    "findings", "issue", "explanation", "recom01", "recom02",
+    "by01", "by02", "improve", "frequency", "action",
+    "sanction", "case_status", "score", "improve_score",
+    "net_score", "audit_unit", "user",
+]
+
+
+def prepare_external_system_export(df):
+    """Prepare exact database headers and select-option values for import.
+
+    This is export-only: it does not modify Master Data or the on-screen records.
+    """
+    if df is None:
+        return df
+
+    result = df.copy()
+
+    if "Findings" in result.columns:
+        result["Findings"] = result["Findings"].map(external_finding_label)
+
+    for column in ("Audited By1", "Audited By2"):
+        if column in result.columns:
+            result[column] = result[column].map(external_auditor_label)
+
+    if "Reaction" in result.columns:
+        # Reaction/Response has no separate receiving-system list here, so retain
+        # its exact Master Data capitalization and internal spacing, removing only
+        # accidental leading/trailing or invisible whitespace.
+        result["Reaction"] = result["Reaction"].map(_external_export_text)
+
+    if "Frequency" in result.columns:
+        result["Frequency"] = result["Frequency"].map(external_frequency_label)
+
+    if "Sanction" in result.columns:
+        result["Sanction"] = result["Sanction"].map(
+            lambda value: _external_option(value, EXTERNAL_SANCTION_OPTIONS)
+        )
+
+    # User is also a controlled short text field and should never contain hidden
+    # leading/trailing whitespace.
+    if "User" in result.columns:
+        result["User"] = result["User"].map(_external_export_text)
+
+    # Rename only at export time so the Streamlit editor can continue using the
+    # established IARS display labels while the downloaded file matches the
+    # receiving database column names exactly.
+    result = result.rename(columns=EXTERNAL_SYSTEM_HEADERS)
+
+    # Preserve the database's exact 27-column sequence. Any missing column is
+    # created as blank rather than shifting subsequent values during CSV import.
+    for column in EXTERNAL_SYSTEM_HEADER_ORDER:
+        if column not in result.columns:
+            result[column] = ""
+    result = result[EXTERNAL_SYSTEM_HEADER_ORDER]
+
+    return result
+
+
 def excel_bytes(df):
+    export_df = prepare_external_system_export(df)
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Audit Extraction")
+        export_df.to_excel(writer, index=False, sheet_name="Audit Extraction")
         ws = writer.book["Audit Extraction"]
         ws.freeze_panes = "A2"
         for cell in ws[1]:
