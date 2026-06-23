@@ -3134,7 +3134,7 @@ def build_records(
                 header["scope_date"], header["year"], findings,
                 issue_title,
                 explanation or "None", recommendation1 or "None",
-                recommendation2 or "None", auditor or "None", "None",
+                recommendation2 or "None", auditor or "None", "",
                 reaction, frequency, correction or "None", "", case_status,
                 score, improve, net, "Individual", user,
             ],
@@ -3195,6 +3195,18 @@ def normalize_output_with_master(df, master_sheets=None, auditors_df=None):
             if "User" in result.columns:
                 result.at[index, "User"] = auditor_user(auditor, auditors_df)
 
+        if "Audited By2" in result.columns:
+            raw_auditor2 = result.at[index, "Audited By2"]
+            cleaned_auditor2 = _external_export_text(raw_auditor2)
+            if cleaned_auditor2.casefold() in {"", "none", "n/a", "na", "not applicable", "not indicated", "nan"}:
+                auditor2 = ""
+            else:
+                auditor2 = canonical_master_option(cleaned_auditor2, auditor_options, "")
+                if not auditor2:
+                    guessed2, _ = canonical_auditor_name(auditors_df, cleaned_auditor2)
+                    auditor2 = canonical_master_option(guessed2, auditor_options, cleaned_auditor2)
+            result.at[index, "Audited By2"] = auditor2
+
         improve = response_rate_value(reaction, response_df) * frequency_rate_value(frequency, frequency_df)
         if "Improve Score" in result.columns:
             result.at[index, "Improve Score"] = improve
@@ -3252,11 +3264,15 @@ def external_finding_label(value):
 
 
 def external_auditor_label(value):
+    raw = _external_export_text(value)
+    if raw.casefold() in {"", "none", "n/a", "na", "not applicable", "not indicated", "nan"}:
+        return ""
+
     aliases = {
         _master_match_key("Antonio Trece Generato Jr."): "Antonio Trece J. Generato Jr.",
         _master_match_key("Trece Generato Jr."): "Antonio Trece J. Generato Jr.",
     }
-    return _external_option(value, EXTERNAL_AUDITOR_OPTIONS, aliases)
+    return _external_option(raw, EXTERNAL_AUDITOR_OPTIONS, aliases)
 
 
 def external_frequency_label(value):
