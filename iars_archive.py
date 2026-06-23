@@ -12,6 +12,7 @@ from iars_parser import extract_all_text, extract_header
 
 DEFAULT_BUCKET = "audit-pdf-archive"
 DEFAULT_TABLE = "pdf_archive"
+DEFAULT_AUDITORS_TABLE = "auditors_master"
 
 
 class ArchiveError(RuntimeError):
@@ -384,3 +385,71 @@ def human_file_size(size_bytes: Any) -> str:
             return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
         size /= 1024
     return ""
+
+
+def list_additional_auditors(
+    client: Any,
+    table: str = DEFAULT_AUDITORS_TABLE,
+    *,
+    active_only: bool = False,
+) -> list[dict[str, Any]]:
+    """Return auditors added through the IARS archive interface.
+
+    Master Data remains the primary auditor source. This table stores only
+    additional auditors that must persist across Streamlit restarts.
+    """
+    query = client.table(table).select(
+        "id,auditor_name,designation,user_display,email,status,created_at,created_by"
+    ).order("auditor_name")
+    if active_only:
+        query = query.eq("status", "Active")
+    return _response_data(query.execute())
+
+
+def add_additional_auditor(
+    client: Any,
+    *,
+    auditor_name: str,
+    designation: str = "",
+    user_display: str = "",
+    email: str = "",
+    status: str = "Active",
+    created_by: str = "IARS Admin",
+    table: str = DEFAULT_AUDITORS_TABLE,
+) -> dict[str, Any]:
+    """Add a persistent auditor after case-insensitive duplicate checking."""
+    name = " ".join(str(auditor_name or "").split()).strip()
+    if not name:
+        raise ArchiveError("Auditor Full Name is required.")
+
+    status_value = str(status or "Active").strip().title()
+    if status_value not in {"Active", "Inactive"}:
+        raise ArchiveError("Auditor status must be Active or Inactive.")
+
+    try:
+        existing_rows = list_additional_auditors(client, table=table, active_only=False)
+    except Exception as exc:
+        raise ArchiveError(
+            "Unable to access the additional-auditor table. Run "
+            "SUPABASE_AUDITOR_MIGRATION.sql in Supabase first. "
+            f"Details: {exc}"
+        ) from exc
+
+    normalized = name.casefold()
+    for row in existing_rows:
+        if " ".join(str(row.get("auditor_name", "") or "").split()).casefold() == normalized:
+            raise ArchiveError(f"Auditor already exists: {row.get('auditor_name', name)}")
+
+    payload = {
+        "auditor_name": name,
+        "designation": " ".join(str(designation or "").split()).strip(),
+        "user_display": " ".join(str(user_display or "").split()).strip(),
+        "email": str(email or "").strip(),
+        "status": status_value,
+        "created_by": " ".join(str(created_by or "IARS Admin").split()).strip() or "IARS Admin",
+    }
+    try:
+        rows = _response_data(client.table(table).insert(payload).execute())
+    except Exception as exc:
+        raise ArchiveError(f"Unable to add the auditor: {exc}") from exc
+    return rows[0] if rows else payload

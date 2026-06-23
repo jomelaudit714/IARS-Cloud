@@ -1,64 +1,45 @@
-# IARS v3.0 Test Results
+# IARS v3.1 Test Results
 
-Test date: 2026-06-22
+## Source validation
+- Python compilation passed for `app.py`, `iars_archive.py`, `iars_parser.py`, and `iars_pdf_editor.py`.
+- New Supabase auditor functions passed simulated list, insert, active filtering, and duplicate-prevention tests.
 
-## Application tests
+## Master Data validation
+- Uploaded workbook imported successfully with 15 sheets.
+- Employees range retained: `A1:F1016`.
+- Auditors range retained: `A1:F10`.
+- Classification Matrix range retained: `A1:S39`.
+- No spreadsheet formula-error strings were detected.
+- Clean re-export preserved the tested key ranges exactly.
+- Clean `.xlsx` ZIP integrity passed.
 
-- Python compilation: PASS
-  - `app.py`
-  - `iars_archive.py`
-  - `iars_parser.py`
-  - `iars_pdf_editor.py`
-- Streamlit 1.58.0 AppTest with archive secrets absent: PASS
-- AppTest exceptions: 0
-- Tabs detected:
-  - Generate Extraction
-  - PDF Tagging Editor
-  - Saved PDFs
-- Local Streamlit server startup: PASS
-- Streamlit health endpoint: PASS
+## Uploaded By tests
+- Active Master Data auditors included.
+- Inactive auditors excluded.
+- Supabase-added active auditor included.
+- Duplicate Master Data/cloud auditor returned only once.
+- Case-insensitive cloud duplicate was blocked.
+- Search filtering and clear-state logic passed at source level.
 
-## Archive service tests using simulated Supabase
+## Auditee Master Data tests
+- Official names sourced from the Employees sheet.
+- Header `Dianne Susie Berbano and Jinky Venise Angel` resolved to:
+  - `Dianne Susie Capisonda Berbano`
+  - `Jinky Venise Vicente Angel`
+- Duplicate official names were removed.
+- Canonical names from extraction output were joined correctly for archive metadata.
 
-- Upload PDF to private bucket abstraction: PASS
-- Insert archive metadata: PASS
-- SHA-256 duplicate prevention: PASS
-- Newest-first record listing: PASS
-- Search/filter by auditee, type and date: PASS
-- Private PDF download: PASS
-- Delete Storage object: PASS
-- Delete metadata row: PASS
-- Storage path sanitization: PASS
-- Year/Audit Reference/Original-Tagged folder structure: PASS
+## Parser regression
+- `2026IAD220_Jugine_Corpuz.pdf`: 4 rows generated.
+- `2026IAD221_Timothy_So(1).pdf`: 1 row generated.
+- `2026IAD209_Michelle_Mesa.pdf`: 3 rows generated.
+- `tagged_2026IAD222_Vet_City_Marikina (2).pdf`: 7 rows generated.
+- Required output headers including `#` and `Encoded Date` remained present.
 
-## Real PDF metadata test
+## Deployment note
+A live Add New Auditor insertion requires the user's Supabase project. Run `SUPABASE_AUDITOR_MIGRATION.sql` before using that button.
 
-Source: `tagged_2026IAD222_Vet_City_Marikina (2).pdf`
-
-- Audit Reference detected: `2026IAD222` - PASS
-- Header Auditee detected: `Dianne Susie Berbano and Jinky Venise Angel` - PASS
-
-## Parser regression test
-
-The current 2026IAD222 tagged PDF was processed using the included Master Data.
-
-- Finding rows: 7 - PASS
-- `#` column blank: PASS
-- Encoded Date format `yyyy-mm-dd`: PASS
-- Date Reported: `2026-06-09` - PASS
-- True issue-title rules retained: PASS
-- PCV missing-detail augmentation retained: PASS
-- Issue-specific frequency retained: PASS
-- Second Time -> Performed SAME offense retained: PASS
-- First-name auditee matching retained: PASS
-
-## Dependency/API compatibility checks
-
-- `supabase==2.31.0` installed and imported: PASS
-- Storage upload accepts `bytes`: PASS
-- Storage download returns `bytes`: PASS
-- Storage remove accepts `list[str]`: PASS
-
-## Live-cloud limitation
-
-A real Supabase project was not available during packaging. Therefore, live network upload, list, download and delete operations could not be executed against the user's production project. The same operations were tested using a stateful simulated Supabase client, and the Python method signatures were checked against `supabase==2.31.0`.
+## Streamlit runtime tests
+- Streamlit 1.58.0 `AppTest` completed with zero application exceptions.
+- All three tabs loaded: Generate Extraction, PDF Tagging Editor, and Saved PDFs.
+- Local Streamlit server started successfully and returned `ok` from the health endpoint.
