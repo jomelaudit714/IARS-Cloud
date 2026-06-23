@@ -78,11 +78,11 @@ REACTION_OPTIONS = [
     "", "Complied with previous recommendation", "Established guidelines",
     "Acknowledged the issue & will do correction", "Maintaining Status Quo",
     "Performed SAME offense", "Diverted the issue", "Low priority",
-    "Undertake unfavorable approach", "Uncooperative", "Do Some Adjustment",
+    "Undertake unfavorable approach", "Uncooperative", "Do some ADJUSTMENT",
 ]
 
 FREQUENCY_OPTIONS = [
-    "", "Not Applicable", "First Time", "Second Time", "Third Time", "Fourth Time",
+    "", "Not Applicable", "First Time", "Second Time", "Third Time", "FORTH time",
     "Fifth Time", "Sixth Time", "Seventh Time",
 ]
 
@@ -188,7 +188,7 @@ RESPONSE_RATE = {
     "Low priority": -3,
     "Undertake unfavorable approach": -2,
     "Uncooperative": -4,
-    "Do Some Adjustment": 0,
+    "Do some ADJUSTMENT": 0,
     "": 0,
     "None": 0,
 }
@@ -198,7 +198,7 @@ FREQUENCY_RATE = {
     "First Time": 1,
     "Second Time": 2,
     "Third Time": 3,
-    "Fourth Time": 4,
+    "FORTH time": 4,
     "Fifth Time": 5,
     "Sixth Time": 6,
     "Seventh Time": 7,
@@ -1570,7 +1570,7 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     return "Ignore or Disregard Office/Operation Best Practices -3"
 
 
-def canonical_response_label(value, response_df=None, default="Do Some Adjustment"):
+def canonical_response_label(value, response_df=None, default="Do some ADJUSTMENT"):
     """Return the exact Response_Master label, preserving its case and spacing."""
     options = master_option_values(
         response_df,
@@ -1622,7 +1622,7 @@ def detect_reaction(issue, narrative, recommendation):
         return "Established guidelines"
     if "acknowledged" in text:
         return "Acknowledged the issue & will do correction"
-    return "Do Some Adjustment"
+    return "Do some ADJUSTMENT"
 
 
 def normalize_frequency_label(value, frequency_df=None):
@@ -1641,7 +1641,7 @@ def normalize_frequency_label(value, frequency_df=None):
             "1": "First Time", "1st": "First Time", "first": "First Time",
             "2": "Second Time", "2nd": "Second Time", "second": "Second Time",
             "3": "Third Time", "3rd": "Third Time", "third": "Third Time",
-            "4": "Fourth Time", "4th": "Fourth Time", "fourth": "Fourth Time",
+            "4": "FORTH time", "4th": "FORTH time", "fourth": "FORTH time", "forth": "FORTH time",
             "5": "Fifth Time", "5th": "Fifth Time", "fifth": "Fifth Time",
             "6": "Sixth Time", "6th": "Sixth Time", "sixth": "Sixth Time",
             "7": "Seventh Time", "7th": "Seventh Time", "seventh": "Seventh Time",
@@ -1695,7 +1695,7 @@ def detect_frequency(issue, narrative, recommendation):
     # Explicit issue-level tag has priority, e.g. Frequency Rate: 2nd Time.
     explicit = re.search(
         r"\bFrequency(?:\s+Rate)?\s*[:;\-]\s*"
-        r"((?:1st|2nd|3rd|4th|5th|6th|7th|first|second|third|fourth|fifth|sixth|seventh)\s+time|not\s+applicable)",
+        r"((?:1st|2nd|3rd|4th|5th|6th|7th|first|second|third|fourth|forth|fifth|sixth|seventh)\s+time|not\s+applicable)",
         text,
         re.I,
     )
@@ -1706,7 +1706,7 @@ def detect_frequency(issue, narrative, recommendation):
 
     # Also accept a clear standalone occurrence statement in the issue text.
     occurrence = re.search(
-        r"\b(1st|2nd|3rd|4th|5th|6th|7th|first|second|third|fourth|fifth|sixth|seventh)\s+time\b",
+        r"\b(1st|2nd|3rd|4th|5th|6th|7th|first|second|third|fourth|forth|fifth|sixth|seventh)\s+time\b",
         text,
         re.I,
     )
@@ -2970,7 +2970,7 @@ def filter_no_findings_when_other_issues(items):
 
 def classify_audit_type(text):
     sales_terms = ["area sales representative", "district sales supervisor", "regional sales supervisor", "technical sales supervisor", "sales personnel"]
-    return "Operations Audit" if any(t in text.lower() for t in sales_terms) else "Financial Audit"
+    return "Operations Audit" if any(t in text.lower() for t in sales_terms) else "Financial"
 
 
 
@@ -3028,7 +3028,7 @@ def build_records(
     response_df = (master_sheets or {}).get("Response_Master", pd.DataFrame())
     frequency_df = (master_sheets or {}).get("Frequency_Master", pd.DataFrame())
 
-    response_default = canonical_response_label("Do Some Adjustment", response_df)
+    response_default = canonical_response_label("Do some ADJUSTMENT", response_df)
     response_repeat = canonical_response_label("Performed SAME offense", response_df)
     response_status_quo = canonical_response_label("Maintaining Status Quo", response_df)
     frequency_first = normalize_frequency_label("First Time", frequency_df)
@@ -3120,7 +3120,7 @@ def build_records(
 
         improve = response_rate_value(reaction, response_df) * frequency_rate_value(frequency, frequency_df)
         net = score + improve
-        case_status = "No Case/Issue" if no_or_immaterial else "Follow-up with HR"
+        case_status = "No Case/Issue" if no_or_immaterial else "Follow up with HR"
         user = auditor_user(auditor, auditors_df)
 
         row_dicts.append({
