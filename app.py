@@ -10,6 +10,12 @@ import pandas as pd
 import streamlit as st
 
 from iars_pdf_editor import pdf_textbox_editor
+from iars_auth import (
+    read_auth_config,
+    render_auth_gate,
+    render_account_sidebar,
+    is_admin_user,
+)
 
 from iars_archive import (
     ArchiveConfig,
@@ -45,6 +51,9 @@ st.set_page_config(
     page_icon="📄",
     layout="wide",
 )
+
+auth_config = read_auth_config(st.secrets)
+auth_client, auth_user = render_auth_gate(auth_config)
 
 MASTER_DATA_PATH = Path("data/Master_Data.xlsx")
 
@@ -539,7 +548,25 @@ def archive_pdf_with_feedback(
             document_type=document_type,
             uploaded_by=uploaded_by,
         )
-        return {"Status": "Archived", "File": filename, "Details": record.get("storage_path", "")}
+        compression = record.get("_compression", {}) or {}
+        storage_path = record.get("storage_path", "")
+        original_size = compression.get("original_size")
+        stored_size = compression.get("stored_size", record.get("file_size"))
+        reduction = compression.get("reduction_percent", 0)
+        note = compression.get("compression_note", "")
+
+        if compression.get("compression_applied"):
+            details = (
+                f"{storage_path} | Compressed {human_file_size(original_size)} → "
+                f"{human_file_size(stored_size)} ({reduction}% smaller)"
+            )
+            status = "Archived and compressed"
+        else:
+            size_text = human_file_size(stored_size) if stored_size is not None else ""
+            details = f"{storage_path} | {size_text} | {note}".strip(" |")
+            status = "Archived"
+
+        return {"Status": status, "File": filename, "Details": details}
     except DuplicateArchiveError as exc:
         return {"Status": "Duplicate skipped", "File": filename, "Details": str(exc)}
     except Exception as exc:
@@ -552,9 +579,11 @@ archive_ready = archive_is_configured(archive_config) and archive_client is not 
 archive_unlocked = archive_access_granted(archive_config)
 
 st.title("Internal Audit Report System (IARS)")
-st.caption("Permanent Master Data + Multiple PDF extraction + PDF Textbox Editor + Private PDF Archive v3.2")
+st.caption("Permanent Master Data + Multiple PDF extraction + PDF Textbox Editor + Admin-Approved Username Login + Auto-Compressed Private PDF Archive v3.8.1")
 
 with st.sidebar:
+    render_account_sidebar(auth_client, auth_user, auth_config)
+    st.divider()
     st.header("Master Data")
 
     if MASTER_DATA_PATH.exists():
@@ -563,18 +592,21 @@ with st.sidebar:
     else:
         st.error("Master Data not found. Upload Master_Data.xlsx first.")
 
-    with st.expander("Update Master Data"):
-        uploaded_master = st.file_uploader(
-            "Upload updated Master_Data.xlsx",
-            type=["xlsx"],
-            key="master_update",
-        )
+    if is_admin_user(auth_user):
+        with st.expander("Update Master Data"):
+            uploaded_master = st.file_uploader(
+                "Upload updated Master_Data.xlsx",
+                type=["xlsx"],
+                key="master_update",
+            )
 
-        if uploaded_master is not None:
-            if st.button("Save Updated Master Data"):
-                save_uploaded_master(uploaded_master)
-                st.cache_data.clear()
-                st.success("Master Data updated. Please refresh the app.")
+            if uploaded_master is not None:
+                if st.button("Save Updated Master Data"):
+                    save_uploaded_master(uploaded_master)
+                    st.cache_data.clear()
+                    st.success("Master Data updated. Please refresh the app.")
+    else:
+        st.caption("Master Data updates are restricted to the administrator.")
 
     st.divider()
     st.header("PDF Archive")
@@ -836,7 +868,10 @@ with tab_editor:
 
 with tab_archive:
     st.subheader("Saved PDFs")
-    st.caption("Private permanent archive for original and tagged audit-report PDFs.")
+    st.caption(
+        "Private permanent archive for original and tagged audit-report PDFs. "
+        "PDFs are automatically compressed with balanced quality before upload."
+    )
 
     if render_archive_login(archive_config):
         archive_unlocked = True

@@ -162,6 +162,104 @@ def pdf_hash(pdf_bytes: bytes) -> str:
     return sha256(pdf_bytes).hexdigest()
 
 
+def compress_pdf_for_archive(pdf_bytes: bytes) -> tuple[bytes, dict[str, Any]]:
+    """Return a smaller archive-ready PDF when safe and beneficial.
+
+    The routine keeps searchable text and PDF structure intact. It first
+    recompresses oversized images using balanced settings, then performs
+    lossless object/font/stream optimization. If optimization fails, if the
+    PDF is encrypted or digitally signed, or if the result is not smaller,
+    the original bytes are retained so archiving is never blocked.
+    """
+    original_size = len(pdf_bytes or b"")
+    result = {
+        "original_size": original_size,
+        "stored_size": original_size,
+        "saved_bytes": 0,
+        "reduction_percent": 0.0,
+        "compression_applied": False,
+        "compression_note": "Original retained",
+    }
+
+    if not pdf_bytes:
+        return pdf_bytes, result
+
+    try:
+        import fitz
+
+        document = fitz.open(stream=pdf_bytes, filetype="pdf")
+        try:
+            if getattr(document, "needs_pass", False):
+                result["compression_note"] = "Encrypted PDF retained without modification"
+                return pdf_bytes, result
+
+            try:
+                signature_flags = int(document.get_sigflags())
+            except Exception:
+                signature_flags = -1
+            if signature_flags > 0:
+                result["compression_note"] = "Digitally signed PDF retained to protect the signature"
+                return pdf_bytes, result
+
+            # Balanced image recompression: only images above 220 DPI are
+            # downsampled, to 150 DPI at JPEG quality 72. Text remains text.
+            rewrite_images = getattr(document, "rewrite_images", None)
+            if callable(rewrite_images):
+                try:
+                    rewrite_images(
+                        dpi_threshold=220,
+                        dpi_target=150,
+                        quality=72,
+                        lossy=True,
+                        lossless=True,
+                        bitonal=True,
+                        color=True,
+                        gray=True,
+                        set_to_gray=False,
+                    )
+                except Exception:
+                    # Continue with lossless PDF optimization even when a
+                    # particular image cannot be rewritten.
+                    pass
+
+            output = BytesIO()
+            document.save(
+                output,
+                garbage=4,
+                clean=True,
+                deflate=True,
+                deflate_images=True,
+                deflate_fonts=True,
+                use_objstms=1,
+                compression_effort=60,
+            )
+            candidate = output.getvalue()
+        finally:
+            document.close()
+
+        if candidate and len(candidate) < original_size:
+            stored_size = len(candidate)
+            saved_bytes = original_size - stored_size
+            result.update(
+                {
+                    "stored_size": stored_size,
+                    "saved_bytes": saved_bytes,
+                    "reduction_percent": round((saved_bytes / original_size) * 100, 1),
+                    "compression_applied": True,
+                    "compression_note": "Compressed automatically before archive upload",
+                }
+            )
+            return candidate, result
+
+        result["compression_note"] = "PDF was already optimized; original retained"
+        return pdf_bytes, result
+    except Exception as exc:
+        # Compression is a best-effort archive optimization. The upload must
+        # still proceed using the original PDF if optimization is unavailable.
+        result["compression_note"] = f"Compression skipped: {exc}"
+        return pdf_bytes, result
+
+
 def extract_archive_metadata(pdf_bytes: bytes, filename: str = "") -> dict[str, str]:
     """Extract audit reference and auditee header from a PDF.
 
@@ -232,6 +330,8 @@ def upload_pdf(
     if not str(original_filename or "").lower().endswith(".pdf"):
         raise ArchiveError("Only PDF files can be archived.")
 
+    # Duplicate detection uses the original uploaded bytes, so the same PDF
+    # remains detectable even though the stored copy is compressed.
     digest = pdf_hash(pdf_bytes)
     if prevent_duplicate:
         existing = find_duplicate(client, config, digest)
@@ -240,6 +340,8 @@ def upload_pdf(
                 f"This exact PDF is already archived as {existing.get('original_filename', 'an existing file')}.",
                 existing,
             )
+
+    stored_pdf_bytes, compression = compress_pdf_for_archive(pdf_bytes)
 
     doc_type = normalize_document_type(document_type)
     storage_path = make_storage_path(
@@ -252,7 +354,7 @@ def upload_pdf(
     try:
         bucket.upload(
             path=storage_path,
-            file=pdf_bytes,
+            file=stored_pdf_bytes,
             file_options={
                 "content-type": "application/pdf",
                 "cache-control": "3600",
@@ -270,14 +372,18 @@ def upload_pdf(
         "storage_path": storage_path,
         "document_type": doc_type,
         "uploaded_by": str(uploaded_by or "").strip(),
-        "file_size": len(pdf_bytes),
+        "file_size": len(stored_pdf_bytes),
         "sha256": digest,
     }
 
     try:
         response = client.table(config.table).insert(metadata).execute()
         rows = _response_data(response)
-        return rows[0] if rows else metadata
+        record = dict(rows[0] if rows else metadata)
+        # Transient feedback fields are returned to Streamlit only; they are
+        # not inserted into Supabase and require no database migration.
+        record["_compression"] = compression
+        return record
     except Exception as exc:
         # Roll back the storage object if metadata insertion fails.
         try:
