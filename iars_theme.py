@@ -254,6 +254,32 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 
 @media(max-width:1000px) {{.st-key-edl_login_hero_panel{{min-height:auto}}}}
 @media(max-width:720px) {{.st-key-edl_login_hero_panel{{padding:1rem;min-height:auto}} .st-key-edl_dashboard_hero_panel{{padding:.8rem}}}}
+
+/* v4.4 exact-reference refinements */
+section[data-testid="stSidebar"] {{width:238px!important;min-width:238px!important;}}
+section[data-testid="stSidebar"] > div:first-child {{padding:10px 10px 18px!important;}}
+section[data-testid="stSidebar"] [data-testid="stImage"] img {{background:transparent!important;border:none!important;box-shadow:none!important;}}
+section[data-testid="stSidebar"] .stButton>button {{min-height:40px!important;border:none!important;background:transparent!important;text-align:left!important;font-weight:620!important;padding:.46rem .62rem!important;}}
+section[data-testid="stSidebar"] .stButton>button:hover {{background:rgba(255,255,255,.08)!important;}}
+section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:linear-gradient(135deg,#B77B05,#D99D19)!important;color:#fff!important;box-shadow:0 6px 15px rgba(186,124,5,.22)!important;}}
+.stButton>button[kind="primary"], .stFormSubmitButton>button, [data-testid="stDownloadButton"]>button {{background:#061A36!important;color:white!important;border:1px solid #061A36!important;border-radius:6px!important;box-shadow:none!important;}}
+.stButton>button[kind="primary"]:hover, .stFormSubmitButton>button:hover, [data-testid="stDownloadButton"]>button:hover {{background:#0A2C59!important;border-color:#0A2C59!important;}}
+.stButton>button[kind="secondary"] {{border:1px solid #C7D0DD!important;background:#fff!important;color:#061A36!important;border-radius:6px!important;}}
+.stTabs [data-baseweb="tab-list"] {{gap:0!important;border-bottom:1px solid #D9E0EA!important;background:#fff!important;}}
+.stTabs [data-baseweb="tab"] {{border-radius:0!important;padding:.65rem .9rem!important;color:#475467!important;}}
+.stTabs [aria-selected="true"] {{color:#061A36!important;border-bottom:2px solid #C88A08!important;background:#fff!important;}}
+[data-testid="stMetric"] {{background:#fff;border:1px solid #E1E6EE;border-radius:8px;padding:.68rem .76rem;}}
+.edl-panel,.edl-metric-card,.edl-feature-card,.edl-topbar {{border-radius:8px!important;box-shadow:0 2px 8px rgba(16,24,40,.035)!important;}}
+.edl-topbar {{padding:.58rem .72rem!important;}}
+.edl-metric-grid {{grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:.48rem!important;}}
+.edl-metric-card {{min-height:96px!important;padding:.66rem .7rem!important;}}
+.edl-metric-value {{font-size:1.23rem!important;}}
+.st-key-edl_login_hero_panel {{padding:0!important;background:#061A36!important;border-radius:10px!important;overflow:hidden!important;box-shadow:0 12px 30px rgba(4,23,48,.18)!important;}}
+.st-key-edl_login_hero_panel [data-testid="stImage"] {{margin:0!important;}}
+.st-key-edl_login_hero_panel [data-testid="stImage"] img {{display:block!important;width:100%!important;border-radius:0!important;}}
+.st-key-iars_auth_card {{border-radius:10px!important;padding:1.1rem!important;box-shadow:0 10px 28px rgba(16,24,40,.08)!important;background:#fff!important;}}
+@media(max-width:1200px){{.edl-metric-grid{{grid-template-columns:repeat(3,minmax(0,1fr))!important;}}}}
+@media(max-width:760px){{.edl-metric-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}section[data-testid="stSidebar"]{{width:230px!important;min-width:230px!important;}}}}
 </style>
 """
     _render_html(css)
@@ -267,9 +293,9 @@ def render_sidebar_brand() -> None:
     """Render the exact EDL logo with native Streamlit image support."""
     logo_path = _asset_path("edl_logo.png")
     if logo_path.exists():
-        st.image(str(logo_path), width=126)
+        st.image(str(logo_path), width=118)
     _render_html(
-        '<div class="edl-sidebar-brand" style="padding-top:.05rem">'
+        '<div class="edl-sidebar-brand" style="padding-top:.02rem">'
         '<h3>INTERNAL AUDIT<br>REPORT SYSTEM</h3>'
         '<p>EDL GROUP OF COMPANIES</p>'
         '</div>'
@@ -305,31 +331,24 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
 
 
 def render_login_hero() -> None:
-    """Render the branded login panel using native Streamlit images."""
-    logo_path = _asset_path("edl_logo.png")
-    visual_path = _asset_path("internal_audit_visual.png")
+    """Render the approved EDL Internal Audit visual as a single stable native image."""
+    panel_path = _asset_path("login_panel.jpg")
     with st.container(key="edl_login_hero_panel"):
-        logo_cols = st.columns([1, 1.15, 1])
-        with logo_cols[1]:
+        if panel_path.exists():
+            st.image(str(panel_path), use_container_width=True)
+        else:
+            logo_path = _asset_path("edl_logo.png")
+            visual_path = _asset_path("internal_audit_visual.png")
             if logo_path.exists():
-                st.image(str(logo_path), use_container_width=True)
-        _render_html(
-            '<div class="edl-native-login-copy">'
-            '<div class="eyebrow">EDL GROUP OF COMPANIES</div>'
-            '<h1>Secure Internal Audit <em>Workspace.</em></h1>'
-            '<p>A secure and centralized workspace for managing internal audit reports, shared archives, templates, policies and controlled records.</p>'
-            '</div>'
-            '<div class="edl-login-points">'
-            '<div class="edl-login-point"><span>🛡️</span>Admin-approved access</div>'
-            '<div class="edl-login-point"><span>📄</span>Smart report extraction</div>'
-            '<div class="edl-login-point"><span>🗂️</span>Shared PDF and document libraries</div>'
-            '<div class="edl-login-point"><span>✅</span>Controlled and traceable records</div>'
-            '</div>'
-        )
-        if visual_path.exists():
-            st.image(str(visual_path), use_container_width=True)
-        st.caption("Secure · Confidential · Authorized Internal Audit personnel only")
-
+                st.image(str(logo_path), width=180)
+            _render_html(
+                '<div class="edl-native-login-copy">'
+                '<h1>INTERNAL AUDIT<br>REPORT SYSTEM</h1>'
+                '<p>A secure and centralized workspace for managing internal audit reports, archives, templates, and compliance documents.</p>'
+                '</div>'
+            )
+            if visual_path.exists():
+                st.image(str(visual_path), use_container_width=True)
 
 def render_dashboard_hero() -> None:
     """Render the dashboard hero with a guaranteed visible audit image."""

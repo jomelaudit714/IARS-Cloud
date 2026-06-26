@@ -1,3 +1,5 @@
+# IARS v4.4.0 — EDL Enterprise UI
+
 # IARS v4.2.0 — EDL Native Streamlit Enterprise UI
 
 This release keeps the v4.1.0 functions and replaces fragile embedded images and sidebar radio navigation with native Streamlit components for reliable production rendering.
