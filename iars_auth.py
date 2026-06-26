@@ -12,6 +12,7 @@ from typing import Any
 import streamlit as st
 
 from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards
+from iars_login_component import apply_exact_login_host_css, render_exact_login
 
 
 DEFAULT_USERS_TABLE = "iars_users"
@@ -369,107 +370,134 @@ def _render_setup_notice() -> None:
     )
 
 
-def _render_sign_in(client: Any, config: AuthConfig) -> None:
-    st.subheader("Sign in to your account")
-    st.caption("Access your approved Internal Audit workspace using your username or nickname.")
-    with st.form("iars_manual_sign_in_form"):
-        username_input = st.text_input(
-            "Username / Nickname",
-            placeholder="Enter your username or nickname",
-            autocomplete="username",
-        )
-        password = st.text_input(
-            "Password", type="password", autocomplete="current-password"
-        )
-        submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
-
-    if not submitted:
-        return
-
-    try:
-        username = normalize_username(username_input)
-        if username == config.admin_username.casefold():
-            if not hmac.compare_digest(password, config.admin_password):
-                _log_event(client, config, event_type="admin_sign_in", username=username, success=False)
-                raise ValueError("Incorrect username or password.")
-            admin_user = {
-                "id": "admin",
-                "username": username,
-                "full_name": config.admin_name,
-                "role": "admin",
-                "status": "Active",
-            }
-            _set_session(admin_user)
-            _log_event(client, config, event_type="admin_sign_in", username=username, success=True)
-            st.success("Administrator signed in successfully.")
-            st.rerun()
-
-        user = _fetch_user(client, config, username)
-        if not user:
-            _log_event(client, config, event_type="user_sign_in", username=username, success=False)
+def _process_sign_in_credentials(
+    client: Any,
+    config: AuthConfig,
+    username_input: str,
+    password: str,
+) -> None:
+    username = normalize_username(username_input)
+    if username == config.admin_username.casefold():
+        if not hmac.compare_digest(password, config.admin_password):
+            _log_event(client, config, event_type="admin_sign_in", username=username, success=False)
             raise ValueError("Incorrect username or password.")
+        admin_user = {
+            "id": "admin",
+            "username": username,
+            "full_name": config.admin_name,
+            "role": "admin",
+            "status": "Active",
+        }
+        _set_session(admin_user)
+        _log_event(client, config, event_type="admin_sign_in", username=username, success=True)
+        st.success("Administrator signed in successfully.")
+        st.rerun()
 
-        status = str(user.get("status", "") or "")
-        if status == "Pending":
-            raise ValueError("Your registration is waiting for administrator approval.")
-        if status == "Code Issued":
-            raise ValueError("Your activation code is ready. Open Verify Account to activate your account.")
-        if status == "Suspended":
-            raise ValueError("Your account is suspended. Contact the administrator.")
-        if status == "Deactivated":
-            raise ValueError("Your account is deactivated. Contact the administrator.")
-        if status != "Active":
-            raise ValueError("Your account is not active.")
+    user = _fetch_user(client, config, username)
+    if not user:
+        _log_event(client, config, event_type="user_sign_in", username=username, success=False)
+        raise ValueError("Incorrect username or password.")
 
-        locked_until = _parse_datetime(user.get("locked_until"))
-        if locked_until and locked_until > _utc_now():
-            remaining = max(1, int((locked_until - _utc_now()).total_seconds() // 60) + 1)
-            raise ValueError(f"Too many failed attempts. Try again in about {remaining} minute(s).")
+    status = str(user.get("status", "") or "")
+    if status == "Pending":
+        raise ValueError("Your registration is waiting for administrator approval.")
+    if status == "Code Issued":
+        raise ValueError("Your activation code is ready. Open Verify Account to activate your account.")
+    if status == "Suspended":
+        raise ValueError("Your account is suspended. Contact the administrator.")
+    if status == "Deactivated":
+        raise ValueError("Your account is deactivated. Contact the administrator.")
+    if status != "Active":
+        raise ValueError("Your account is not active.")
 
-        if not _password_matches(
-            password, str(user.get("password_salt", "")), str(user.get("password_hash", ""))
-        ):
-            attempts = int(user.get("failed_login_attempts") or 0) + 1
-            update: dict[str, Any] = {"failed_login_attempts": attempts}
-            if attempts >= MAX_LOGIN_ATTEMPTS:
-                update["locked_until"] = _iso(_utc_now() + timedelta(minutes=LOCKOUT_MINUTES))
-                update["failed_login_attempts"] = 0
-            _update_user(client, config, str(user["id"]), update)
-            _log_event(
-                client,
-                config,
-                event_type="user_sign_in",
-                username=username,
-                user_id=str(user.get("id")),
-                success=False,
-            )
-            raise ValueError("Incorrect username or password.")
+    locked_until = _parse_datetime(user.get("locked_until"))
+    if locked_until and locked_until > _utc_now():
+        remaining = max(1, int((locked_until - _utc_now()).total_seconds() // 60) + 1)
+        raise ValueError(f"Too many failed attempts. Try again in about {remaining} minute(s).")
 
-        _update_user(
-            client,
-            config,
-            str(user["id"]),
-            {
-                "failed_login_attempts": 0,
-                "locked_until": None,
-                "last_login_at": _iso(_utc_now()),
-            },
-        )
-        user["role"] = "user"
-        _set_session(user)
+    if not _password_matches(
+        password, str(user.get("password_salt", "")), str(user.get("password_hash", ""))
+    ):
+        attempts = int(user.get("failed_login_attempts") or 0) + 1
+        update: dict[str, Any] = {"failed_login_attempts": attempts}
+        if attempts >= MAX_LOGIN_ATTEMPTS:
+            update["locked_until"] = _iso(_utc_now() + timedelta(minutes=LOCKOUT_MINUTES))
+            update["failed_login_attempts"] = 0
+        _update_user(client, config, str(user["id"]), update)
         _log_event(
             client,
             config,
             event_type="user_sign_in",
             username=username,
             user_id=str(user.get("id")),
-            success=True,
+            success=False,
         )
-        st.success("Signed in successfully.")
-        st.rerun()
-    except Exception as exc:
-        st.error(str(exc) or "Sign-in failed.")
+        raise ValueError("Incorrect username or password.")
 
+    _update_user(
+        client,
+        config,
+        str(user["id"]),
+        {
+            "failed_login_attempts": 0,
+            "locked_until": None,
+            "last_login_at": _iso(_utc_now()),
+        },
+    )
+    _set_session(user)
+    _log_event(
+        client,
+        config,
+        event_type="user_sign_in",
+        username=username,
+        user_id=str(user.get("id")),
+        success=True,
+    )
+    st.success("Signed in successfully.")
+    st.rerun()
+
+
+def _render_sign_in(client: Any, config: AuthConfig) -> None:
+    username_input = st.text_input(
+        "Username",
+        placeholder="Enter your username",
+        autocomplete="username",
+        key="auth_signin_username",
+    )
+    password = st.text_input(
+        "Password",
+        placeholder="Enter your password",
+        type="password",
+        autocomplete="current-password",
+        key="auth_signin_password",
+    )
+
+    remember_col, forgot_col = st.columns([1, 1])
+    with remember_col:
+        st.checkbox("Remember me", key="auth_remember_me")
+    with forgot_col:
+        if st.button(
+            "Forgot password?",
+            key="auth_forgot_link",
+            use_container_width=True,
+        ):
+            st.session_state["iars_auth_view"] = "forgot"
+            st.rerun()
+
+    submitted = st.button(
+        "🔒  Sign In",
+        type="primary",
+        key="auth_signin_submit",
+        use_container_width=True,
+    )
+
+    if not submitted:
+        return
+
+    try:
+        _process_sign_in_credentials(client, config, username_input, password)
+    except Exception as exc:
+        st.error(str(exc) or "Unable to sign in.")
 
 def _render_sign_up(client: Any, config: AuthConfig) -> None:
     st.subheader("Sign Up")
@@ -725,88 +753,96 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
 
 def render_auth_gate(config: AuthConfig):
     """Require username/password authentication before rendering IARS."""
-    render_brand_stripe()
+
+    def _render_native_shell(render_right) -> None:
+        st.markdown('<div class="iars-login-marker"></div>', unsafe_allow_html=True)
+        with st.container(key="iars_login_shell"):
+            left, right = st.columns([1, 1], gap="small", vertical_alignment="top")
+            with left:
+                render_login_hero()
+            with right:
+                with st.container(key="iars_auth_card"):
+                    render_right()
 
     if not auth_is_configured(config):
-        left, right = st.columns([1.03, 0.97], gap="small", vertical_alignment="center")
-        with left:
-            render_login_hero()
-        with right:
-            with st.container(border=True, key="iars_auth_card"):
-                render_section_header(
-                    "Account Setup Required",
-                    "Complete the administrator and Supabase configuration before opening IARS.",
-                    badge="Configuration",
-                )
-                _render_setup_notice()
+        def _setup_panel() -> None:
+            render_section_header(
+                "Account Setup Required",
+                "Complete the administrator and Supabase configuration before opening IARS.",
+                badge="Configuration",
+            )
+            _render_setup_notice()
+        _render_native_shell(_setup_panel)
         st.stop()
 
     try:
         client = create_auth_client(config)
         user = restore_auth_session(client, config)
     except Exception as exc:
-        left, right = st.columns([1.03, 0.97], gap="small", vertical_alignment="center")
-        with left:
-            render_login_hero()
-        with right:
-            with st.container(border=True, key="iars_auth_card"):
-                render_section_header(
-                    "Unable to Start Login",
-                    "The account service could not be initialized.",
-                    badge="Connection Error",
-                )
-                st.error(f"Unable to initialize IARS account login: {exc}")
-                st.info("Run SUPABASE_USER_AUTH_SETUP.sql and verify the Streamlit Secrets values.")
+        def _error_panel() -> None:
+            render_section_header(
+                "Unable to Start Login",
+                "The account service could not be initialized.",
+                badge="Connection Error",
+            )
+            st.error(f"Unable to initialize IARS account login: {exc}")
+            st.info("Run SUPABASE_USER_AUTH_SETUP.sql and verify the Streamlit Secrets values.")
+        _render_native_shell(_error_panel)
         st.stop()
 
     if user is not None:
         return client, user
 
     view = st.session_state.get("iars_auth_view", "sign_in")
-    left, right = st.columns([1.03, 0.97], gap="small", vertical_alignment="center")
-    with left:
-        render_login_hero()
-    with right:
-        with st.container(border=True, key="iars_auth_card"):
-            if view == "sign_in":
-                st.markdown(
-                    '<div class="edl-auth-title"><h1>Sign in to your account</h1>'
-                    '<p>Access your internal audit workspace</p></div>',
-                    unsafe_allow_html=True,
-                )
-                _render_sign_in(client, config)
-                forgot_col, _ = st.columns([1, 1])
-                with forgot_col:
-                    if st.button("Forgot password?", key="auth_forgot_link", use_container_width=False):
-                        st.session_state["iars_auth_view"] = "forgot"
-                        st.rerun()
-                st.markdown('<div class="edl-auth-divider">or</div>', unsafe_allow_html=True)
-                if st.button("👤  Sign Up", key="auth_go_signup", use_container_width=True):
-                    st.session_state["iars_auth_view"] = "sign_up"
-                    st.rerun()
-                if st.button("🛡️  Verify Your Account", key="auth_go_verify", use_container_width=True):
-                    st.session_state["iars_auth_view"] = "verify"
-                    st.rerun()
-            elif view == "sign_up":
-                render_section_header("Create Account", "Register using only the essential account details.")
-                _render_sign_up(client, config)
-                if st.button("← Back to Sign In", key="auth_back_signup", use_container_width=True):
-                    st.session_state["iars_auth_view"] = "sign_in"
-                    st.rerun()
-            elif view == "verify":
-                render_section_header("Verify Account", "Enter the activation code personally provided by the administrator.")
-                _render_verify_account(client, config)
-                if st.button("← Back to Sign In", key="auth_back_verify", use_container_width=True):
-                    st.session_state["iars_auth_view"] = "sign_in"
-                    st.rerun()
-            else:
-                render_section_header("Reset Password", "Request or complete an administrator-approved password reset.")
-                _render_forgot_password(client, config)
-                if st.button("← Back to Sign In", key="auth_back_forgot", use_container_width=True):
-                    st.session_state["iars_auth_view"] = "sign_in"
-                    st.rerun()
 
-            st.caption("Authorized EDL Internal Audit personnel only.")
+    if view == "sign_in":
+        apply_exact_login_host_css()
+        result = render_exact_login(key="iars_exact_login")
+
+        submit_payload = getattr(result, "submit", None)
+        if isinstance(submit_payload, dict):
+            try:
+                _process_sign_in_credentials(
+                    client,
+                    config,
+                    str(submit_payload.get("username", "")),
+                    str(submit_payload.get("password", "")),
+                )
+            except Exception as exc:
+                st.error(str(exc) or "Unable to sign in.")
+
+        if getattr(result, "forgot", None):
+            st.session_state["iars_auth_view"] = "forgot"
+            st.rerun()
+        if getattr(result, "signup", None):
+            st.session_state["iars_auth_view"] = "sign_up"
+            st.rerun()
+        if getattr(result, "verify", None):
+            st.session_state["iars_auth_view"] = "verify"
+            st.rerun()
+        st.stop()
+
+    def _auth_panel() -> None:
+        if view == "sign_up":
+            render_section_header("Create Account", "Register using only the essential account details.")
+            _render_sign_up(client, config)
+            if st.button("← Back to Sign In", key="auth_back_signup", use_container_width=True):
+                st.session_state["iars_auth_view"] = "sign_in"
+                st.rerun()
+        elif view == "verify":
+            render_section_header("Verify Account", "Enter the activation code personally provided by the administrator.")
+            _render_verify_account(client, config)
+            if st.button("← Back to Sign In", key="auth_back_verify", use_container_width=True):
+                st.session_state["iars_auth_view"] = "sign_in"
+                st.rerun()
+        else:
+            render_section_header("Reset Password", "Request or complete an administrator-approved password reset.")
+            _render_forgot_password(client, config)
+            if st.button("← Back to Sign In", key="auth_back_forgot", use_container_width=True):
+                st.session_state["iars_auth_view"] = "sign_in"
+                st.rerun()
+
+    _render_native_shell(_auth_panel)
     st.stop()
 
 def _user_label(user: dict[str, Any]) -> str:
