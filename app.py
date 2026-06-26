@@ -10,6 +10,15 @@ import pandas as pd
 import streamlit as st
 
 from iars_pdf_editor import pdf_textbox_editor
+from iars_theme import (
+    apply_iars_theme,
+    render_app_header,
+    render_feature_cards,
+    render_metric_cards,
+    render_section_header,
+    render_sidebar_brand,
+    render_sidebar_status,
+)
 from iars_auth import (
     read_auth_config,
     render_auth_gate,
@@ -47,10 +56,13 @@ from iars_parser import (
 )
 
 st.set_page_config(
-    page_title="Internal Audit Report System",
-    page_icon="📄",
+    page_title="EDL Internal Audit Report System",
+    page_icon="🛡️",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
+
+apply_iars_theme()
 
 auth_config = read_auth_config(st.secrets)
 auth_client, auth_user = render_auth_gate(auth_config)
@@ -576,21 +588,28 @@ def archive_pdf_with_feedback(
 archive_config = read_archive_config(st.secrets)
 archive_client = archive_client_or_none(archive_config)
 archive_ready = archive_is_configured(archive_config) and archive_client is not None
-archive_unlocked = archive_access_granted(archive_config)
+archive_unlocked = archive_ready  # All authenticated IARS users may access the shared archive.
 
-st.title("Internal Audit Report System (IARS)")
-st.caption("Permanent Master Data + Multiple PDF extraction + PDF Textbox Editor + Admin-Approved Username Login + Auto-Compressed Private PDF Archive v3.8.1")
+render_app_header(auth_user, version="3.9.0")
 
 with st.sidebar:
+    render_sidebar_brand()
     render_account_sidebar(auth_client, auth_user, auth_config)
     st.divider()
-    st.header("Master Data")
+    st.markdown("### Master Data")
 
     if MASTER_DATA_PATH.exists():
-        st.success("Master Data loaded from system.")
-        st.caption(str(MASTER_DATA_PATH))
+        render_sidebar_status(
+            "Master Data ready",
+            "Employee, auditor and classification references are loaded.",
+            ok=True,
+        )
     else:
-        st.error("Master Data not found. Upload Master_Data.xlsx first.")
+        render_sidebar_status(
+            "Master Data missing",
+            "Upload data/Master_Data.xlsx before using extraction.",
+            ok=False,
+        )
 
     if is_admin_user(auth_user):
         with st.expander("Update Master Data"):
@@ -601,24 +620,28 @@ with st.sidebar:
             )
 
             if uploaded_master is not None:
-                if st.button("Save Updated Master Data"):
+                if st.button("Save Updated Master Data", type="primary", use_container_width=True):
                     save_uploaded_master(uploaded_master)
                     st.cache_data.clear()
-                    st.success("Master Data updated. Please refresh the app.")
+                    st.success("Master Data updated. Refresh the app to load the new version.")
     else:
         st.caption("Master Data updates are restricted to the administrator.")
 
     st.divider()
-    st.header("PDF Archive")
+    st.markdown("### PDF Archive")
     if archive_ready:
-        st.success("Supabase private archive connected.")
-        st.caption(f"Bucket: {archive_config.bucket}")
-        if archive_unlocked:
-            st.caption("Access: Unlocked")
-        else:
-            st.caption("Access: Locked")
+        render_sidebar_status(
+            "Shared archive connected",
+            "All signed-in auditors may search, preview and download archived PDFs.",
+            ok=True,
+        )
+        st.caption(f"Storage bucket: {archive_config.bucket}")
     else:
-        st.warning("Supabase archive not configured.")
+        render_sidebar_status(
+            "Archive unavailable",
+            "Verify the Supabase archive settings in Streamlit Secrets.",
+            ok=False,
+        )
 
 if not MASTER_DATA_PATH.exists():
     st.info("Please upload or add data/Master_Data.xlsx before generating extraction.")
@@ -647,11 +670,131 @@ auditor_options = build_auditor_options(auditors_df, additional_auditor_rows)
 if not auditor_options:
     auditor_options = sorted({_clean_option(name) for name in AUDITORS if _clean_option(name)}, key=str.casefold)
 
-tab_extract, tab_editor, tab_archive = st.tabs(["Generate Extraction", "PDF Tagging Editor", "Saved PDFs"])
+tab_home, tab_extract, tab_editor, tab_archive = st.tabs(
+    ["Home", "Generate Extraction", "PDF Tagging", "PDF Archive"]
+)
+
+
+with tab_home:
+    display_name = str(auth_user.get("full_name") or auth_user.get("username") or "Auditor")
+    role_label = "Administrator" if is_admin_user(auth_user) else "Auditor"
+
+    home_archive_records = []
+    home_archive_error = ""
+    if archive_ready and archive_client is not None:
+        try:
+            home_archive_records = list_archive_records(archive_client, archive_config, limit=1000)
+        except Exception as exc:
+            home_archive_error = str(exc)
+
+    render_section_header(
+        f"Welcome, {display_name}",
+        "Your EDL Internal Audit workspace is ready. Review system status and continue with the task you need.",
+        badge=role_label,
+    )
+    render_metric_cards(
+        [
+            {
+                "label": "Employees",
+                "value": f"{len(master_df):,}",
+                "note": "Available in Master Data",
+                "accent": "#2563EB",
+            },
+            {
+                "label": "Active Auditors",
+                "value": f"{len(auditor_options):,}",
+                "note": "Available for assignment",
+                "accent": "#C9971A",
+            },
+            {
+                "label": "Archived PDFs",
+                "value": f"{len(home_archive_records):,}" if archive_ready else "Offline",
+                "note": "Shared across signed-in auditors",
+                "accent": "#16A34A",
+            },
+            {
+                "label": "Archive Status",
+                "value": "Connected" if archive_ready else "Not configured",
+                "note": "Automatic PDF compression enabled",
+                "accent": "#E11D28" if not archive_ready else "#16A34A",
+            },
+        ]
+    )
+
+    render_section_header(
+        "Core Workspaces",
+        "Use the tabs above to move between the major IARS functions.",
+    )
+    render_feature_cards(
+        [
+            {
+                "icon": "📄",
+                "title": "Generate Extraction",
+                "text": "Upload one or more audit-report PDFs, review extracted findings and download an import-ready output.",
+            },
+            {
+                "icon": "🏷️",
+                "title": "PDF Tagging",
+                "text": "Place controlled text boxes on PDF pages, generate tagged copies and archive selected versions.",
+            },
+            {
+                "icon": "🗂️",
+                "title": "Shared PDF Archive",
+                "text": "Search, preview and download documents archived by any authorized auditor.",
+            },
+            {
+                "icon": "🛡️",
+                "title": "Controlled Access",
+                "text": "Accounts require administrator approval, while sensitive deletion and Master Data functions remain restricted.",
+            },
+        ]
+    )
+
+    left_home, right_home = st.columns([1.45, 1], gap="large")
+    with left_home:
+        render_section_header(
+            "Recent Archive Activity",
+            "The most recently stored documents across all auditors.",
+        )
+        if home_archive_records:
+            recent_rows = []
+            for record in home_archive_records[:6]:
+                recent_rows.append(
+                    {
+                        "Audit Reference": record.get("audit_reference", ""),
+                        "Auditee": record.get("auditee_name", ""),
+                        "Document": record.get("original_filename", ""),
+                        "Type": record.get("document_type", ""),
+                        "Uploaded By": record.get("uploaded_by", ""),
+                        "Date": str(record.get("uploaded_at", ""))[:10],
+                    }
+                )
+            st.dataframe(pd.DataFrame(recent_rows), width="stretch", hide_index=True)
+        elif home_archive_error:
+            st.warning(f"Archive activity could not be loaded: {home_archive_error}")
+        else:
+            st.info("No archived PDFs are available yet.")
+
+    with right_home:
+        render_section_header(
+            "System Controls",
+            "Current access and data protection status.",
+        )
+        st.success("Shared archive access is enabled for all signed-in auditors.")
+        st.info("Original PDFs may be archived directly, with or without generating extraction records.")
+        st.info("PDFs are compressed automatically when the optimized copy is smaller.")
+        if is_admin_user(auth_user):
+            st.warning("Administrator controls are available in the sidebar for accounts and Master Data.")
+        else:
+            st.caption("Archive deletion and Master Data updates remain administrator-only.")
 
 
 with tab_editor:
-    st.subheader("PDF Tagging Editor")
+    render_section_header(
+        "PDF Tagging Editor",
+        "Create precise text labels, generate tagged PDFs and save selected versions to the shared archive.",
+        badge="PDF Workspace",
+    )
     st.caption(
         "Double-right-click the PDF to add a textbox. Click inside to type, "
         "drag the move tab to reposition, and drag the blue handles to resize. "
@@ -869,48 +1012,52 @@ with tab_editor:
 with tab_archive:
     st.subheader("Saved PDFs")
     st.caption(
-        "Private permanent archive for original and tagged audit-report PDFs. "
+        "Shared permanent archive for original and tagged audit-report PDFs. "
+        "All signed-in auditors can view, search, preview, and download PDFs uploaded by any auditor. "
         "PDFs are automatically compressed with balanced quality before upload."
     )
 
-    if render_archive_login(archive_config):
-        archive_unlocked = True
+    if not archive_ready:
+        render_archive_setup_notice()
+    else:
         archive_client = archive_client_or_none(archive_config)
         if archive_client is None:
             st.error("Unable to connect to Supabase. Verify the URL and service-role key in Streamlit Secrets.")
         else:
-            st.markdown("### Auditor Directory")
-            with st.expander("Add New Auditor", expanded=False):
-                if additional_auditor_error:
-                    st.warning(
-                        "The additional-auditor table is not ready. Run "
-                        "SUPABASE_AUDITOR_MIGRATION.sql in Supabase, then refresh the app."
-                    )
-                with st.form("add_new_auditor_form", clear_on_submit=True):
-                    new_auditor_name = st.text_input("Auditor Full Name")
-                    new_auditor_designation = st.text_input("Designation")
-                    new_auditor_user = st.text_input("User / Display Name")
-                    new_auditor_email = st.text_input("Email (optional)")
-                    new_auditor_status = st.selectbox("Status", ["Active", "Inactive"])
-                    add_auditor_submit = st.form_submit_button("Add New Auditor", type="primary")
-
-                if add_auditor_submit:
-                    try:
-                        add_additional_auditor(
-                            archive_client,
-                            auditor_name=new_auditor_name,
-                            designation=new_auditor_designation,
-                            user_display=new_auditor_user,
-                            email=new_auditor_email,
-                            status=new_auditor_status,
-                            created_by="IARS Archive Admin",
+            if is_admin_user(auth_user):
+                st.markdown("### Auditor Directory")
+                with st.expander("Add New Auditor", expanded=False):
+                    if additional_auditor_error:
+                        st.warning(
+                            "The additional-auditor table is not ready. Run "
+                            "SUPABASE_AUDITOR_MIGRATION.sql in Supabase, then refresh the app."
                         )
-                        st.success("New auditor added successfully and is now available in the dropdown.")
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(str(exc))
+                    with st.form("add_new_auditor_form", clear_on_submit=True):
+                        new_auditor_name = st.text_input("Auditor Full Name")
+                        new_auditor_designation = st.text_input("Designation")
+                        new_auditor_user = st.text_input("User / Display Name")
+                        new_auditor_email = st.text_input("Email (optional)")
+                        new_auditor_status = st.selectbox("Status", ["Active", "Inactive"])
+                        add_auditor_submit = st.form_submit_button("Add New Auditor", type="primary")
 
-            st.markdown("### Upload PDFs to Archive")
+                    if add_auditor_submit:
+                        try:
+                            add_additional_auditor(
+                                archive_client,
+                                auditor_name=new_auditor_name,
+                                designation=new_auditor_designation,
+                                user_display=new_auditor_user,
+                                email=new_auditor_email,
+                                status=new_auditor_status,
+                                created_by="IARS Archive Admin",
+                            )
+                            st.success("New auditor added successfully and is now available in the dropdown.")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(str(exc))
+
+            st.markdown("### Upload PDFs Directly to Archive")
+            st.caption("This is available to all signed-in auditors. Uploaded PDFs become visible in the shared archive.")
             saved_uploads = st.file_uploader(
                 "Select one or multiple PDF files",
                 type=["pdf"],
@@ -974,7 +1121,7 @@ with tab_archive:
             st.divider()
             title_col, refresh_col = st.columns([4, 1])
             with title_col:
-                st.markdown("### Archived PDF Records")
+                st.markdown("### Shared Archived PDF Records")
             with refresh_col:
                 if st.button("Refresh List"):
                     st.session_state.pop("archive_preview_bytes", None)
@@ -1025,7 +1172,7 @@ with tab_archive:
                         }
                     )
 
-                st.caption(f"Showing {len(filtered)} of {len(records)} archived PDF record(s).")
+                st.caption(f"Showing {len(filtered)} of {len(records)} archived PDF record(s) from all auditors.")
                 if display_rows:
                     st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
 
@@ -1041,7 +1188,7 @@ with tab_archive:
                         labels.append(label)
                         record_by_label[label] = record
 
-                    selected_label = st.selectbox("Select a PDF to preview, download or delete", labels)
+                    selected_label = st.selectbox("Select a PDF to preview or download", labels)
                     selected_record = record_by_label[selected_label]
 
                     if st.button("Load Selected PDF"):
@@ -1085,30 +1232,38 @@ with tab_archive:
                         except Exception as exc:
                             st.warning(f"PDF preview unavailable: {exc}")
 
-                    st.markdown("#### Delete Selected PDF")
-                    st.warning("Deleting removes both the private Storage object and its archive metadata.")
-                    confirmation = st.text_input(
-                        "Type DELETE to confirm",
-                        key=f"delete_confirm_{selected_record.get('id')}",
-                    )
-                    if st.button(
-                        "Delete Selected PDF",
-                        type="primary",
-                        disabled=confirmation.strip().upper() != "DELETE",
-                    ):
-                        try:
-                            delete_archived_pdf(archive_client, archive_config, selected_record)
-                            st.session_state.pop("archive_preview_bytes", None)
-                            st.session_state.pop("archive_preview_record_id", None)
-                            st.success("Archived PDF deleted successfully.")
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(str(exc))
+                    if is_admin_user(auth_user):
+                        st.markdown("#### Delete Selected PDF — Administrator Only")
+                        st.warning("Deleting removes both the private Storage object and its archive metadata.")
+                        confirmation = st.text_input(
+                            "Type DELETE to confirm",
+                            key=f"delete_confirm_{selected_record.get('id')}",
+                        )
+                        if st.button(
+                            "Delete Selected PDF",
+                            type="primary",
+                            disabled=confirmation.strip().upper() != "DELETE",
+                        ):
+                            try:
+                                delete_archived_pdf(archive_client, archive_config, selected_record)
+                                st.session_state.pop("archive_preview_bytes", None)
+                                st.session_state.pop("archive_preview_record_id", None)
+                                st.success("Archived PDF deleted successfully.")
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(str(exc))
+                    else:
+                        st.caption("Only the administrator can delete archived PDFs.")
                 else:
                     st.info("No archived PDFs match the selected filters.")
 
 
 with tab_extract:
+    render_section_header(
+        "Generate Extraction",
+        "Upload audit-report PDFs, review generated records and choose whether originals should also be archived.",
+        badge="Extraction Workspace",
+    )
     st.subheader("System Status")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -1130,32 +1285,44 @@ with tab_extract:
     if pdf_files:
         st.success(f"{len(pdf_files)} PDF report(s) uploaded successfully.")
 
-        archive_after_extract = False
+        upload_action_options = ["Generate extraction only"]
+        if archive_ready:
+            upload_action_options.extend([
+                "Generate extraction and archive original PDFs",
+                "Archive original PDFs only",
+            ])
+
+        upload_action = st.radio(
+            "Choose what to do with the uploaded PDFs",
+            upload_action_options,
+            horizontal=True,
+            key="extract_upload_action",
+        )
+        archive_requested = upload_action != "Generate extraction only"
+        archive_only = upload_action == "Archive original PDFs only"
         extraction_uploaded_by = ""
-        if archive_ready and archive_unlocked:
-            archive_after_extract = st.checkbox(
-                "Save successfully processed original PDFs to the permanent archive",
-                value=True,
-                key="archive_after_extract",
+
+        if archive_requested:
+            st.info(
+                "The original PDFs will be compressed and saved in the shared archive, "
+                "where all signed-in auditors can view them."
             )
-            if archive_after_extract:
-                extraction_uploaded_by = render_auditor_selector(
-                    "Uploaded By",
-                    "extract_archive_uploaded_by",
-                    auditor_options,
-                )
-        elif archive_ready:
-            st.info("Unlock the Saved PDFs tab to enable automatic archiving after extraction.")
-        else:
+            extraction_uploaded_by = render_auditor_selector(
+                "Uploaded By",
+                "extract_archive_uploaded_by",
+                auditor_options,
+            )
+        elif not archive_ready:
             st.caption("Permanent archive is unavailable until Supabase is configured.")
 
-        if st.button("Generate Extraction", type="primary"):
+        action_button_label = "Archive Uploaded PDFs" if archive_only else "Generate Extraction"
+        if st.button(action_button_label, type="primary"):
             all_results = []
             processing_errors = []
             archive_results = []
 
-            if archive_after_extract and not extraction_uploaded_by.strip():
-                st.error("Uploaded By is required when automatic archiving is enabled.")
+            if archive_requested and not extraction_uploaded_by.strip():
+                st.error("Uploaded By is required when saving PDFs to the archive.")
                 st.stop()
 
             progress = st.progress(0)
@@ -1165,31 +1332,51 @@ with tab_extract:
                 pdf_data = pdf_file.getvalue()
                 try:
                     status.write(f"Processing {idx} of {len(pdf_files)}: {pdf_file.name}")
-                    pdf_file.seek(0)
-                    result_df, header, items = build_records(
-                        pdf_file,
-                        master_df,
-                        auditors_df=auditors_df,
-                        master_sheets=master_sheets,
-                    )
-                    all_results.append(result_df)
 
-                    if archive_after_extract:
+                    if archive_only:
+                        defaults = cached_archive_metadata(pdf_data, pdf_file.name)
+                        official_names = official_auditee_string(
+                            str(defaults.get("auditee_name", "") or ""),
+                            employee_records,
+                        )
                         archive_results.append(
                             archive_pdf_with_feedback(
                                 archive_client,
                                 archive_config,
                                 pdf_bytes=pdf_data,
                                 filename=pdf_file.name,
-                                audit_reference=str(header.get("audit_reference", "") or ""),
-                                auditee_name=(
-                                    canonical_names_from_result(result_df)
-                                    or official_auditee_string(str(header.get("auditee_name", "") or ""), employee_records)
-                                ),
+                                audit_reference=str(defaults.get("audit_reference", "") or ""),
+                                auditee_name=official_names or str(defaults.get("auditee_name", "") or ""),
                                 document_type="Original",
                                 uploaded_by=extraction_uploaded_by,
                             )
                         )
+                    else:
+                        pdf_file.seek(0)
+                        result_df, header, items = build_records(
+                            pdf_file,
+                            master_df,
+                            auditors_df=auditors_df,
+                            master_sheets=master_sheets,
+                        )
+                        all_results.append(result_df)
+
+                        if archive_requested:
+                            archive_results.append(
+                                archive_pdf_with_feedback(
+                                    archive_client,
+                                    archive_config,
+                                    pdf_bytes=pdf_data,
+                                    filename=pdf_file.name,
+                                    audit_reference=str(header.get("audit_reference", "") or ""),
+                                    auditee_name=(
+                                        canonical_names_from_result(result_df)
+                                        or official_auditee_string(str(header.get("auditee_name", "") or ""), employee_records)
+                                    ),
+                                    document_type="Original",
+                                    uploaded_by=extraction_uploaded_by,
+                                )
+                            )
 
                 except Exception as e:
                     processing_errors.append({
@@ -1200,6 +1387,9 @@ with tab_extract:
                 progress.progress(idx / len(pdf_files))
 
             status.empty()
+
+            if archive_only and archive_results:
+                st.success(f"Processed {len(archive_results)} PDF file(s) for the shared archive.")
 
             if all_results:
                 final_df = pd.concat(all_results, ignore_index=True)
