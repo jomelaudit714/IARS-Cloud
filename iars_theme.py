@@ -47,11 +47,10 @@ def _audit_image_data_uri() -> str:
 
 
 def _render_html(fragment: str) -> None:
-    """Render trusted local HTML without Markdown treating tags as code."""
-    if hasattr(st, "html"):
-        st.html(fragment)
-    else:  # pragma: no cover - compatibility with older Streamlit versions
-        st.markdown(fragment, unsafe_allow_html=True)
+    """Render trusted local HTML and CSS consistently across Streamlit versions."""
+    # st.markdown with explicit HTML permission is more reliable for the custom
+    # styling used by IARS, while all inserted user text is escaped by callers.
+    st.markdown(fragment.strip(), unsafe_allow_html=True)
 
 
 def apply_iars_theme() -> None:
@@ -225,6 +224,36 @@ div[data-testid="stForm"],div[data-testid="stVerticalBlockBorderWrapper"] {{bord
   .edl-login-foot{{left:1.2rem;right:1.2rem}} .edl-stepper{{grid-template-columns:1fr}} .edl-step:not(:last-child):after{{display:none}}
   .st-key-extract_upload_action [data-testid="stRadio"] > div {{grid-template-columns:1fr!important;}}
 }}
+
+/* v4.2: native Streamlit image and navigation layout for reliable rendering */
+[data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{display:none!important;}}
+section[data-testid="stSidebar"] [data-testid="stImage"] {{display:flex;justify-content:center;margin:.15rem auto .35rem;}}
+section[data-testid="stSidebar"] [data-testid="stImage"] img {{width:126px!important;height:126px!important;object-fit:contain;background:#FFF;border-radius:16px;padding:5px;box-shadow:0 12px 28px rgba(0,0,0,.24);}}
+section[data-testid="stSidebar"] .stButton {{margin:.08rem 0;}}
+section[data-testid="stSidebar"] .stButton>button {{width:100%;justify-content:flex-start;text-align:left;min-height:43px;padding:.52rem .68rem;font-size:.78rem;}}
+section[data-testid="stSidebar"] .stButton>button[kind="secondary"] {{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#F8FAFC!important;}}
+section[data-testid="stSidebar"] .stButton>button[kind="secondary"]:hover {{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.08)!important;}}
+section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:linear-gradient(135deg,#B87905,#DCA423)!important;border-color:#DCA423!important;box-shadow:0 7px 18px rgba(199,139,18,.25)!important;color:#FFF!important;}}
+
+.st-key-edl_login_hero_panel {{min-height:720px;background:linear-gradient(155deg,#05172F 0%,#08264C 62%,#061A36 100%);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:1.55rem 1.65rem 1.15rem;box-shadow:0 22px 58px rgba(7,28,58,.20);overflow:hidden;}}
+.st-key-edl_login_hero_panel [data-testid="stImage"] img {{border-radius:13px;}}
+.st-key-edl_login_hero_panel .edl-native-login-copy h1 {{color:#FFF;font-size:clamp(2rem,3.8vw,3rem);line-height:1.03;letter-spacing:-.04em;margin:.42rem 0 .7rem;font-weight:850;}}
+.st-key-edl_login_hero_panel .edl-native-login-copy h1 em {{color:#F0BD3F;font-style:normal;}}
+.st-key-edl_login_hero_panel .edl-native-login-copy p {{color:rgba(255,255,255,.77);font-size:.82rem;line-height:1.58;}}
+.st-key-edl_login_hero_panel .edl-native-login-copy .eyebrow {{color:#E9B839;font-size:.68rem;font-weight:820;letter-spacing:.14em;text-transform:uppercase;}}
+.st-key-edl_login_hero_panel .edl-login-points {{margin:.9rem 0 1.1rem;}}
+.st-key-edl_login_hero_panel .stCaption {{color:rgba(255,255,255,.55)!important;border-top:1px solid rgba(255,255,255,.10);padding-top:.65rem;}}
+
+.st-key-edl_dashboard_hero_panel {{background:#FFF;border:1px solid var(--edl-border);border-radius:14px;padding:1.15rem 1.3rem;box-shadow:0 7px 24px rgba(16,24,40,.055);margin:.12rem 0 .85rem;overflow:hidden;}}
+.st-key-edl_dashboard_hero_panel [data-testid="stImage"] img {{border-radius:12px;max-height:300px;object-fit:cover;object-position:center;}}
+.st-key-edl_dashboard_hero_panel .edl-native-dashboard-copy {{padding:.65rem .35rem .35rem;}}
+.st-key-edl_dashboard_hero_panel .edl-native-dashboard-copy h1 {{color:var(--edl-navy);font-size:clamp(1.8rem,3.1vw,2.65rem);line-height:1.04;letter-spacing:-.04em;margin:.45rem 0 .55rem;font-weight:850;}}
+.st-key-edl_dashboard_hero_panel .edl-native-dashboard-copy h1 em {{color:var(--edl-gold);font-style:normal;}}
+.st-key-edl_dashboard_hero_panel .edl-native-dashboard-copy p {{color:var(--edl-muted);font-size:.82rem;line-height:1.58;max-width:560px;}}
+.edl-native-hero-tag {{display:inline-flex;align-items:center;gap:.38rem;color:#815B08;border:1px solid rgba(199,139,18,.28);background:#FFF8E8;border-radius:999px;padding:.32rem .55rem;font-size:.66rem;font-weight:760;}}
+
+@media(max-width:1000px) {{.st-key-edl_login_hero_panel{{min-height:auto}}}}
+@media(max-width:720px) {{.st-key-edl_login_hero_panel{{padding:1rem;min-height:auto}} .st-key-edl_dashboard_hero_panel{{padding:.8rem}}}}
 </style>
 """
     _render_html(css)
@@ -235,11 +264,12 @@ def render_brand_stripe() -> None:
 
 
 def render_sidebar_brand() -> None:
-    logo = _logo_data_uri()
-    image = f'<img src="{logo}" alt="EDL GROUP OF COMPANIES logo">' if logo else ""
+    """Render the exact EDL logo with native Streamlit image support."""
+    logo_path = _asset_path("edl_logo.png")
+    if logo_path.exists():
+        st.image(str(logo_path), width=126)
     _render_html(
-        '<div class="edl-sidebar-brand">'
-        f'<div class="edl-sidebar-logo-shell">{image}</div>'
+        '<div class="edl-sidebar-brand" style="padding-top:.05rem">'
         '<h3>INTERNAL AUDIT<br>REPORT SYSTEM</h3>'
         '<p>EDL GROUP OF COMPANIES</p>'
         '</div>'
@@ -275,44 +305,48 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
 
 
 def render_login_hero() -> None:
-    logo = _logo_data_uri()
-    audit_image = _audit_image_data_uri()
-    logo_html = (
-        f'<div class="edl-login-logo-shell"><img class="edl-login-logo" src="{logo}" alt="EDL GROUP OF COMPANIES logo"></div>'
-        if logo else ""
-    )
-    visual_html = (
-        f'<img class="edl-login-visual" src="{audit_image}" alt="Internal audit reports and compliance workpapers">'
-        if audit_image else ""
-    )
-    _render_html(
-        '<div class="edl-login-hero">'
-        f'{visual_html}<div class="edl-login-content">{logo_html}'
-        '<div class="eyebrow">EDL GROUP OF COMPANIES</div>'
-        '<h1>Secure Internal Audit <em>Workspace.</em></h1>'
-        '<p>A secure and centralized workspace for managing internal audit reports, shared archives, templates, policies and controlled records.</p>'
-        '<div class="edl-login-points">'
-        '<div class="edl-login-point"><span>🛡️</span>Admin-approved access</div>'
-        '<div class="edl-login-point"><span>📄</span>Smart report extraction</div>'
-        '<div class="edl-login-point"><span>🗂️</span>Shared PDF and document libraries</div>'
-        '<div class="edl-login-point"><span>✅</span>Controlled and traceable records</div>'
-        '</div></div><div class="edl-login-foot">Secure · Confidential · Authorized Internal Audit personnel only</div></div>'
-    )
+    """Render the branded login panel using native Streamlit images."""
+    logo_path = _asset_path("edl_logo.png")
+    visual_path = _asset_path("internal_audit_visual.png")
+    with st.container(key="edl_login_hero_panel"):
+        logo_cols = st.columns([1, 1.15, 1])
+        with logo_cols[1]:
+            if logo_path.exists():
+                st.image(str(logo_path), use_container_width=True)
+        _render_html(
+            '<div class="edl-native-login-copy">'
+            '<div class="eyebrow">EDL GROUP OF COMPANIES</div>'
+            '<h1>Secure Internal Audit <em>Workspace.</em></h1>'
+            '<p>A secure and centralized workspace for managing internal audit reports, shared archives, templates, policies and controlled records.</p>'
+            '</div>'
+            '<div class="edl-login-points">'
+            '<div class="edl-login-point"><span>🛡️</span>Admin-approved access</div>'
+            '<div class="edl-login-point"><span>📄</span>Smart report extraction</div>'
+            '<div class="edl-login-point"><span>🗂️</span>Shared PDF and document libraries</div>'
+            '<div class="edl-login-point"><span>✅</span>Controlled and traceable records</div>'
+            '</div>'
+        )
+        if visual_path.exists():
+            st.image(str(visual_path), use_container_width=True)
+        st.caption("Secure · Confidential · Authorized Internal Audit personnel only")
 
 
 def render_dashboard_hero() -> None:
-    audit_image = _audit_image_data_uri()
-    visual_html = (
-        f'<img class="edl-dashboard-visual" src="{audit_image}" alt="Internal audit reports and workpapers">'
-        if audit_image else ""
-    )
-    _render_html(
-        '<div class="edl-dashboard-hero">'
-        f'{visual_html}<div class="edl-hero-tag">🛡️ Internal Audit Digital Workspace</div>'
-        '<h1>Delivering Integrity.<br>Driving <em>Assurance.</em></h1>'
-        '<p>Empowering the Internal Audit team with secure tools, accurate data, reusable resources and controlled records for confident decision-making.</p>'
-        '</div>'
-    )
+    """Render the dashboard hero with a guaranteed visible audit image."""
+    visual_path = _asset_path("internal_audit_visual.png")
+    with st.container(key="edl_dashboard_hero_panel"):
+        copy_col, image_col = st.columns([1.05, 1], gap="large", vertical_alignment="center")
+        with copy_col:
+            _render_html(
+                '<div class="edl-native-dashboard-copy">'
+                '<div class="edl-native-hero-tag">🛡️ Internal Audit Digital Workspace</div>'
+                '<h1>Delivering Integrity.<br>Driving <em>Assurance.</em></h1>'
+                '<p>Empowering the Internal Audit team with secure tools, accurate data, reusable resources and controlled records for confident decision-making.</p>'
+                '</div>'
+            )
+        with image_col:
+            if visual_path.exists():
+                st.image(str(visual_path), use_container_width=True)
 
 
 def render_section_header(title: str, subtitle: str = "", badge: str = "") -> None:

@@ -995,12 +995,18 @@ if st.session_state.get("main_navigation") not in nav_options:
 
 with st.sidebar:
     render_sidebar_brand()
-    selected_page = st.radio(
-        "Navigation",
-        nav_options,
-        key="main_navigation",
-        label_visibility="collapsed",
-    )
+    selected_page = st.session_state["main_navigation"]
+    for nav_index, nav_label in enumerate(nav_options):
+        nav_key = re.sub(r"[^a-z0-9]+", "_", nav_label.lower()).strip("_")
+        is_selected = nav_label == selected_page
+        if st.button(
+            nav_label,
+            key=f"sidebar_nav_{nav_index}_{nav_key}",
+            use_container_width=True,
+            type="primary" if is_selected else "secondary",
+        ):
+            st.session_state["main_navigation"] = nav_label
+            st.rerun()
     st.divider()
     system_ok = archive_ready and document_library_ready and MASTER_DATA_PATH.exists()
     render_sidebar_status(
@@ -1010,8 +1016,9 @@ with st.sidebar:
     )
     render_account_sidebar(auth_client, auth_user, auth_config)
 
+selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.1.0", page_title=page_key)
+render_app_header(auth_user, version="4.2.0", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
@@ -1926,7 +1933,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.1.0", "note": "EDL Enterprise Interface", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.2.0", "note": "Native Streamlit Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

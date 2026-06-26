@@ -1,3 +1,24 @@
+# IARS v4.2.0 — EDL Native Streamlit Enterprise UI
+
+This release keeps the v4.1.0 functions and replaces fragile embedded images and sidebar radio navigation with native Streamlit components for reliable production rendering.
+
+## Required assets
+
+- `assets/edl_logo.png` — exact original EDL GROUP OF COMPANIES logo
+- `assets/internal_audit_visual.png` — Internal Audit reports, compliance, workpapers and assurance visual
+
+## Main corrections
+
+- Exact EDL logo visible on login and main sidebar
+- Internal Audit image visible on login and Dashboard
+- No radio-button circles in the main navigation
+- Gold active navigation and navy professional sidebar
+- Existing IARS business logic retained
+
+See `DEPLOY_v4_2_0.md` and `CHANGELOG_v4_2_0.md`.
+
+---
+
 # IARS v4.1.0 — EDL Enterprise Internal Audit Interface
 
 This package applies the approved EDL GROUP OF COMPANIES Internal Audit interface to the working IARS application while retaining the existing authentication, extraction, PDF tagging, shared archive, document library, Master Data, and export logic.
