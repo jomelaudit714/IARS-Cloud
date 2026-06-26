@@ -90,14 +90,14 @@ button,input { font:inherit; }
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:10px;
-  padding:8px;
+  padding:4px;
   background:#F4F6FA;
 }
 .visual-panel,
 .form-panel {
   min-width:0;
   min-height:0;
-  height:calc(100dvh - 16px);
+  height:calc(100dvh - 8px);
   border-radius:16px;
   overflow:hidden;
 }
@@ -110,7 +110,7 @@ button,input { font:inherit; }
   height:100%;
   display:block;
   object-fit:cover;
-  object-position:center center;
+  object-position:center top;
 }
 .form-panel {
   display:flex;
@@ -441,6 +441,12 @@ def apply_exact_login_host_css() -> None:
           margin:0 !important;
           overflow:hidden !important;
           background:#F4F6FA !important;
+        }
+        [data-testid="stVerticalBlock"],
+        [data-testid="stVerticalBlock"] > div {
+          gap:0 !important;
+          margin:0 !important;
+          padding:0 !important;
         }
         [data-testid="stCustomComponentV2"],
         [data-testid="stCustomComponentV2"] > div {
