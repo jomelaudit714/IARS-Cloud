@@ -20,6 +20,9 @@ from iars_theme import (
     render_sidebar_status,
     render_dashboard_hero,
     render_library_note,
+    render_stepper,
+    render_activity_list,
+    render_system_overview,
 )
 from iars_auth import (
     read_auth_config,
@@ -999,27 +1002,16 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.divider()
+    system_ok = archive_ready and document_library_ready and MASTER_DATA_PATH.exists()
     render_sidebar_status(
-        "PDF archive connected" if archive_ready else "PDF archive unavailable",
-        "Shared across all authorized auditors." if archive_ready else "Check Supabase archive settings.",
-        ok=archive_ready,
+        "System operational" if system_ok else "Setup requires review",
+        "Archive, libraries and Master Data are ready." if system_ok else "Open Dashboard or Settings for details.",
+        ok=system_ok,
     )
-    render_sidebar_status(
-        "Document library connected" if document_library_ready else "Document library setup needed",
-        "Templates, policies and memoranda are available." if document_library_ready else "Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql.",
-        ok=document_library_ready,
-    )
-    render_sidebar_status(
-        "Master Data ready" if MASTER_DATA_PATH.exists() else "Master Data missing",
-        f"{len(master_df):,} employee records loaded." if MASTER_DATA_PATH.exists() else "Add data/Master_Data.xlsx.",
-        ok=MASTER_DATA_PATH.exists(),
-    )
-    st.divider()
     render_account_sidebar(auth_client, auth_user, auth_config)
 
-render_app_header(auth_user, version="4.0.1")
-
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
+render_app_header(auth_user, version="4.1.0", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
@@ -1053,143 +1045,62 @@ if page_key == "Dashboard":
             home_library_error = str(exc)
 
     render_section_header(
-        f"Welcome, {display_name}",
-        "Review system status, recent activity and the Internal Audit resources available to your team.",
+        f"Welcome back, {display_name}",
+        "Here is what is happening across the Internal Audit Report System.",
         badge=role_label,
     )
-    render_dashboard_hero()
     render_metric_cards(
         [
-            {
-                "label": "Employees",
-                "value": f"{len(master_df):,}",
-                "note": "Master Data records",
-                "icon": "👥",
-                "accent": "#2563EB",
-            },
-            {
-                "label": "Active Auditors",
-                "value": f"{len(auditor_options):,}",
-                "note": "Available for assignment",
-                "icon": "🧑‍💼",
-                "accent": "#178A52",
-            },
-            {
-                "label": "Archived PDFs",
-                "value": f"{len(home_archive_records):,}" if archive_ready else "Offline",
-                "note": "Shared audit archive",
-                "icon": "🗂️",
-                "accent": "#C78B12",
-            },
-            {
-                "label": "Report Templates",
-                "value": f"{len(home_template_records):,}" if document_library_ready else "Setup",
-                "note": "Excel, Word and PDF",
-                "icon": "📚",
-                "accent": "#6941C6",
-            },
-            {
-                "label": "Policies & Memos",
-                "value": f"{len(home_policy_records):,}" if document_library_ready else "Setup",
-                "note": "Controlled references",
-                "icon": "📜",
-                "accent": "#087E8B",
-            },
-            {
-                "label": "Archive Status",
-                "value": "Connected" if archive_ready else "Not configured",
-                "note": "Automatic PDF compression",
-                "icon": "🛡️",
-                "accent": "#178A52" if archive_ready else "#D92D20",
-            },
+            {"label": "Employees", "value": f"{len(master_df):,}", "note": "Master Data records", "icon": "👥", "accent": "#175CD3"},
+            {"label": "Active Auditors", "value": f"{len(auditor_options):,}", "note": "Approved users", "icon": "🧑‍💼", "accent": "#148A4B"},
+            {"label": "Archived PDFs", "value": f"{len(home_archive_records):,}" if archive_ready else "Offline", "note": "Shared archive", "icon": "🗂️", "accent": "#6938EF"},
+            {"label": "Report Templates", "value": f"{len(home_template_records):,}" if document_library_ready else "Setup", "note": "Reusable resources", "icon": "📚", "accent": "#C88A08"},
+            {"label": "Policies & Memos", "value": f"{len(home_policy_records):,}" if document_library_ready else "Setup", "note": "Controlled references", "icon": "📜", "accent": "#087E8B"},
+            {"label": "Archive Status", "value": "Connected" if archive_ready else "Not configured", "note": "Automatic compression", "icon": "🛡️", "accent": "#148A4B" if archive_ready else "#D92D20"},
         ]
     )
 
-    render_section_header(
-        "Quick Actions",
-        "Open the workspace needed for your current audit activity.",
-    )
-    qa1, qa2, qa3, qa4, qa5 = st.columns(5)
-    with qa1:
-        st.button(
-            "📄 Generate Extraction",
-            use_container_width=True,
-            type="primary",
-            on_click=_navigate_to,
-            args=("📄 Generate Extraction",),
-        )
-    with qa2:
-        st.button(
-            "🏷️ PDF Tagging",
-            use_container_width=True,
-            on_click=_navigate_to,
-            args=("🏷️ PDF Tagging",),
-        )
-    with qa3:
-        st.button(
-            "🗂️ Shared Archive",
-            use_container_width=True,
-            on_click=_navigate_to,
-            args=("🗂️ Shared PDF Archive",),
-        )
-    with qa4:
-        st.button(
-            "📚 Report Templates",
-            use_container_width=True,
-            on_click=_navigate_to,
-            args=("📚 Report Templates",),
-        )
-    with qa5:
-        st.button(
-            "📜 Policies & Memos",
-            use_container_width=True,
-            on_click=_navigate_to,
-            args=("📜 Policies & Memoranda",),
-        )
-
-    left_home, right_home = st.columns([1.5, 1], gap="large")
-    with left_home:
-        render_section_header(
-            "Recent Archive Activity",
-            "The most recently stored audit reports across all authorized auditors.",
-        )
-        if home_archive_records:
-            recent_rows = []
-            for record in home_archive_records[:7]:
-                recent_rows.append(
-                    {
-                        "Audit Reference": record.get("audit_reference", ""),
-                        "Document": record.get("original_filename", ""),
-                        "Uploaded By": record.get("uploaded_by", ""),
-                        "Type": record.get("document_type", ""),
-                        "Date": str(record.get("uploaded_at", ""))[:16].replace("T", " "),
-                    }
-                )
-            st.dataframe(pd.DataFrame(recent_rows), width="stretch", hide_index=True)
-        elif home_archive_error:
+    activity_col, action_col, overview_col = st.columns([1.55, 0.9, 0.78], gap="large")
+    with activity_col:
+        render_section_header("Recent Archive Activity", "Latest reports saved by authorized auditors.")
+        activity_rows = []
+        for record in home_archive_records[:7]:
+            activity_rows.append(
+                {
+                    "icon": "📄",
+                    "title": str(record.get("original_filename", "") or "Archived PDF"),
+                    "subtitle": f"{record.get('audit_reference', '') or 'No reference'} · Uploaded by {record.get('uploaded_by', '') or 'Unknown'}",
+                    "meta": str(record.get("uploaded_at", ""))[:16].replace("T", " "),
+                }
+            )
+        render_activity_list(activity_rows)
+        if home_archive_error:
             st.warning(f"Archive activity could not be loaded: {home_archive_error}")
-        else:
-            st.info("No archived PDFs are available yet.")
 
-    with right_home:
-        render_section_header(
-            "Pending Attention",
-            "Configuration and access items that may require review.",
+    with action_col:
+        render_section_header("Quick Actions", "Open a core workspace.")
+        st.button("📄 Generate Extraction", use_container_width=True, type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
+        st.button("🗂️ Archive PDFs", use_container_width=True, on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
+        st.button("🏷️ PDF Tagging", use_container_width=True, on_click=_navigate_to, args=("🏷️ PDF Tagging",))
+        st.button("📚 Report Templates", use_container_width=True, on_click=_navigate_to, args=("📚 Report Templates",))
+        st.button("📜 Policies & Memos", use_container_width=True, on_click=_navigate_to, args=("📜 Policies & Memoranda",))
+        if is_admin_user(auth_user):
+            st.button("👥 User Management", use_container_width=True, on_click=_navigate_to, args=("👥 User Management",))
+
+    with overview_col:
+        render_section_header("System Overview", "Current environment status.")
+        render_system_overview(
+            [
+                {"label": "Database", "value": "Operational" if archive_ready else "Review", "ok": archive_ready},
+                {"label": "Master Data", "value": "Ready" if MASTER_DATA_PATH.exists() else "Missing", "ok": MASTER_DATA_PATH.exists()},
+                {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "ok": document_library_ready},
+                {"label": "PDF Compression", "value": "Enabled", "ok": True},
+                {"label": "Shared Access", "value": "All auditors", "ok": True},
+                {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "ok": True},
+            ]
         )
-        if not MASTER_DATA_PATH.exists():
-            st.warning("Master Data is missing. An administrator must upload data/Master_Data.xlsx.")
-        else:
-            st.success("Master Data is loaded and ready for extraction.")
-        if not document_library_ready:
-            st.warning("Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql to activate templates and policy libraries.")
-        else:
-            st.success("Report Templates and Policies & Memoranda libraries are connected.")
         if home_library_error:
             st.warning(f"Document-library activity could not be loaded: {home_library_error}")
-        if is_admin_user(auth_user):
-            st.info("User approvals, Master Data maintenance and deletion controls are available to the administrator.")
-        else:
-            st.caption("You can view and download shared records. Deletion and system maintenance remain administrator-only.")
 
 
 if page_key == "PDF Tagging":
@@ -1198,6 +1109,7 @@ if page_key == "PDF Tagging":
         "Create precise text labels, generate tagged PDFs and save selected versions to the shared archive.",
         badge="PDF Workspace",
     )
+    render_stepper(["Upload PDF", "Add & Position Tags", "Review", "Generate / Archive"], active_index=0)
     st.caption(
         "Double-right-click the PDF to add a textbox. Click inside to type, "
         "drag the move tab to reposition, and drag the blue handles to resize. "
@@ -1413,11 +1325,15 @@ if page_key == "PDF Tagging":
 
 
 if page_key == "Shared PDF Archive":
-    st.subheader("Saved PDFs")
-    st.caption(
-        "Shared permanent archive for original and tagged audit-report PDFs. "
-        "All signed-in auditors can view, search, preview, and download PDFs uploaded by any auditor. "
-        "PDFs are automatically compressed with balanced quality before upload."
+    render_section_header(
+        "Shared PDF Archive",
+        "Browse, upload, preview and download audit-report PDFs from all authorized auditors.",
+        badge="Shared Archive",
+    )
+    render_library_note(
+        "Controlled shared access",
+        "All signed-in auditors may view and download archived PDFs. Files are compressed automatically; deletion remains administrator-only.",
+        icon="🗂️",
     )
 
     if not archive_ready:
@@ -1535,6 +1451,18 @@ if page_key == "Shared PDF Archive":
             except Exception as exc:
                 st.error(f"Unable to load archive records: {exc}")
                 records = []
+
+            total_archive_bytes = sum(int(record.get("file_size") or 0) for record in records)
+            archive_uploaders = {str(record.get("uploaded_by", "") or "").strip() for record in records if str(record.get("uploaded_by", "") or "").strip()}
+            tagged_count = sum(str(record.get("document_type", "") or "").strip().casefold() == "tagged" for record in records)
+            render_metric_cards(
+                [
+                    {"label": "Total Files", "value": f"{len(records):,}", "note": "Shared audit PDFs", "icon": "📄", "accent": "#175CD3"},
+                    {"label": "Total Size", "value": human_file_size(total_archive_bytes), "note": "Compressed storage", "icon": "💾", "accent": "#C88A08"},
+                    {"label": "Uploaded By", "value": f"{len(archive_uploaders):,}", "note": "Contributing auditors", "icon": "👥", "accent": "#148A4B"},
+                    {"label": "Tagged PDFs", "value": f"{tagged_count:,}", "note": "Tagged document versions", "icon": "🏷️", "accent": "#6938EF"},
+                ]
+            )
 
             if not records:
                 st.info("No PDFs have been archived yet.")
@@ -1672,17 +1600,17 @@ if page_key == "Generate Extraction":
             "Master Data is required before generating extraction records. Ask the administrator to upload data/Master_Data.xlsx from the Master Data page."
         )
         st.stop()
-    st.subheader("System Status")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Master Data", "Loaded")
-    with col2:
-        st.metric("Employees", len(master_df))
-    with col3:
-        st.metric("PDF Archive", "Connected" if archive_ready else "Not configured")
+    render_stepper(["Upload PDFs", "Choose Action", "Process Reports", "Review & Export"], active_index=0)
+    render_metric_cards(
+        [
+            {"label": "Master Data", "value": "Loaded", "note": "Reference workbook ready", "icon": "🗃️", "accent": "#148A4B"},
+            {"label": "Employees", "value": f"{len(master_df):,}", "note": "Available for matching", "icon": "👥", "accent": "#175CD3"},
+            {"label": "Auditors", "value": f"{len(auditor_options):,}", "note": "Active dropdown values", "icon": "🧑‍💼", "accent": "#6938EF"},
+            {"label": "PDF Archive", "value": "Connected" if archive_ready else "Not configured", "note": "Auto-compression enabled", "icon": "🗂️", "accent": "#C88A08" if archive_ready else "#D92D20"},
+        ]
+    )
 
-    st.divider()
-    st.header("Audit Reports")
+    render_section_header("Upload Audit Reports", "Drag and drop one or multiple searchable PDF reports.")
     pdf_files = st.file_uploader(
         "Upload one or multiple audit report PDFs",
         type=["pdf"],
@@ -1998,7 +1926,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.0.0", "note": "EDL Professional Interface", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.1.0", "note": "EDL Enterprise Interface", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

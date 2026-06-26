@@ -370,12 +370,12 @@ def _render_setup_notice() -> None:
 
 
 def _render_sign_in(client: Any, config: AuthConfig) -> None:
-    st.subheader("Sign In")
-    st.caption("Use your nickname/username and password. A contact number is not used for login.")
+    st.subheader("Sign in to your account")
+    st.caption("Access your approved Internal Audit workspace using your username or nickname.")
     with st.form("iars_manual_sign_in_form"):
         username_input = st.text_input(
             "Username / Nickname",
-            placeholder="sar",
+            placeholder="Enter your username or nickname",
             autocomplete="username",
         )
         password = st.text_input(
@@ -760,18 +760,18 @@ def render_auth_gate(config: AuthConfig):
     if user is not None:
         return client, user
 
-    left, right = st.columns([1.12, 0.88], gap="large", vertical_alignment="center")
+    left, right = st.columns([1.05, 0.95], gap="large", vertical_alignment="center")
     with left:
         render_login_hero()
     with right:
         with st.container(border=True, key="iars_auth_card"):
             render_section_header(
-                "Secure Account Access",
-                "Use your approved username and password, or create an account for administrator review.",
+                "Welcome Back",
+                "Sign in to your approved account or create a registration for administrator review.",
                 badge="Authorized Users Only",
             )
             sign_in_tab, sign_up_tab, verify_tab, forgot_tab = st.tabs(
-                ["Sign In", "Sign Up", "Verify Account", "Reset Password"]
+                ["Sign In", "Sign Up", "Verify", "Reset Password"]
             )
             with sign_in_tab:
                 _render_sign_in(client, config)

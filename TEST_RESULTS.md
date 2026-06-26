@@ -1,24 +1,20 @@
-# Test Results — IARS v4.0.0
+# Test Results — IARS v4.1.0
 
-## Completed checks
+## Completed
 
-- All Python source files compile successfully.
-- `app.py` references only functions available in the included modules.
-- The supplied EDL logo is an exact byte-for-byte copy of the user's original logo.
-- `data/Master_Data.xlsx` opens successfully and contains the required `Employees` and `Auditors` worksheets.
-- Report Templates and Policies & Memoranda accept only Excel, Word and PDF extensions.
-- Document-library storage paths, filtering and duplicate-hash helpers were tested.
-- Existing parser API functions required by the interface are retained.
-- No real credentials are included in the package.
+- Python syntax compilation passed for:
+  - `app.py`
+  - `iars_auth.py`
+  - `iars_archive.py`
+  - `iars_document_library.py`
+  - `iars_parser.py`
+  - `iars_pdf_editor.py`
+  - `iars_theme.py`
+- Verified the packaged `assets/edl_logo.png` SHA-256 matches the exact user-supplied original logo.
+- Verified the new theme helper functions imported by `app.py` exist.
+- Verified no real Streamlit Secrets were included.
+- Verified Master Data, archive code, parser, PDF editor, and document-library code remain packaged.
 
-## Deployment-dependent checks
+## Deployment validation still required
 
-The following require the user's Streamlit and Supabase environment:
-
-- Actual account sign-in and administrator approval
-- Actual Supabase uploads/downloads
-- Actual PDF archive compression and storage
-- Actual document-library uploads/downloads
-- Browser rendering across desktop and tablet devices
-
-Run `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql` before testing the two new document-library pages.
+A live visual test must be completed after deployment because this build environment does not have the Streamlit executable or access to the user's Supabase project. After deployment, test login, navigation, extraction, archive upload/download, document libraries, and administrator pages using the actual Streamlit Secrets and Supabase data.

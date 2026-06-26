@@ -1,52 +1,38 @@
-# IARS v4.0.0 — EDL Professional Internal Audit Workspace
+# IARS v4.1.0 — EDL Enterprise Internal Audit Interface
 
-This package applies the approved EDL GROUP OF COMPANIES branding and professional Internal Audit interface to the current IARS functions.
+This package applies the approved EDL GROUP OF COMPANIES Internal Audit interface to the working IARS application while retaining the existing authentication, extraction, PDF tagging, shared archive, document library, Master Data, and export logic.
 
-## Main functions
+## Visual implementation
 
-- Administrator-approved multi-user login using username/nickname and password
-- Dashboard with system status, archive activity and quick actions
-- Generate Extraction with three choices:
-  - Generate extraction only
-  - Generate extraction and archive original PDFs
-  - Archive original PDFs only
-- PDF Tagging Editor
-- Shared PDF Archive visible to all signed-in auditors
-- Automatic PDF compression before archive storage
-- Report Templates Library for Excel, Word and PDF files
-- Policies & Memoranda Archive for Excel, Word and PDF files
-- User Management for administrator approval and account control
-- Master Data Management with workbook validation before activation
-- Read-only System Settings and security status
+- Exact original `assets/edl_logo.png` supplied by the user
+- Navy enterprise sidebar with gold active navigation
+- Compact page-specific top bar with user, role, date, and version
+- Professional login split layout with Internal Audit image and white account card
+- Dashboard KPI cards, recent archive activity, quick actions, and system overview
+- Workflow steppers for Generate Extraction and PDF Tagging
+- Summary cards for Shared PDF Archive, Report Templates, Policies & Memoranda, Master Data, User Management, and Settings
+- Responsive layout for smaller screens
+- Direct HTML rendering through `st.html()` when supported to prevent raw tags from appearing
 
-## Branding and interface
+## Existing functions retained
 
-- Uses the exact original `EDL GROUP OF COMPANIES` logo supplied by the user
-- Professional navy, white and restrained gold palette
-- Sidebar navigation instead of top-level workspace tabs
-- Corporate dashboard, compact status cards and user-friendly upload screens
-- Responsive layout for desktop and tablet use
+- Admin-approved username/nickname login
+- Sign Up, Verify, and Reset Password
+- Shared PDF archive visible to all signed-in auditors
+- Direct archive upload and automatic PDF compression
+- Report extraction and exact external-system export headers
+- PDF tagging editor
+- Report Templates library for Excel, Word, and PDF
+- Policies & Memoranda archive for Excel, Word, and PDF
+- Administrator-only deletion, account administration, and Master Data updates
 
 ## Deployment
 
 1. Extract the ZIP.
 2. Upload all files and folders to the GitHub repository used by Streamlit.
-3. Commit the changes together.
-4. Run the required Supabase SQL files:
-   - `SUPABASE_SETUP.sql`
-   - `SUPABASE_AUDITOR_MIGRATION.sql`
-   - `SUPABASE_USER_AUTH_SETUP.sql`
-   - `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql`
-5. Add the values from `.streamlit/secrets.toml.example` to Streamlit Secrets.
-6. Reboot the Streamlit app.
+3. Commit them together on the deployed branch.
+4. Keep the existing Streamlit Secrets.
+5. Run the SQL setup files only if the corresponding Supabase tables were not created previously.
+6. Reboot the Streamlit app and hard-refresh the browser with `Ctrl + F5`.
 
-## Important files
-
-- `app.py` — application pages and workflows
-- `iars_theme.py` — EDL professional interface
-- `iars_auth.py` — login, sign-up, approval and reset flow
-- `iars_archive.py` — compressed PDF archive
-- `iars_document_library.py` — templates, policies and memoranda storage
-- `iars_parser.py` — audit report extraction and exact export values
-- `assets/edl_logo.png` — exact original logo
-- `assets/internal_audit_workspace.png` — Internal Audit visual used in the interface
+The Streamlit implementation follows the approved mockup closely, but native Streamlit controls may not be pixel-identical to a custom React or HTML application.
