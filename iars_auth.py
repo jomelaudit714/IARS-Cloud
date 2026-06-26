@@ -728,64 +728,86 @@ def render_auth_gate(config: AuthConfig):
     render_brand_stripe()
 
     if not auth_is_configured(config):
-        left, right = st.columns([1.1, 1], gap="large")
+        left, right = st.columns([1.03, 0.97], gap="small", vertical_alignment="center")
         with left:
             render_login_hero()
         with right:
-            render_section_header(
-                "Account Setup Required",
-                "Complete the administrator and Supabase configuration before opening IARS.",
-                badge="Configuration",
-            )
-            _render_setup_notice()
+            with st.container(border=True, key="iars_auth_card"):
+                render_section_header(
+                    "Account Setup Required",
+                    "Complete the administrator and Supabase configuration before opening IARS.",
+                    badge="Configuration",
+                )
+                _render_setup_notice()
         st.stop()
 
     try:
         client = create_auth_client(config)
         user = restore_auth_session(client, config)
     except Exception as exc:
-        left, right = st.columns([1.1, 1], gap="large")
+        left, right = st.columns([1.03, 0.97], gap="small", vertical_alignment="center")
         with left:
             render_login_hero()
         with right:
-            render_section_header(
-                "Unable to Start Login",
-                "The account service could not be initialized.",
-                badge="Connection Error",
-            )
-            st.error(f"Unable to initialize IARS account login: {exc}")
-            st.info("Run SUPABASE_USER_AUTH_SETUP.sql and verify the Streamlit Secrets values.")
+            with st.container(border=True, key="iars_auth_card"):
+                render_section_header(
+                    "Unable to Start Login",
+                    "The account service could not be initialized.",
+                    badge="Connection Error",
+                )
+                st.error(f"Unable to initialize IARS account login: {exc}")
+                st.info("Run SUPABASE_USER_AUTH_SETUP.sql and verify the Streamlit Secrets values.")
         st.stop()
 
     if user is not None:
         return client, user
 
-    left, right = st.columns([1.05, 0.95], gap="large", vertical_alignment="center")
+    view = st.session_state.get("iars_auth_view", "sign_in")
+    left, right = st.columns([1.03, 0.97], gap="small", vertical_alignment="center")
     with left:
         render_login_hero()
     with right:
         with st.container(border=True, key="iars_auth_card"):
-            render_section_header(
-                "Welcome Back",
-                "Sign in to your approved account or create a registration for administrator review.",
-                badge="Authorized Users Only",
-            )
-            sign_in_tab, sign_up_tab, verify_tab, forgot_tab = st.tabs(
-                ["Sign In", "Sign Up", "Verify", "Reset Password"]
-            )
-            with sign_in_tab:
+            if view == "sign_in":
+                st.markdown(
+                    '<div class="edl-auth-title"><h1>Sign in to your account</h1>'
+                    '<p>Access your internal audit workspace</p></div>',
+                    unsafe_allow_html=True,
+                )
                 _render_sign_in(client, config)
-            with sign_up_tab:
+                forgot_col, _ = st.columns([1, 1])
+                with forgot_col:
+                    if st.button("Forgot password?", key="auth_forgot_link", use_container_width=False):
+                        st.session_state["iars_auth_view"] = "forgot"
+                        st.rerun()
+                st.markdown('<div class="edl-auth-divider">or</div>', unsafe_allow_html=True)
+                if st.button("👤  Sign Up", key="auth_go_signup", use_container_width=True):
+                    st.session_state["iars_auth_view"] = "sign_up"
+                    st.rerun()
+                if st.button("🛡️  Verify Your Account", key="auth_go_verify", use_container_width=True):
+                    st.session_state["iars_auth_view"] = "verify"
+                    st.rerun()
+            elif view == "sign_up":
+                render_section_header("Create Account", "Register using only the essential account details.")
                 _render_sign_up(client, config)
-            with verify_tab:
+                if st.button("← Back to Sign In", key="auth_back_signup", use_container_width=True):
+                    st.session_state["iars_auth_view"] = "sign_in"
+                    st.rerun()
+            elif view == "verify":
+                render_section_header("Verify Account", "Enter the activation code personally provided by the administrator.")
                 _render_verify_account(client, config)
-            with forgot_tab:
+                if st.button("← Back to Sign In", key="auth_back_verify", use_container_width=True):
+                    st.session_state["iars_auth_view"] = "sign_in"
+                    st.rerun()
+            else:
+                render_section_header("Reset Password", "Request or complete an administrator-approved password reset.")
                 _render_forgot_password(client, config)
-            st.caption(
-                "Authorized EDL Internal Audit personnel only. Account activity may be recorded for security and accountability."
-            )
-    st.stop()
+                if st.button("← Back to Sign In", key="auth_back_forgot", use_container_width=True):
+                    st.session_state["iars_auth_view"] = "sign_in"
+                    st.rerun()
 
+            st.caption("Authorized EDL Internal Audit personnel only.")
+    st.stop()
 
 def _user_label(user: dict[str, Any]) -> str:
     return f"{user.get('full_name', '')} (@{user.get('username', '')})"

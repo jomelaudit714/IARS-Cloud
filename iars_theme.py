@@ -280,6 +280,34 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 .st-key-iars_auth_card {{border-radius:10px!important;padding:1.1rem!important;box-shadow:0 10px 28px rgba(16,24,40,.08)!important;background:#fff!important;}}
 @media(max-width:1200px){{.edl-metric-grid{{grid-template-columns:repeat(3,minmax(0,1fr))!important;}}}}
 @media(max-width:760px){{.edl-metric-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}section[data-testid="stSidebar"]{{width:230px!important;min-width:230px!important;}}}}
+
+/* Phase 1 exact login page */
+[data-testid="stAppViewContainer"] > .main {{background:#F5F7FB!important;}}
+[data-testid="stHeader"] {{background:transparent!important;height:0!important;}}
+.block-container {{max-width:1480px!important;padding-top:18px!important;padding-bottom:18px!important;}}
+.st-key-edl_login_hero_panel {{height:calc(100vh - 36px)!important;min-height:720px!important;padding:0!important;border-radius:14px!important;overflow:hidden!important;background:#061A36!important;box-shadow:0 14px 36px rgba(5,24,50,.18)!important;}}
+.st-key-edl_login_hero_panel [data-testid="stImage"],
+.st-key-edl_login_hero_panel [data-testid="stImage"] > div {{height:100%!important;margin:0!important;}}
+.st-key-edl_login_hero_panel [data-testid="stImage"] img {{height:100%!important;width:100%!important;object-fit:cover!important;object-position:center!important;border-radius:0!important;}}
+.st-key-iars_auth_card {{min-height:calc(100vh - 36px)!important;display:flex!important;flex-direction:column!important;justify-content:center!important;background:#FFF!important;border:1px solid #DCE3EC!important;border-radius:14px!important;padding:2.3rem 2.5rem!important;box-shadow:0 14px 36px rgba(16,24,40,.08)!important;}}
+.st-key-iars_auth_card h2,.st-key-iars_auth_card h3 {{color:#061A36!important;letter-spacing:-.025em!important;}}
+.st-key-iars_auth_card .stTextInput input {{min-height:54px!important;background:#FFF!important;border:1px solid #C9D3E0!important;border-radius:7px!important;font-size:.95rem!important;}}
+.st-key-iars_auth_card .stTextInput input:focus {{border-color:#174A86!important;box-shadow:0 0 0 3px rgba(23,74,134,.10)!important;}}
+.st-key-iars_auth_card .stButton>button, .st-key-iars_auth_card .stFormSubmitButton>button {{min-height:52px!important;border-radius:7px!important;font-weight:750!important;font-size:.95rem!important;}}
+.st-key-iars_auth_card .stFormSubmitButton>button {{background:#061A36!important;border-color:#061A36!important;color:#FFF!important;}}
+.st-key-iars_auth_card .stButton>button[kind="secondary"] {{background:#FFF!important;color:#061A36!important;border:1px solid #174A86!important;}}
+.st-key-iars_auth_card .stCaption {{text-align:center!important;color:#667085!important;}}
+.edl-auth-title {{text-align:center;margin-bottom:1.4rem;}}
+.edl-auth-title h1 {{margin:0;color:#061A36;font-size:2rem;font-weight:850;letter-spacing:-.035em;}}
+.edl-auth-title p {{margin:.35rem 0 0;color:#667085;font-size:.95rem;}}
+.edl-auth-divider {{display:flex;align-items:center;gap:.8rem;color:#667085;font-size:.78rem;margin:.55rem 0;}}
+.edl-auth-divider:before,.edl-auth-divider:after {{content:"";height:1px;flex:1;background:#DCE3EC;}}
+@media(max-width:900px) {{
+ .block-container {{padding:10px!important;}}
+ .st-key-edl_login_hero_panel {{height:auto!important;min-height:360px!important;}}
+ .st-key-edl_login_hero_panel [data-testid="stImage"] img {{height:auto!important;max-height:440px!important;}}
+ .st-key-iars_auth_card {{min-height:auto!important;padding:1.3rem!important;}}
+}}
 </style>
 """
     _render_html(css)
@@ -331,14 +359,13 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
 
 
 def render_login_hero() -> None:
-    """Render the approved EDL Internal Audit visual as a single stable native image."""
-    panel_path = _asset_path("login_panel.jpg")
+    """Render the approved left-side login artwork at full panel height."""
+    panel_path = _asset_path("login_left_panel.png")
     with st.container(key="edl_login_hero_panel"):
         if panel_path.exists():
             st.image(str(panel_path), use_container_width=True)
         else:
             logo_path = _asset_path("edl_logo.png")
-            visual_path = _asset_path("internal_audit_visual.png")
             if logo_path.exists():
                 st.image(str(logo_path), width=180)
             _render_html(
@@ -347,8 +374,6 @@ def render_login_hero() -> None:
                 '<p>A secure and centralized workspace for managing internal audit reports, archives, templates, and compliance documents.</p>'
                 '</div>'
             )
-            if visual_path.exists():
-                st.image(str(visual_path), use_container_width=True)
 
 def render_dashboard_hero() -> None:
     """Render the dashboard hero with a guaranteed visible audit image."""
