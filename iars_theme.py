@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import html
 from pathlib import Path
-from textwrap import dedent
 from typing import Any, Iterable
 
 import streamlit as st
@@ -492,25 +491,33 @@ def render_app_header(user: dict[str, Any], *, version: str) -> None:
 
 
 def render_login_hero() -> None:
+    """Render the branded login panel as raw HTML, never Markdown code."""
     logo = _logo_data_uri()
     image = f'<img src="{logo}" alt="EDL Group logo">' if logo else ""
-    login_html = dedent(
-        f"""
-        <div class="edl-login-hero">
-            {image}
-            <div class="eyebrow">EDL Group Internal Audit</div>
-            <h1>Internal Audit<br>Report System</h1>
-            <p>One secure workspace for extracting audit reports, validating findings, tagging PDFs and maintaining a shared document archive.</p>
-            <div class="edl-login-points">
-                <div class="edl-login-point">🛡️ Admin-approved access</div>
-                <div class="edl-login-point">📄 Smart report extraction</div>
-                <div class="edl-login-point">🗂️ Shared PDF archive</div>
-                <div class="edl-login-point">✅ Controlled audit records</div>
-            </div>
-        </div>
-        """
-    ).strip()
-    st.markdown(login_html, unsafe_allow_html=True)
+
+    # Keep the fragment unindented/minified. Markdown parsers can interpret
+    # indented child HTML as a code block even when unsafe HTML is enabled.
+    login_html = (
+        '<div class="edl-login-hero">'
+        f'{image}'
+        '<div class="eyebrow">EDL Group Internal Audit</div>'
+        '<h1>Internal Audit<br>Report System</h1>'
+        '<p>One secure workspace for extracting audit reports, validating findings, '
+        'tagging PDFs and maintaining a shared document archive.</p>'
+        '<div class="edl-login-points">'
+        '<div class="edl-login-point">🛡️ Admin-approved access</div>'
+        '<div class="edl-login-point">📄 Smart report extraction</div>'
+        '<div class="edl-login-point">🗂️ Shared PDF archive</div>'
+        '<div class="edl-login-point">✅ Controlled audit records</div>'
+        '</div>'
+        '</div>'
+    )
+
+    # st.html is purpose-built for HTML. The fallback supports older Streamlit.
+    if hasattr(st, "html"):
+        st.html(login_html)
+    else:
+        st.markdown(login_html, unsafe_allow_html=True)
 
 
 def render_section_header(title: str, subtitle: str = "", badge: str = "") -> None:
