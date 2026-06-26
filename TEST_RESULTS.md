@@ -1,39 +1,24 @@
-# Test Results — IARS v3.9.0
+# Test Results — IARS v4.0.0
 
-## Static validation
+## Completed checks
 
-- `app.py` syntax compilation: PASSED
-- `iars_auth.py` syntax compilation: PASSED
-- `iars_theme.py` syntax compilation: PASSED
-- `iars_archive.py` syntax compilation: PASSED
-- `iars_parser.py` syntax compilation: PASSED
-- `iars_pdf_editor.py` syntax compilation: PASSED
+- All Python source files compile successfully.
+- `app.py` references only functions available in the included modules.
+- The supplied EDL logo is an exact byte-for-byte copy of the user's original logo.
+- `data/Master_Data.xlsx` opens successfully and contains the required `Employees` and `Auditors` worksheets.
+- Report Templates and Policies & Memoranda accept only Excel, Word and PDF extensions.
+- Document-library storage paths, filtering and duplicate-hash helpers were tested.
+- Existing parser API functions required by the interface are retained.
+- No real credentials are included in the package.
 
-## Package validation
+## Deployment-dependent checks
 
-- EDL logo asset included: PASSED
-- Streamlit theme configuration included: PASSED
-- Deployment files arranged at ZIP root: PASSED
-- No new Python dependency introduced: PASSED
+The following require the user's Streamlit and Supabase environment:
 
-## Regression checks
+- Actual account sign-in and administrator approval
+- Actual Supabase uploads/downloads
+- Actual PDF archive compression and storage
+- Actual document-library uploads/downloads
+- Browser rendering across desktop and tablet devices
 
-The following files are byte-for-byte unchanged from v3.8.2:
-
-- `iars_archive.py`
-- `iars_parser.py`
-- `iars_pdf_editor.py`
-- `data/Master_Data.xlsx`
-
-Therefore, the following prior behaviors remain unchanged:
-
-- Shared archive visibility for all signed-in auditors
-- Direct PDF archive and extraction/archive options
-- Automatic PDF compression
-- Exact 27-column export headers
-- Exact Master Data labels
-- Blank Auditor 2 / `by02` behavior
-
-## Environment limitation
-
-Live login and Supabase archive actions require the user's deployed Supabase project and Streamlit Secrets. Those remote operations were not executed in the offline package test.
+Run `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql` before testing the two new document-library pages.

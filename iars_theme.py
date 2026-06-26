@@ -8,549 +8,281 @@ from typing import Any, Iterable
 import streamlit as st
 
 
-EDL_NAVY = "#0F172A"
-EDL_NAVY_2 = "#17233D"
-EDL_GOLD = "#C9971A"
-EDL_GOLD_LIGHT = "#F4C430"
-EDL_RED = "#E11D28"
-EDL_GREEN = "#16A34A"
+EDL_NAVY = "#071C3A"
+EDL_NAVY_2 = "#0B2D57"
+EDL_NAVY_3 = "#123D70"
+EDL_GOLD = "#C78B12"
+EDL_GOLD_LIGHT = "#E5B13C"
+EDL_RED = "#D92D20"
+EDL_GREEN = "#178A52"
 EDL_BLUE = "#2563EB"
-EDL_BG = "#F6F8FC"
-EDL_TEXT = "#172033"
+EDL_PURPLE = "#6941C6"
+EDL_TEAL = "#087E8B"
+EDL_BG = "#F4F7FB"
+EDL_TEXT = "#16213A"
 EDL_MUTED = "#667085"
-EDL_BORDER = "#E4E7EC"
+EDL_BORDER = "#DCE3EC"
 
 
-def _logo_path() -> Path:
-    return Path(__file__).resolve().parent / "assets" / "edl_logo.png"
+def _asset_path(filename: str) -> Path:
+    return Path(__file__).resolve().parent / "assets" / filename
+
+
+def _asset_data_uri(filename: str) -> str:
+    path = _asset_path(filename)
+    if not path.exists():
+        return ""
+    mime = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 def _logo_data_uri() -> str:
-    path = _logo_path()
-    if not path.exists():
-        return ""
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
+    return _asset_data_uri("edl_logo.png")
+
+
+def _audit_image_data_uri() -> str:
+    return _asset_data_uri("internal_audit_workspace.png")
+
+
+def _render_html(fragment: str) -> None:
+    """Render controlled local HTML without Markdown code-block interpretation."""
+    if hasattr(st, "html"):
+        st.html(fragment)
+    else:  # pragma: no cover - compatibility fallback
+        st.markdown(fragment, unsafe_allow_html=True)
 
 
 def apply_iars_theme() -> None:
-    """Apply the EDL Audit Pro visual system without changing application logic."""
-    st.markdown(
-        f"""
-        <style>
-        :root {{
-            --edl-navy: {EDL_NAVY};
-            --edl-navy-2: {EDL_NAVY_2};
-            --edl-gold: {EDL_GOLD};
-            --edl-red: {EDL_RED};
-            --edl-green: {EDL_GREEN};
-            --edl-blue: {EDL_BLUE};
-            --edl-bg: {EDL_BG};
-            --edl-text: {EDL_TEXT};
-            --edl-muted: {EDL_MUTED};
-            --edl-border: {EDL_BORDER};
-        }}
+    """Apply the EDL Internal Audit professional visual system."""
+    css = f"""
+<style>
+:root {{
+  --edl-navy:{EDL_NAVY}; --edl-navy-2:{EDL_NAVY_2}; --edl-navy-3:{EDL_NAVY_3};
+  --edl-gold:{EDL_GOLD}; --edl-gold-light:{EDL_GOLD_LIGHT}; --edl-red:{EDL_RED};
+  --edl-green:{EDL_GREEN}; --edl-blue:{EDL_BLUE}; --edl-purple:{EDL_PURPLE};
+  --edl-teal:{EDL_TEAL}; --edl-bg:{EDL_BG}; --edl-text:{EDL_TEXT};
+  --edl-muted:{EDL_MUTED}; --edl-border:{EDL_BORDER};
+}}
+html,body,[class*="css"],.stApp {{
+  font-family:Inter,"Segoe UI",Roboto,Arial,sans-serif;
+}}
+.stApp {{
+  background:
+    radial-gradient(circle at 90% 0%,rgba(199,139,18,.07),transparent 24rem),
+    linear-gradient(180deg,#F9FBFE 0%,var(--edl-bg) 100%);
+  color:var(--edl-text);
+}}
+.block-container {{max-width:1500px;padding-top:1.25rem;padding-bottom:3rem;}}
+header[data-testid="stHeader"] {{background:rgba(249,251,254,.86);backdrop-filter:blur(14px);}}
+#MainMenu {{visibility:hidden;}}
+footer {{visibility:hidden;}}
 
-        html, body, [class*="css"] {{
-            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-                "Segoe UI", sans-serif;
-        }}
+section[data-testid="stSidebar"] {{
+  background:linear-gradient(180deg,#06182F 0%,#08254A 55%,#061A35 100%);
+  border-right:1px solid rgba(255,255,255,.08);
+}}
+section[data-testid="stSidebar"] > div {{padding-top:.55rem;}}
+section[data-testid="stSidebar"] * {{color:#F8FAFC;}}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+section[data-testid="stSidebar"] .stCaption {{color:rgba(255,255,255,.62)!important;}}
+section[data-testid="stSidebar"] hr {{border-color:rgba(255,255,255,.11);}}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label {{
+  border-radius:10px;padding:.38rem .55rem;margin:.08rem 0;transition:.15s ease;
+}}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {{
+  background:rgba(255,255,255,.08);
+}}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {{
+  background:linear-gradient(135deg,#B97808,#D89F22);
+  box-shadow:0 7px 18px rgba(199,139,18,.25);
+}}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p {{color:#FFFFFF!important;font-weight:760;}}
+section[data-testid="stSidebar"] .stButton>button {{
+  border-radius:10px;border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:white;
+}}
+section[data-testid="stSidebar"] .stButton>button:hover {{
+  background:rgba(199,139,18,.22);border-color:rgba(229,177,60,.58);
+}}
 
-        .stApp {{
-            background:
-                radial-gradient(circle at 92% 2%, rgba(201,151,26,.09), transparent 21rem),
-                radial-gradient(circle at 75% 12%, rgba(37,99,235,.05), transparent 24rem),
-                var(--edl-bg);
-            color: var(--edl-text);
-        }}
+.edl-brand-stripe {{height:4px;border-radius:99px;background:linear-gradient(90deg,#1665D8 0 24%,#169B45 24% 49%,#E8B629 49% 74%,#E3282C 74% 100%);}}
+.edl-sidebar-brand {{text-align:center;padding:.35rem .2rem .8rem;}}
+.edl-sidebar-brand img {{width:132px;max-width:78%;object-fit:contain;filter:drop-shadow(0 10px 22px rgba(0,0,0,.25));}}
+.edl-sidebar-brand h3 {{margin:.55rem 0 .05rem;font-size:1rem;letter-spacing:.03em;color:#FFF;}}
+.edl-sidebar-brand p {{margin:0;color:rgba(255,255,255,.64)!important;font-size:.73rem;letter-spacing:.035em;text-transform:uppercase;}}
 
-        .block-container {{
-            max-width: 1500px;
-            padding-top: 1.35rem;
-            padding-bottom: 3rem;
-        }}
+.edl-app-header {{
+  display:flex;align-items:center;gap:1rem;padding:.88rem 1.05rem;background:rgba(255,255,255,.96);
+  border:1px solid var(--edl-border);border-radius:16px;box-shadow:0 8px 26px rgba(7,28,58,.06);margin-bottom:.9rem;
+}}
+.edl-app-logo {{width:70px;height:70px;object-fit:contain;flex:0 0 auto;}}
+.edl-app-kicker {{color:var(--edl-gold);font-size:.72rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;}}
+.edl-app-title {{margin:.18rem 0 0;color:var(--edl-navy);font-size:clamp(1.45rem,2.6vw,2.15rem);line-height:1.08;font-weight:820;letter-spacing:-.03em;}}
+.edl-app-subtitle {{color:var(--edl-muted);margin-top:.28rem;font-size:.88rem;}}
+.edl-user-chip {{margin-left:auto;background:#F8FAFC;border:1px solid var(--edl-border);border-radius:12px;padding:.55rem .75rem;min-width:170px;text-align:right;}}
+.edl-user-chip strong {{color:var(--edl-navy);font-size:.9rem;}}
+.edl-user-chip span {{color:var(--edl-muted);font-size:.74rem;}}
 
-        header[data-testid="stHeader"] {{
-            background: rgba(246,248,252,.92);
-            border-bottom: 1px solid rgba(228,231,236,.85);
-            backdrop-filter: blur(12px);
-        }}
+.edl-section-head {{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin:.55rem 0 .85rem;}}
+.edl-section-head h2 {{margin:0;color:var(--edl-navy);font-size:1.45rem;letter-spacing:-.02em;}}
+.edl-section-head p {{margin:.22rem 0 0;color:var(--edl-muted);font-size:.9rem;}}
+.edl-section-badge {{white-space:nowrap;border:1px solid rgba(199,139,18,.28);background:rgba(199,139,18,.09);color:#80590B;border-radius:999px;padding:.38rem .62rem;font-size:.72rem;font-weight:760;}}
 
-        section[data-testid="stSidebar"] {{
-            background:
-                linear-gradient(180deg, rgba(15,23,42,.98), rgba(23,35,61,.99));
-            border-right: 1px solid rgba(255,255,255,.08);
-        }}
+.edl-metric-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:.72rem;margin:.15rem 0 1rem;}}
+.edl-metric-card {{position:relative;overflow:hidden;background:#FFF;border:1px solid var(--edl-border);border-radius:14px;padding:.9rem 1rem;box-shadow:0 6px 18px rgba(7,28,58,.045);}}
+.edl-metric-card:before {{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--edl-gold));}}
+.edl-metric-icon {{position:absolute;right:.8rem;top:.7rem;font-size:1.25rem;opacity:.86;}}
+.edl-metric-label {{color:var(--edl-muted);font-size:.7rem;font-weight:760;text-transform:uppercase;letter-spacing:.045em;}}
+.edl-metric-value {{color:var(--edl-navy);font-size:1.55rem;font-weight:830;line-height:1.15;margin:.28rem 0 .16rem;}}
+.edl-metric-note {{color:var(--edl-muted);font-size:.73rem;}}
 
-        section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
-            padding-top: .75rem;
-        }}
+.edl-feature-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.75rem;margin:.15rem 0 1rem;}}
+.edl-feature-card {{min-height:128px;background:linear-gradient(145deg,#FFF,#FBFCFE);border:1px solid var(--edl-border);border-radius:14px;padding:.9rem;box-shadow:0 6px 18px rgba(7,28,58,.04);}}
+.edl-feature-icon {{font-size:1.35rem;margin-bottom:.45rem;}}
+.edl-feature-card h4 {{margin:0 0 .25rem;color:var(--edl-navy);font-size:.96rem;}}
+.edl-feature-card p {{margin:0;color:var(--edl-muted);font-size:.79rem;line-height:1.48;}}
 
-        section[data-testid="stSidebar"] h1,
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] h3,
-        section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{
-            color: #F8FAFC !important;
-        }}
+.edl-dashboard-hero {{
+  position:relative;overflow:hidden;min-height:245px;border-radius:18px;border:1px solid var(--edl-border);
+  background:linear-gradient(90deg,rgba(255,255,255,.99) 0%,rgba(255,255,255,.94) 44%,rgba(255,255,255,.18) 72%),var(--hero-image) center right/cover no-repeat;
+  box-shadow:0 10px 28px rgba(7,28,58,.07);padding:2rem 2.15rem;margin:.3rem 0 1rem;
+}}
+.edl-dashboard-hero h1 {{max-width:560px;color:var(--edl-navy);font-size:clamp(2rem,4vw,3.1rem);line-height:1.04;letter-spacing:-.045em;margin:0 0 .65rem;font-weight:850;}}
+.edl-dashboard-hero h1 em {{color:var(--edl-gold);font-style:normal;}}
+.edl-dashboard-hero p {{max-width:570px;color:#526077;font-size:.98rem;line-height:1.58;margin:0;}}
+.edl-hero-tag {{display:inline-flex;align-items:center;gap:.38rem;background:rgba(7,28,58,.06);color:var(--edl-navy);border:1px solid rgba(7,28,58,.1);border-radius:999px;padding:.36rem .62rem;font-size:.72rem;font-weight:750;margin-bottom:.75rem;}}
 
-        section[data-testid="stSidebar"] hr {{
-            border-color: rgba(255,255,255,.12);
-        }}
+.edl-login-wrap {{min-height:calc(100vh - 3rem);display:flex;align-items:center;}}
+.edl-login-hero {{position:relative;overflow:hidden;min-height:620px;border-radius:22px;padding:2.2rem;color:white;background:linear-gradient(180deg,rgba(5,23,48,.90),rgba(5,26,55,.96)),var(--audit-image) center/cover no-repeat;box-shadow:0 20px 50px rgba(7,28,58,.17);}}
+.edl-login-hero img {{width:170px;max-width:58%;height:auto;object-fit:contain;margin-bottom:1.4rem;filter:drop-shadow(0 9px 22px rgba(0,0,0,.28));}}
+.edl-login-hero .eyebrow {{color:#F0C65A;font-size:.73rem;font-weight:820;letter-spacing:.14em;text-transform:uppercase;}}
+.edl-login-hero h1 {{color:white;font-size:clamp(2.25rem,4vw,3.5rem);letter-spacing:-.045em;line-height:1.02;margin:.48rem 0 .75rem;font-weight:850;}}
+.edl-login-hero h1 em {{color:#F0C65A;font-style:normal;}}
+.edl-login-hero p {{color:rgba(255,255,255,.78);max-width:580px;font-size:.97rem;line-height:1.62;}}
+.edl-login-points {{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem;margin-top:1.2rem;}}
+.edl-login-point {{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.72rem .8rem;color:white;font-size:.8rem;backdrop-filter:blur(6px);}}
+.edl-login-foot {{position:absolute;left:2.2rem;right:2.2rem;bottom:1.4rem;color:rgba(255,255,255,.58);font-size:.72rem;border-top:1px solid rgba(255,255,255,.12);padding-top:.8rem;}}
 
-        section[data-testid="stSidebar"] .stButton > button {{
-            border-color: rgba(255,255,255,.18);
-            background: rgba(255,255,255,.07);
-            color: #FFFFFF;
-        }}
+.edl-user-card {{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:13px;padding:.75rem .8rem;margin:.35rem 0 .6rem;}}
+.edl-user-card strong {{display:block;color:#FFF;font-size:.9rem;}}
+.edl-user-card span {{color:rgba(255,255,255,.64);font-size:.73rem;}}
+.edl-status-card {{border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);padding:.68rem .76rem;margin:.3rem 0 .55rem;color:#FFF;}}
+.edl-status-card strong {{color:#FFF;display:block;margin-bottom:.12rem;font-size:.82rem;}}
+.edl-status-card span {{color:rgba(255,255,255,.68);font-size:.72rem;}}
+.edl-status-dot {{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.38rem;background:var(--dot,var(--edl-green));box-shadow:0 0 0 3px rgba(23,138,82,.16);}}
 
-        section[data-testid="stSidebar"] .stButton > button:hover {{
-            background: rgba(201,151,26,.22);
-            border-color: rgba(244,196,48,.55);
-        }}
+.edl-library-note {{display:flex;gap:.7rem;align-items:flex-start;padding:.85rem .95rem;border:1px solid #CFE0F5;background:#F4F8FE;border-radius:12px;margin:.25rem 0 .8rem;}}
+.edl-library-note strong {{color:var(--edl-navy);}}
+.edl-library-note span {{color:var(--edl-muted);font-size:.8rem;}}
 
-        .edl-brand-stripe {{
-            height: 5px;
-            border-radius: 99px;
-            background: linear-gradient(90deg,
-                var(--edl-blue) 0 24%,
-                var(--edl-green) 24% 49%,
-                var(--edl-gold) 49% 74%,
-                var(--edl-red) 74% 100%);
-            box-shadow: 0 5px 14px rgba(15,23,42,.10);
-        }}
+.stButton>button,.stDownloadButton>button,button[kind="primary"] {{border-radius:9px;font-weight:730;transition:.12s ease;}}
+.stButton>button:hover,.stDownloadButton>button:hover {{transform:translateY(-1px);box-shadow:0 7px 16px rgba(7,28,58,.10);}}
+button[kind="primary"] {{background:linear-gradient(135deg,#B77908,#DDAA2E)!important;color:white!important;border:1px solid #A96E06!important;}}
+[data-testid="stFileUploaderDropzone"] {{border:1.5px dashed rgba(37,99,235,.38);background:linear-gradient(145deg,rgba(37,99,235,.025),rgba(199,139,18,.035));border-radius:14px;padding:1rem;}}
+[data-testid="stMetric"] {{background:#FFF;border:1px solid var(--edl-border);border-radius:13px;padding:.78rem .9rem;box-shadow:0 5px 16px rgba(7,28,58,.04);}}
+[data-testid="stDataFrame"],[data-testid="stDataEditor"] {{border:1px solid var(--edl-border);border-radius:12px;overflow:hidden;box-shadow:0 5px 18px rgba(7,28,58,.04);}}
+[data-testid="stAlert"] {{border-radius:11px;border-width:1px;}}
+div[data-testid="stForm"],div[data-testid="stVerticalBlockBorderWrapper"] {{border-color:var(--edl-border)!important;border-radius:15px!important;box-shadow:0 7px 22px rgba(7,28,58,.04);background:rgba(255,255,255,.97);}}
+.stTabs [data-baseweb="tab-list"] {{gap:.28rem;background:#FFF;border:1px solid var(--edl-border);padding:.28rem;border-radius:11px;box-shadow:0 4px 14px rgba(7,28,58,.035);}}
+.stTabs [data-baseweb="tab"] {{border-radius:8px;padding:.48rem .75rem;color:var(--edl-muted);font-weight:700;}}
+.stTabs [aria-selected="true"] {{background:rgba(199,139,18,.11)!important;color:#78520A!important;}}
+.stTabs [data-baseweb="tab-highlight"] {{background-color:var(--edl-gold)!important;}}
 
-        .edl-app-header {{
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1rem 1.2rem;
-            background: rgba(255,255,255,.94);
-            border: 1px solid var(--edl-border);
-            border-radius: 18px;
-            box-shadow: 0 10px 30px rgba(15,23,42,.07);
-            margin-bottom: .9rem;
-        }}
-
-        .edl-app-logo {{
-            width: 76px;
-            height: 76px;
-            object-fit: contain;
-            flex: 0 0 auto;
-            border-radius: 16px;
-            background: #FFFFFF;
-            padding: 4px;
-        }}
-
-        .edl-app-kicker {{
-            color: var(--edl-gold);
-            font-size: .76rem;
-            font-weight: 800;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-            margin-bottom: .2rem;
-        }}
-
-        .edl-app-title {{
-            margin: 0;
-            color: var(--edl-navy);
-            font-size: clamp(1.55rem, 3vw, 2.35rem);
-            line-height: 1.08;
-            font-weight: 850;
-            letter-spacing: -.035em;
-        }}
-
-        .edl-app-subtitle {{
-            color: var(--edl-muted);
-            margin-top: .35rem;
-            font-size: .94rem;
-        }}
-
-        .edl-user-chip {{
-            margin-left: auto;
-            background: #F8FAFC;
-            border: 1px solid var(--edl-border);
-            border-radius: 14px;
-            padding: .65rem .85rem;
-            min-width: 165px;
-            text-align: right;
-        }}
-
-        .edl-user-chip strong {{ color: var(--edl-navy); }}
-        .edl-user-chip span {{ color: var(--edl-muted); font-size: .78rem; }}
-
-        .edl-sidebar-brand {{
-            text-align: center;
-            padding: .45rem .25rem .85rem;
-        }}
-        .edl-sidebar-brand img {{
-            width: 118px;
-            max-width: 72%;
-            filter: drop-shadow(0 8px 18px rgba(0,0,0,.22));
-            background: white;
-            border-radius: 18px;
-            padding: 5px;
-        }}
-        .edl-sidebar-brand h3 {{
-            margin: .6rem 0 .12rem;
-            font-size: 1rem;
-            letter-spacing: .02em;
-        }}
-        .edl-sidebar-brand p {{
-            margin: 0;
-            color: rgba(255,255,255,.66) !important;
-            font-size: .76rem;
-        }}
-
-        .edl-section-head {{
-            display:flex;
-            align-items:flex-end;
-            justify-content:space-between;
-            gap:1rem;
-            margin: .6rem 0 1rem;
-        }}
-        .edl-section-head h2 {{
-            margin:0;
-            color:var(--edl-navy);
-            font-size:1.55rem;
-            letter-spacing:-.02em;
-        }}
-        .edl-section-head p {{
-            margin:.25rem 0 0;
-            color:var(--edl-muted);
-        }}
-        .edl-section-badge {{
-            white-space:nowrap;
-            border:1px solid rgba(201,151,26,.30);
-            background:rgba(201,151,26,.10);
-            color:#8A6510;
-            border-radius:999px;
-            padding:.42rem .68rem;
-            font-size:.76rem;
-            font-weight:750;
-        }}
-
-        .edl-metric-grid {{
-            display:grid;
-            grid-template-columns: repeat(4, minmax(0,1fr));
-            gap:.85rem;
-            margin:.2rem 0 1rem;
-        }}
-        .edl-metric-card {{
-            position:relative;
-            overflow:hidden;
-            background:#FFFFFF;
-            border:1px solid var(--edl-border);
-            border-radius:16px;
-            padding:1rem 1.05rem;
-            box-shadow:0 7px 20px rgba(15,23,42,.05);
-        }}
-        .edl-metric-card::before {{
-            content:"";
-            position:absolute;
-            left:0; top:0; bottom:0;
-            width:5px;
-            background:var(--accent, var(--edl-gold));
-        }}
-        .edl-metric-label {{
-            color:var(--edl-muted);
-            font-size:.78rem;
-            font-weight:700;
-            text-transform:uppercase;
-            letter-spacing:.05em;
-        }}
-        .edl-metric-value {{
-            color:var(--edl-navy);
-            font-size:1.75rem;
-            font-weight:850;
-            line-height:1.15;
-            margin:.32rem 0 .2rem;
-        }}
-        .edl-metric-note {{ color:var(--edl-muted); font-size:.78rem; }}
-
-        .edl-feature-grid {{
-            display:grid;
-            grid-template-columns:repeat(4,minmax(0,1fr));
-            gap:.85rem;
-            margin:.2rem 0 1.1rem;
-        }}
-        .edl-feature-card {{
-            min-height:150px;
-            background:linear-gradient(145deg,#FFFFFF,#FAFBFD);
-            border:1px solid var(--edl-border);
-            border-radius:16px;
-            padding:1rem;
-            box-shadow:0 7px 20px rgba(15,23,42,.04);
-        }}
-        .edl-feature-icon {{ font-size:1.5rem; margin-bottom:.55rem; }}
-        .edl-feature-card h4 {{ margin:0 0 .3rem; color:var(--edl-navy); }}
-        .edl-feature-card p {{ margin:0; color:var(--edl-muted); font-size:.84rem; line-height:1.45; }}
-
-        .edl-login-hero {{
-            min-height: 540px;
-            display:flex;
-            flex-direction:column;
-            justify-content:center;
-            padding:2rem 1.25rem;
-        }}
-        .edl-login-hero img {{
-            width:180px;
-            max-width:60%;
-            background:#FFFFFF;
-            border-radius:24px;
-            padding:8px;
-            box-shadow:0 18px 45px rgba(15,23,42,.14);
-            margin-bottom:1.15rem;
-        }}
-        .edl-login-hero .eyebrow {{
-            color:var(--edl-gold);
-            font-size:.78rem;
-            font-weight:850;
-            letter-spacing:.14em;
-            text-transform:uppercase;
-        }}
-        .edl-login-hero h1 {{
-            color:var(--edl-navy);
-            font-size:clamp(2rem,4vw,3.25rem);
-            letter-spacing:-.045em;
-            line-height:1.03;
-            margin:.45rem 0 .75rem;
-        }}
-        .edl-login-hero p {{
-            color:var(--edl-muted);
-            max-width:580px;
-            font-size:1rem;
-            line-height:1.6;
-        }}
-        .edl-login-points {{
-            display:grid;
-            grid-template-columns:repeat(2,minmax(0,1fr));
-            gap:.55rem;
-            margin-top:1.05rem;
-        }}
-        .edl-login-point {{
-            background:#FFFFFF;
-            border:1px solid var(--edl-border);
-            border-radius:12px;
-            padding:.72rem .8rem;
-            color:var(--edl-text);
-            font-size:.82rem;
-            box-shadow:0 5px 16px rgba(15,23,42,.04);
-        }}
-
-        div[data-testid="stForm"],
-        div[data-testid="stVerticalBlockBorderWrapper"] {{
-            border-color: var(--edl-border) !important;
-            border-radius: 16px !important;
-            box-shadow: 0 8px 24px rgba(15,23,42,.045);
-            background: rgba(255,255,255,.94);
-        }}
-
-        .stButton > button,
-        .stDownloadButton > button,
-        button[kind="primary"] {{
-            border-radius: 10px;
-            font-weight: 750;
-            transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-        }}
-        .stButton > button:hover,
-        .stDownloadButton > button:hover {{
-            transform: translateY(-1px);
-            box-shadow: 0 8px 18px rgba(15,23,42,.10);
-        }}
-        button[kind="primary"] {{
-            background: linear-gradient(135deg, #B88410, {EDL_GOLD_LIGHT}) !important;
-            color: #17120A !important;
-            border: 1px solid #B88410 !important;
-        }}
-
-        .stTabs [data-baseweb="tab-list"] {{
-            gap:.35rem;
-            background:#FFFFFF;
-            border:1px solid var(--edl-border);
-            padding:.35rem;
-            border-radius:13px;
-            box-shadow:0 5px 16px rgba(15,23,42,.04);
-        }}
-        .stTabs [data-baseweb="tab"] {{
-            border-radius:9px;
-            padding:.55rem .85rem;
-            color:var(--edl-muted);
-            font-weight:700;
-        }}
-        .stTabs [aria-selected="true"] {{
-            background:rgba(201,151,26,.13) !important;
-            color:#795A0D !important;
-        }}
-        .stTabs [data-baseweb="tab-highlight"] {{
-            background-color:var(--edl-gold) !important;
-        }}
-
-        [data-testid="stFileUploaderDropzone"] {{
-            border:1.5px dashed rgba(37,99,235,.42);
-            background:linear-gradient(145deg,rgba(37,99,235,.035),rgba(201,151,26,.045));
-            border-radius:16px;
-            padding:1rem;
-        }}
-
-        [data-testid="stMetric"] {{
-            background:#FFFFFF;
-            border:1px solid var(--edl-border);
-            border-radius:15px;
-            padding:.85rem 1rem;
-            box-shadow:0 6px 18px rgba(15,23,42,.04);
-        }}
-
-        [data-testid="stDataFrame"], [data-testid="stDataEditor"] {{
-            border:1px solid var(--edl-border);
-            border-radius:14px;
-            overflow:hidden;
-            box-shadow:0 6px 20px rgba(15,23,42,.04);
-        }}
-
-        [data-testid="stAlert"] {{
-            border-radius:12px;
-            border-width:1px;
-        }}
-
-        .edl-status-card {{
-            border-radius:13px;
-            border:1px solid rgba(255,255,255,.12);
-            background:rgba(255,255,255,.07);
-            padding:.75rem .85rem;
-            margin:.3rem 0 .6rem;
-            color:#FFFFFF;
-        }}
-        .edl-status-card strong {{ color:#FFFFFF; display:block; margin-bottom:.15rem; }}
-        .edl-status-card span {{ color:rgba(255,255,255,.70); font-size:.78rem; }}
-        .edl-status-dot {{
-            display:inline-block;
-            width:8px;height:8px;border-radius:50%;
-            margin-right:.42rem;
-            background:var(--dot, var(--edl-green));
-            box-shadow:0 0 0 3px rgba(22,163,74,.16);
-        }}
-
-        @media (max-width: 1000px) {{
-            .edl-metric-grid, .edl-feature-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
-            .edl-user-chip {{ display:none; }}
-        }}
-        @media (max-width: 650px) {{
-            .block-container {{ padding-left:1rem; padding-right:1rem; }}
-            .edl-app-header {{ align-items:flex-start; }}
-            .edl-app-logo {{ width:58px; height:58px; }}
-            .edl-metric-grid, .edl-feature-grid, .edl-login-points {{ grid-template-columns:1fr; }}
-            .edl-login-hero {{ min-height:auto; padding:1rem 0 .5rem; }}
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+@media(max-width:1000px) {{.edl-user-chip{{display:none}}.edl-login-hero{{min-height:520px}}}}
+@media(max-width:700px) {{
+  .block-container{{padding-left:.9rem;padding-right:.9rem}}
+  .edl-app-header{{align-items:flex-start}}.edl-app-logo{{width:56px;height:56px}}
+  .edl-login-points{{grid-template-columns:1fr}}.edl-login-hero{{min-height:510px;padding:1.35rem}}
+  .edl-login-foot{{left:1.35rem;right:1.35rem}}.edl-dashboard-hero{{padding:1.35rem;background:linear-gradient(90deg,rgba(255,255,255,.97),rgba(255,255,255,.86)),var(--hero-image) center/cover}}
+}}
+</style>
+"""
+    _render_html(css)
 
 
 def render_brand_stripe() -> None:
-    st.markdown('<div class="edl-brand-stripe"></div>', unsafe_allow_html=True)
+    _render_html('<div class="edl-brand-stripe"></div>')
 
 
 def render_sidebar_brand() -> None:
     logo = _logo_data_uri()
-    image = f'<img src="{logo}" alt="EDL Group logo">' if logo else ""
-    st.markdown(
-        f"""
-        <div class="edl-sidebar-brand">
-            {image}
-            <h3>Internal Audit</h3>
-            <p>EDL Group of Companies</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    image = f'<img src="{logo}" alt="EDL GROUP OF COMPANIES logo">' if logo else ""
+    _render_html(
+        '<div class="edl-sidebar-brand">'
+        f'{image}<h3>Internal Audit</h3><p>EDL GROUP OF COMPANIES</p>'
+        '</div>'
     )
 
 
 def render_app_header(user: dict[str, Any], *, version: str) -> None:
     logo = _logo_data_uri()
-    image = f'<img class="edl-app-logo" src="{logo}" alt="EDL Group logo">' if logo else ""
+    image = f'<img class="edl-app-logo" src="{logo}" alt="EDL GROUP OF COMPANIES logo">' if logo else ""
     name = html.escape(str(user.get("full_name") or user.get("username") or "IARS User"))
     role = "Administrator" if str(user.get("role", "")).lower() == "admin" else "Auditor"
-    st.markdown(
-        f"""
-        <div class="edl-brand-stripe"></div>
-        <div class="edl-app-header">
-            {image}
-            <div>
-                <div class="edl-app-kicker">EDL Group Internal Audit</div>
-                <h1 class="edl-app-title">Internal Audit Report System</h1>
-                <div class="edl-app-subtitle">Secure report extraction, PDF tagging, shared archive and controlled account access · v{html.escape(version)}</div>
-            </div>
-            <div class="edl-user-chip"><strong>{name}</strong><br><span>{role}</span></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    _render_html(
+        '<div class="edl-brand-stripe"></div>'
+        '<div class="edl-app-header">'
+        f'{image}<div><div class="edl-app-kicker">EDL GROUP OF COMPANIES</div>'
+        '<h1 class="edl-app-title">Internal Audit Report System</h1>'
+        f'<div class="edl-app-subtitle">Secure extraction, PDF tagging, shared archives and controlled records · v{html.escape(version)}</div></div>'
+        f'<div class="edl-user-chip"><strong>{name}</strong><br><span>{role}</span></div></div>'
     )
 
 
 def render_login_hero() -> None:
-    """Render the branded login panel as raw HTML, never Markdown code."""
     logo = _logo_data_uri()
-    image = f'<img src="{logo}" alt="EDL Group logo">' if logo else ""
-
-    # Keep the fragment unindented/minified. Markdown parsers can interpret
-    # indented child HTML as a code block even when unsafe HTML is enabled.
-    login_html = (
-        '<div class="edl-login-hero">'
-        f'{image}'
-        '<div class="eyebrow">EDL Group Internal Audit</div>'
-        '<h1>Internal Audit<br>Report System</h1>'
-        '<p>One secure workspace for extracting audit reports, validating findings, '
-        'tagging PDFs and maintaining a shared document archive.</p>'
+    audit_image = _audit_image_data_uri()
+    image = f'<img src="{logo}" alt="EDL GROUP OF COMPANIES logo">' if logo else ""
+    style = f' style="--audit-image:url({audit_image})"' if audit_image else ""
+    _render_html(
+        f'<div class="edl-login-hero"{style}>'
+        f'{image}<div class="eyebrow">EDL GROUP OF COMPANIES</div>'
+        '<h1>Secure Internal Audit <em>Workspace.</em></h1>'
+        '<p>Access the Internal Audit Report System for secure report extraction, PDF tagging, shared archive access, reusable templates, policies and controlled audit records.</p>'
         '<div class="edl-login-points">'
         '<div class="edl-login-point">🛡️ Admin-approved access</div>'
         '<div class="edl-login-point">📄 Smart report extraction</div>'
-        '<div class="edl-login-point">🗂️ Shared PDF archive</div>'
+        '<div class="edl-login-point">🗂️ Shared document libraries</div>'
         '<div class="edl-login-point">✅ Controlled audit records</div>'
-        '</div>'
-        '</div>'
+        '</div><div class="edl-login-foot">Secure · Confidential · EDL GROUP OF COMPANIES Internal Audit</div></div>'
     )
 
-    # st.html is purpose-built for HTML. The fallback supports older Streamlit.
-    if hasattr(st, "html"):
-        st.html(login_html)
-    else:
-        st.markdown(login_html, unsafe_allow_html=True)
+
+def render_dashboard_hero() -> None:
+    audit_image = _audit_image_data_uri()
+    style = f' style="--hero-image:url({audit_image})"' if audit_image else ""
+    _render_html(
+        f'<div class="edl-dashboard-hero"{style}>'
+        '<div class="edl-hero-tag">🛡️ Internal Audit Digital Workspace</div>'
+        '<h1>Delivering Integrity.<br>Driving <em>Assurance.</em></h1>'
+        '<p>Empowering the Internal Audit team with secure tools, accurate data, reusable resources and actionable records for confident decision-making.</p>'
+        '</div>'
+    )
 
 
 def render_section_header(title: str, subtitle: str = "", badge: str = "") -> None:
     badge_html = f'<div class="edl-section-badge">{html.escape(badge)}</div>' if badge else ""
-    st.markdown(
-        f"""
-        <div class="edl-section-head">
-            <div><h2>{html.escape(title)}</h2><p>{html.escape(subtitle)}</p></div>
-            {badge_html}
-        </div>
-        """,
-        unsafe_allow_html=True,
+    _render_html(
+        '<div class="edl-section-head"><div>'
+        f'<h2>{html.escape(title)}</h2><p>{html.escape(subtitle)}</p></div>{badge_html}</div>'
     )
 
 
 def render_metric_cards(cards: Iterable[dict[str, Any]]) -> None:
-    accents = [EDL_GOLD, EDL_BLUE, EDL_GREEN, EDL_RED]
+    accents = [EDL_GOLD, EDL_BLUE, EDL_GREEN, EDL_PURPLE, EDL_TEAL, EDL_RED]
     chunks: list[str] = []
     for index, card in enumerate(cards):
         label = html.escape(str(card.get("label", "")))
         value = html.escape(str(card.get("value", "")))
         note = html.escape(str(card.get("note", "")))
+        icon = html.escape(str(card.get("icon", "")))
         accent = html.escape(str(card.get("accent") or accents[index % len(accents)]))
         chunks.append(
-            f"""
-            <div class="edl-metric-card" style="--accent:{accent}">
-                <div class="edl-metric-label">{label}</div>
-                <div class="edl-metric-value">{value}</div>
-                <div class="edl-metric-note">{note}</div>
-            </div>
-            """
+            f'<div class="edl-metric-card" style="--accent:{accent}">'
+            f'<div class="edl-metric-icon">{icon}</div><div class="edl-metric-label">{label}</div>'
+            f'<div class="edl-metric-value">{value}</div><div class="edl-metric-note">{note}</div></div>'
         )
-    st.markdown(f'<div class="edl-metric-grid">{"".join(chunks)}</div>', unsafe_allow_html=True)
+    _render_html(f'<div class="edl-metric-grid">{"".join(chunks)}</div>')
 
 
 def render_feature_cards(cards: Iterable[dict[str, Any]]) -> None:
@@ -560,25 +292,33 @@ def render_feature_cards(cards: Iterable[dict[str, Any]]) -> None:
         title = html.escape(str(card.get("title", "")))
         text = html.escape(str(card.get("text", "")))
         chunks.append(
-            f"""
-            <div class="edl-feature-card">
-                <div class="edl-feature-icon">{icon}</div>
-                <h4>{title}</h4>
-                <p>{text}</p>
-            </div>
-            """
+            f'<div class="edl-feature-card"><div class="edl-feature-icon">{icon}</div>'
+            f'<h4>{title}</h4><p>{text}</p></div>'
         )
-    st.markdown(f'<div class="edl-feature-grid">{"".join(chunks)}</div>', unsafe_allow_html=True)
+    _render_html(f'<div class="edl-feature-grid">{"".join(chunks)}</div>')
 
 
 def render_sidebar_status(title: str, detail: str, *, ok: bool = True) -> None:
     dot = EDL_GREEN if ok else EDL_RED
-    st.markdown(
-        f"""
-        <div class="edl-status-card">
-            <strong><span class="edl-status-dot" style="--dot:{dot}"></span>{html.escape(title)}</strong>
-            <span>{html.escape(detail)}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    _render_html(
+        '<div class="edl-status-card">'
+        f'<strong><span class="edl-status-dot" style="--dot:{dot}"></span>{html.escape(title)}</strong>'
+        f'<span>{html.escape(detail)}</span></div>'
+    )
+
+
+def render_sidebar_user(user: dict[str, Any]) -> None:
+    name = html.escape(str(user.get("full_name") or user.get("username") or "IARS User"))
+    username = html.escape(str(user.get("username") or ""))
+    role = "Administrator" if str(user.get("role", "")).lower() == "admin" else "Auditor"
+    _render_html(
+        '<div class="edl-user-card">'
+        f'<strong>{name}</strong><span>@{username} · {role}</span></div>'
+    )
+
+
+def render_library_note(title: str, detail: str, icon: str = "ℹ️") -> None:
+    _render_html(
+        '<div class="edl-library-note">'
+        f'<div>{html.escape(icon)}</div><div><strong>{html.escape(title)}</strong><br><span>{html.escape(detail)}</span></div></div>'
     )

@@ -1,35 +1,52 @@
-# IARS v3.9.0 — EDL Audit Pro Interface
+# IARS v4.0.0 — EDL Professional Internal Audit Workspace
 
-This release applies the EDL Group visual identity and a professional Internal Audit design to the existing v3.8.2 system. It retains the multi-user admin-approved login, shared PDF archive, direct archive options, automatic PDF compression, exact database headers, Master Data behavior, and all extraction logic.
+This package applies the approved EDL GROUP OF COMPANIES branding and professional Internal Audit interface to the current IARS functions.
 
-## Interface changes
+## Main functions
 
-- EDL logo integrated into the login page, application header, and sidebar
-- EDL-inspired navy, gold, red, green, and blue color system
-- Branded login experience with Sign In, Sign Up, Verify, and Reset Password tabs
-- New Home dashboard with employee, auditor, archive, and connection status cards
-- Recent shared archive activity on the Home page
-- Redesigned sidebar with branded account, Master Data, and archive status panels
-- Updated workspace tabs: Home, Generate Extraction, PDF Tagging, and PDF Archive
-- Improved cards, forms, file uploaders, buttons, data tables, alerts, and responsive mobile layout
-- Light main workspace with a dark navy Internal Audit sidebar
+- Administrator-approved multi-user login using username/nickname and password
+- Dashboard with system status, archive activity and quick actions
+- Generate Extraction with three choices:
+  - Generate extraction only
+  - Generate extraction and archive original PDFs
+  - Archive original PDFs only
+- PDF Tagging Editor
+- Shared PDF Archive visible to all signed-in auditors
+- Automatic PDF compression before archive storage
+- Report Templates Library for Excel, Word and PDF files
+- Policies & Memoranda Archive for Excel, Word and PDF files
+- User Management for administrator approval and account control
+- Master Data Management with workbook validation before activation
+- Read-only System Settings and security status
 
-## Existing functionality retained
+## Branding and interface
 
-- All signed-in auditors may view, search, preview, and download PDFs uploaded by other auditors
-- Uploaded PDFs may be processed using any of these options:
-  1. Generate extraction only
-  2. Generate extraction and archive original PDFs
-  3. Archive original PDFs only
-- Automatic PDF compression before archive upload
-- Administrator-only archive deletion, Master Data updates, and account administration
-- Admin-approved username/nickname login without SMS
-- Exact 27-column external-system export headers
-- Exact Master Data Findings, Response, Frequency, and Auditor labels
-- Blank `by02` when no second auditor is indicated
+- Uses the exact original `EDL GROUP OF COMPANIES` logo supplied by the user
+- Professional navy, white and restrained gold palette
+- Sidebar navigation instead of top-level workspace tabs
+- Corporate dashboard, compact status cards and user-friendly upload screens
+- Responsive layout for desktop and tablet use
 
 ## Deployment
 
-The ZIP is arranged with the deployment files at its root. Extract it, upload the files to the GitHub repository used by Streamlit, commit them together, and reboot the app.
+1. Extract the ZIP.
+2. Upload all files and folders to the GitHub repository used by Streamlit.
+3. Commit the changes together.
+4. Run the required Supabase SQL files:
+   - `SUPABASE_SETUP.sql`
+   - `SUPABASE_AUDITOR_MIGRATION.sql`
+   - `SUPABASE_USER_AUTH_SETUP.sql`
+   - `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql`
+5. Add the values from `.streamlit/secrets.toml.example` to Streamlit Secrets.
+6. Reboot the Streamlit app.
 
-No new Supabase SQL migration is required if v3.8.2 was already working.
+## Important files
+
+- `app.py` — application pages and workflows
+- `iars_theme.py` — EDL professional interface
+- `iars_auth.py` — login, sign-up, approval and reset flow
+- `iars_archive.py` — compressed PDF archive
+- `iars_document_library.py` — templates, policies and memoranda storage
+- `iars_parser.py` — audit report extraction and exact export values
+- `assets/edl_logo.png` — exact original logo
+- `assets/internal_audit_workspace.png` — Internal Audit visual used in the interface

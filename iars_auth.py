@@ -11,7 +11,7 @@ from typing import Any
 
 import streamlit as st
 
-from iars_theme import render_brand_stripe, render_login_hero, render_section_header
+from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards
 
 
 DEFAULT_USERS_TABLE = "iars_users"
@@ -961,20 +961,34 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
                 st.rerun()
 
 
+def render_account_admin_page(client: Any, config: AuthConfig) -> None:
+    """Render administrator account controls as a full application page."""
+    try:
+        users = _list_users(client, config)
+    except Exception as exc:
+        st.error(f"Unable to load user accounts: {exc}")
+        return
+
+    pending = [u for u in users if str(u.get("status")) == "Pending"]
+    active = [u for u in users if str(u.get("status")) == "Active"]
+    suspended = [u for u in users if str(u.get("status")) == "Suspended"]
+    reset_requests = [u for u in users if bool(u.get("reset_requested"))]
+    render_metric_cards([
+        {"label": "Pending Approval", "value": len(pending), "note": "New registrations", "icon": "⏳", "accent": "#C78B12"},
+        {"label": "Active Users", "value": len(active), "note": "Approved accounts", "icon": "👥", "accent": "#178A52"},
+        {"label": "Suspended", "value": len(suspended), "note": "Restricted accounts", "icon": "⛔", "accent": "#D92D20"},
+        {"label": "Reset Requests", "value": len(reset_requests), "note": "Awaiting admin action", "icon": "🔑", "accent": "#2563EB"},
+    ])
+    with st.container(border=True):
+        _render_admin_controls(client, config)
+
+
 def render_account_sidebar(
     client: Any, user: dict[str, Any], config: AuthConfig
 ) -> None:
-    st.markdown("### Account")
-    st.write(f"**{user_display_name(user)}**")
+    """Render a compact signed-in user card and sign-out action."""
+    render_sidebar_user(user)
     username = user_username(user)
-    if username:
-        st.caption(f"Username: @{username}")
-    st.caption("Role: Administrator" if is_admin_user(user) else "Role: User")
-
-    if is_admin_user(user):
-        with st.expander("Account Administration (Admin Only)", expanded=True):
-            _render_admin_controls(client, config)
-
     if st.button("Sign Out", key="iars_sign_out", use_container_width=True):
         _log_event(
             client,

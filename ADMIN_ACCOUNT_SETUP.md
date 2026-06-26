@@ -1,4 +1,4 @@
-# IARS v3.8.1 — Multi-User Admin-Approved Login Setup
+# IARS v4.0.0 — Multi-User Admin-Approved Login Setup
 
 This version does **not** use SMS, Twilio, phone OTP, or Supabase Phone Auth.
 
@@ -61,7 +61,7 @@ You may also disable **Authentication → Providers → Phone** in Supabase. The
    - Optional contact number
    - Password
 3. The registration is saved as `Pending`.
-4. The administrator signs in and opens **Account Administration** in the sidebar.
+4. The administrator signs in and opens **User Management** from the navigation sidebar.
 5. The administrator selects the pending user and clicks **Approve and Generate Activation Code**.
 6. IARS displays a six-digit one-time code.
 7. The administrator personally gives the code to the user.

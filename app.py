@@ -18,11 +18,14 @@ from iars_theme import (
     render_section_header,
     render_sidebar_brand,
     render_sidebar_status,
+    render_dashboard_hero,
+    render_library_note,
 )
 from iars_auth import (
     read_auth_config,
     render_auth_gate,
     render_account_sidebar,
+    render_account_admin_page,
     is_admin_user,
 )
 
@@ -45,6 +48,25 @@ from iars_archive import (
     upload_pdf as upload_archived_pdf,
 )
 
+
+from iars_document_library import (
+    COLLECTION_POLICIES,
+    COLLECTION_TEMPLATES,
+    DocumentLibraryConfig,
+    DocumentLibraryError,
+    DocumentLibraryNotConfiguredError,
+    DuplicateDocumentError,
+    create_document_library_client,
+    delete_document,
+    document_library_is_configured,
+    download_document,
+    filter_documents,
+    human_file_size as document_file_size,
+    list_documents,
+    read_document_library_config,
+    upload_document,
+)
+
 from iars_parser import (
     AUDITORS,
     master_finding_options,
@@ -56,7 +78,7 @@ from iars_parser import (
 )
 
 st.set_page_config(
-    page_title="EDL Internal Audit Report System",
+    page_title="Internal Audit Report System | EDL GROUP OF COMPANIES",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -483,6 +505,32 @@ def archive_client_or_none(config: ArchiveConfig):
         return None
 
 
+
+@st.cache_resource(show_spinner=False)
+def cached_document_library_client(url: str, service_role_key: str, bucket: str, table: str):
+    return create_document_library_client(
+        DocumentLibraryConfig(
+            url=url,
+            service_role_key=service_role_key,
+            bucket=bucket,
+            table=table,
+        )
+    )
+
+
+def document_library_client_or_none(config: DocumentLibraryConfig):
+    if not document_library_is_configured(config):
+        return None
+    try:
+        return cached_document_library_client(
+            config.url,
+            config.service_role_key,
+            config.bucket,
+            config.table,
+        )
+    except Exception:
+        return None
+
 def archive_access_granted(config: ArchiveConfig) -> bool:
     if not archive_is_configured(config):
         return False
@@ -585,69 +633,324 @@ def archive_pdf_with_feedback(
         return {"Status": "Archive failed", "File": filename, "Details": str(exc)}
 
 
+def render_document_library_page(
+    *,
+    collection: str,
+    client,
+    config: DocumentLibraryConfig,
+    ready: bool,
+    current_user: dict,
+    admin: bool,
+) -> None:
+    is_templates = collection == COLLECTION_TEMPLATES
+    page_title = "Report Templates Library" if is_templates else "Policies & Memoranda Archive"
+    page_subtitle = (
+        "Upload, organize and download reusable count sheets, inventory forms, working papers and report templates."
+        if is_templates
+        else "Maintain a controlled reference library for policies, memoranda, procedures, manuals and guidelines."
+    )
+    render_section_header(
+        page_title,
+        page_subtitle,
+        badge="Shared Document Library",
+    )
+    render_library_note(
+        "Supported document formats",
+        "Microsoft Excel (.xlsx/.xls), Microsoft Word (.docx/.doc) and PDF (.pdf). All signed-in auditors may view and download files; deletion is administrator-only.",
+        icon="📁",
+    )
+
+    if not ready or client is None:
+        st.warning("The document library has not been created in Supabase yet.")
+        st.markdown(
+            "Run `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql` in the same Supabase project used by IARS, then refresh the app."
+        )
+        st.code(
+            '[supabase]\n'
+            'documents_bucket = "iars-document-library"\n'
+            'documents_table = "document_library"',
+            language="toml",
+        )
+        return
+
+    try:
+        records = list_documents(client, config, collection=collection, limit=2000)
+    except Exception as exc:
+        st.error(f"Unable to load the document library: {exc}")
+        return
+
+    extension_counts = {
+        "Excel": sum(str(r.get("file_extension", "")).lower() in {"xls", "xlsx"} for r in records),
+        "Word": sum(str(r.get("file_extension", "")).lower() in {"doc", "docx"} for r in records),
+        "PDF": sum(str(r.get("file_extension", "")).lower() == "pdf" for r in records),
+    }
+    render_metric_cards(
+        [
+            {"label": "Total Documents", "value": f"{len(records):,}", "note": "Available to authorized users", "icon": "📁", "accent": "#C78B12"},
+            {"label": "Excel Files", "value": f"{extension_counts['Excel']:,}", "note": "Worksheets and forms", "icon": "📊", "accent": "#178A52"},
+            {"label": "Word Files", "value": f"{extension_counts['Word']:,}", "note": "Editable documents", "icon": "📝", "accent": "#2563EB"},
+            {"label": "PDF Files", "value": f"{extension_counts['PDF']:,}", "note": "Controlled references", "icon": "📕", "accent": "#D92D20"},
+        ]
+    )
+
+    upload_title = "Upload Report Template" if is_templates else "Upload Policy or Memorandum"
+    with st.expander(upload_title, expanded=False):
+        categories = (
+            [
+                "Count Sheet",
+                "Inventory Count Sheet",
+                "Audit Report Template",
+                "Working Paper",
+                "Audit Checklist",
+                "Reconciliation Template",
+                "Other",
+            ]
+            if is_templates
+            else [
+                "Policy",
+                "Memorandum",
+                "Procedure",
+                "Guidelines",
+                "Manual",
+                "Circular",
+                "Other",
+            ]
+        )
+        uploaded_document = st.file_uploader(
+            "Select Excel, Word or PDF file",
+            type=["xlsx", "xls", "docx", "doc", "pdf"],
+            key=f"document_upload_{collection}",
+        )
+        left, right = st.columns(2)
+        with left:
+            document_title = st.text_input(
+                "Document Title",
+                key=f"document_title_{collection}",
+                placeholder="Example: Revolving Fund Count Sheet",
+            )
+            document_category = st.selectbox(
+                "Category",
+                categories,
+                key=f"document_category_{collection}",
+            )
+        with right:
+            version_label = st.text_input(
+                "Version / Revision",
+                key=f"document_version_{collection}",
+                placeholder="Example: Rev. 02 or 2026 Edition",
+            )
+            use_effective_date = st.checkbox(
+                "Include effective/issuance date",
+                key=f"document_use_date_{collection}",
+            )
+            effective_date = (
+                st.date_input(
+                    "Effective / Issuance Date",
+                    key=f"document_effective_date_{collection}",
+                )
+                if use_effective_date
+                else None
+            )
+        description = st.text_area(
+            "Description / Purpose",
+            key=f"document_description_{collection}",
+            placeholder="Briefly describe when this document should be used.",
+        )
+        if st.button(
+            "Upload to Shared Library",
+            type="primary",
+            use_container_width=True,
+            key=f"document_upload_button_{collection}",
+        ):
+            if uploaded_document is None:
+                st.error("Select a file before uploading.")
+            else:
+                try:
+                    uploader_name = str(
+                        current_user.get("full_name")
+                        or current_user.get("username")
+                        or "IARS User"
+                    )
+                    record = upload_document(
+                        client,
+                        config,
+                        collection=collection,
+                        file_bytes=uploaded_document.getvalue(),
+                        original_filename=uploaded_document.name,
+                        title=document_title,
+                        category=document_category,
+                        description=description,
+                        version_label=version_label,
+                        effective_date=effective_date,
+                        uploaded_by=uploader_name,
+                    )
+                    st.success(f"{record.get('original_filename', uploaded_document.name)} was added to the shared library.")
+                    st.rerun()
+                except DuplicateDocumentError as exc:
+                    st.warning(str(exc))
+                except Exception as exc:
+                    st.error(str(exc))
+
+    st.divider()
+    render_section_header(
+        "Browse Documents",
+        "Search and filter the shared library, then select a document to download.",
+    )
+
+    all_categories = sorted({str(r.get("category", "") or "General") for r in records}, key=str.casefold)
+    all_extensions = sorted({str(r.get("file_extension", "") or "").upper() for r in records if r.get("file_extension")})
+    f1, f2, f3, f4 = st.columns([2.2, 1, 1, 1])
+    with f1:
+        search_text = st.text_input(
+            "Search",
+            key=f"library_search_{collection}",
+            placeholder="Title, filename, category, description or uploader",
+        )
+    with f2:
+        category_filter = st.selectbox(
+            "Category",
+            ["All"] + all_categories,
+            key=f"library_category_filter_{collection}",
+        )
+    with f3:
+        extension_filter = st.selectbox(
+            "File Type",
+            ["All"] + all_extensions,
+            key=f"library_extension_filter_{collection}",
+        )
+    with f4:
+        uploaded_from = st.date_input(
+            "Uploaded From",
+            value=None,
+            key=f"library_date_filter_{collection}",
+        )
+
+    filtered = filter_documents(
+        records,
+        search=search_text,
+        category=category_filter,
+        extension=extension_filter,
+        start_date=uploaded_from if isinstance(uploaded_from, date) else None,
+    )
+
+    display_rows = []
+    for record in filtered:
+        display_rows.append(
+            {
+                "Title": record.get("title", ""),
+                "Category": record.get("category", ""),
+                "Type": str(record.get("file_extension", "")).upper(),
+                "Version": record.get("version_label", ""),
+                "Effective Date": record.get("effective_date", ""),
+                "Uploaded By": record.get("uploaded_by", ""),
+                "Date Uploaded": str(record.get("uploaded_at", ""))[:10],
+                "Size": document_file_size(record.get("file_size")),
+            }
+        )
+
+    st.caption(f"Showing {len(filtered)} of {len(records)} document(s).")
+    if not display_rows:
+        st.info("No documents match the current filters.")
+        return
+
+    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
+    labels: list[str] = []
+    record_by_label: dict[str, dict] = {}
+    for index, record in enumerate(filtered, start=1):
+        label = (
+            f"{record.get('title') or record.get('original_filename')} | "
+            f"{record.get('category', '')} | {str(record.get('file_extension', '')).upper()} | {index}"
+        )
+        labels.append(label)
+        record_by_label[label] = record
+
+    selected_label = st.selectbox(
+        "Select document",
+        labels,
+        key=f"library_selected_{collection}",
+    )
+    selected_record = record_by_label[selected_label]
+    action_1, action_2 = st.columns([1, 1])
+    with action_1:
+        if st.button(
+            "Prepare Download",
+            use_container_width=True,
+            key=f"library_load_{collection}",
+        ):
+            try:
+                data = download_document(
+                    client,
+                    config,
+                    str(selected_record.get("storage_path", "")),
+                )
+                state_key = f"library_download_bytes_{collection}"
+                st.session_state[state_key] = data
+                st.session_state[f"library_download_id_{collection}"] = selected_record.get("id")
+            except Exception as exc:
+                st.error(str(exc))
+    with action_2:
+        st.caption(
+            str(selected_record.get("description", "") or "No description provided.")
+        )
+
+    state_key = f"library_download_bytes_{collection}"
+    if st.session_state.get(f"library_download_id_{collection}") == selected_record.get("id"):
+        selected_bytes = st.session_state.get(state_key)
+        if selected_bytes:
+            st.download_button(
+                "Download Selected Document",
+                data=selected_bytes,
+                file_name=str(selected_record.get("original_filename", "document")),
+                mime=str(selected_record.get("mime_type", "application/octet-stream")),
+                use_container_width=True,
+                key=f"library_download_button_{collection}",
+            )
+            if str(selected_record.get("file_extension", "")).lower() == "pdf":
+                try:
+                    preview_image, _, _ = render_pdf_page(selected_bytes, 0, zoom=1.15)
+                    if preview_image is not None:
+                        st.image(preview_image, caption="PDF first-page preview", width="stretch")
+                except Exception:
+                    pass
+
+    if admin:
+        with st.expander("Delete Selected Document — Administrator Only", expanded=False):
+            st.warning("Deletion permanently removes both the file and its library record.")
+            confirmation = st.text_input(
+                "Type DELETE to confirm",
+                key=f"library_delete_confirm_{collection}_{selected_record.get('id')}",
+            )
+            if st.button(
+                "Delete Document",
+                disabled=confirmation.strip().upper() != "DELETE",
+                key=f"library_delete_button_{collection}_{selected_record.get('id')}",
+            ):
+                try:
+                    delete_document(client, config, selected_record)
+                    st.session_state.pop(state_key, None)
+                    st.session_state.pop(f"library_download_id_{collection}", None)
+                    st.success("Document deleted successfully.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
+
 archive_config = read_archive_config(st.secrets)
 archive_client = archive_client_or_none(archive_config)
 archive_ready = archive_is_configured(archive_config) and archive_client is not None
 archive_unlocked = archive_ready  # All authenticated IARS users may access the shared archive.
 
-render_app_header(auth_user, version="3.9.0")
+document_config = read_document_library_config(st.secrets)
+document_client = document_library_client_or_none(document_config)
+document_library_ready = (
+    document_library_is_configured(document_config) and document_client is not None
+)
 
-with st.sidebar:
-    render_sidebar_brand()
-    render_account_sidebar(auth_client, auth_user, auth_config)
-    st.divider()
-    st.markdown("### Master Data")
+if MASTER_DATA_PATH.exists():
+    master_df, master_sheets = load_master_data(str(MASTER_DATA_PATH))
+else:
+    master_df, master_sheets = pd.DataFrame(), {}
 
-    if MASTER_DATA_PATH.exists():
-        render_sidebar_status(
-            "Master Data ready",
-            "Employee, auditor and classification references are loaded.",
-            ok=True,
-        )
-    else:
-        render_sidebar_status(
-            "Master Data missing",
-            "Upload data/Master_Data.xlsx before using extraction.",
-            ok=False,
-        )
-
-    if is_admin_user(auth_user):
-        with st.expander("Update Master Data"):
-            uploaded_master = st.file_uploader(
-                "Upload updated Master_Data.xlsx",
-                type=["xlsx"],
-                key="master_update",
-            )
-
-            if uploaded_master is not None:
-                if st.button("Save Updated Master Data", type="primary", use_container_width=True):
-                    save_uploaded_master(uploaded_master)
-                    st.cache_data.clear()
-                    st.success("Master Data updated. Refresh the app to load the new version.")
-    else:
-        st.caption("Master Data updates are restricted to the administrator.")
-
-    st.divider()
-    st.markdown("### PDF Archive")
-    if archive_ready:
-        render_sidebar_status(
-            "Shared archive connected",
-            "All signed-in auditors may search, preview and download archived PDFs.",
-            ok=True,
-        )
-        st.caption(f"Storage bucket: {archive_config.bucket}")
-    else:
-        render_sidebar_status(
-            "Archive unavailable",
-            "Verify the Supabase archive settings in Streamlit Secrets.",
-            ok=False,
-        )
-
-if not MASTER_DATA_PATH.exists():
-    st.info("Please upload or add data/Master_Data.xlsx before generating extraction.")
-    st.stop()
-
-master_df, master_sheets = load_master_data(str(MASTER_DATA_PATH))
 auditors_df = master_sheets.get("Auditors", pd.DataFrame())
 employee_records = get_employee_records(master_df)
 employee_options = sorted({record["name"] for record in employee_records}, key=str.casefold)
@@ -670,12 +973,60 @@ auditor_options = build_auditor_options(auditors_df, additional_auditor_rows)
 if not auditor_options:
     auditor_options = sorted({_clean_option(name) for name in AUDITORS if _clean_option(name)}, key=str.casefold)
 
-tab_home, tab_extract, tab_editor, tab_archive = st.tabs(
-    ["Home", "Generate Extraction", "PDF Tagging", "PDF Archive"]
-)
+nav_options = [
+    "🏠 Dashboard",
+    "📄 Generate Extraction",
+    "🏷️ PDF Tagging",
+    "🗂️ Shared PDF Archive",
+    "📚 Report Templates",
+    "📜 Policies & Memoranda",
+]
+if is_admin_user(auth_user):
+    nav_options.extend([
+        "👥 User Management",
+        "🗃️ Master Data",
+    ])
+nav_options.append("⚙️ Settings")
+if st.session_state.get("main_navigation") not in nav_options:
+    st.session_state["main_navigation"] = nav_options[0]
+
+with st.sidebar:
+    render_sidebar_brand()
+    selected_page = st.radio(
+        "Navigation",
+        nav_options,
+        key="main_navigation",
+        label_visibility="collapsed",
+    )
+    st.divider()
+    render_sidebar_status(
+        "PDF archive connected" if archive_ready else "PDF archive unavailable",
+        "Shared across all authorized auditors." if archive_ready else "Check Supabase archive settings.",
+        ok=archive_ready,
+    )
+    render_sidebar_status(
+        "Document library connected" if document_library_ready else "Document library setup needed",
+        "Templates, policies and memoranda are available." if document_library_ready else "Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql.",
+        ok=document_library_ready,
+    )
+    render_sidebar_status(
+        "Master Data ready" if MASTER_DATA_PATH.exists() else "Master Data missing",
+        f"{len(master_df):,} employee records loaded." if MASTER_DATA_PATH.exists() else "Add data/Master_Data.xlsx.",
+        ok=MASTER_DATA_PATH.exists(),
+    )
+    st.divider()
+    render_account_sidebar(auth_client, auth_user, auth_config)
+
+render_app_header(auth_user, version="4.0.0")
+
+page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 
 
-with tab_home:
+def _navigate_to(label: str) -> None:
+    st.session_state["main_navigation"] = label
+
+
+if page_key == "Dashboard":
     display_name = str(auth_user.get("full_name") or auth_user.get("username") or "Auditor")
     role_label = "Administrator" if is_admin_user(auth_user) else "Auditor"
 
@@ -687,86 +1038,131 @@ with tab_home:
         except Exception as exc:
             home_archive_error = str(exc)
 
+    home_template_records = []
+    home_policy_records = []
+    home_library_error = ""
+    if document_library_ready and document_client is not None:
+        try:
+            home_template_records = list_documents(
+                document_client, document_config, collection=COLLECTION_TEMPLATES, limit=1000
+            )
+            home_policy_records = list_documents(
+                document_client, document_config, collection=COLLECTION_POLICIES, limit=1000
+            )
+        except Exception as exc:
+            home_library_error = str(exc)
+
     render_section_header(
         f"Welcome, {display_name}",
-        "Your EDL Internal Audit workspace is ready. Review system status and continue with the task you need.",
+        "Review system status, recent activity and the Internal Audit resources available to your team.",
         badge=role_label,
     )
+    render_dashboard_hero()
     render_metric_cards(
         [
             {
                 "label": "Employees",
                 "value": f"{len(master_df):,}",
-                "note": "Available in Master Data",
+                "note": "Master Data records",
+                "icon": "👥",
                 "accent": "#2563EB",
             },
             {
                 "label": "Active Auditors",
                 "value": f"{len(auditor_options):,}",
                 "note": "Available for assignment",
-                "accent": "#C9971A",
+                "icon": "🧑‍💼",
+                "accent": "#178A52",
             },
             {
                 "label": "Archived PDFs",
                 "value": f"{len(home_archive_records):,}" if archive_ready else "Offline",
-                "note": "Shared across signed-in auditors",
-                "accent": "#16A34A",
+                "note": "Shared audit archive",
+                "icon": "🗂️",
+                "accent": "#C78B12",
+            },
+            {
+                "label": "Report Templates",
+                "value": f"{len(home_template_records):,}" if document_library_ready else "Setup",
+                "note": "Excel, Word and PDF",
+                "icon": "📚",
+                "accent": "#6941C6",
+            },
+            {
+                "label": "Policies & Memos",
+                "value": f"{len(home_policy_records):,}" if document_library_ready else "Setup",
+                "note": "Controlled references",
+                "icon": "📜",
+                "accent": "#087E8B",
             },
             {
                 "label": "Archive Status",
                 "value": "Connected" if archive_ready else "Not configured",
-                "note": "Automatic PDF compression enabled",
-                "accent": "#E11D28" if not archive_ready else "#16A34A",
+                "note": "Automatic PDF compression",
+                "icon": "🛡️",
+                "accent": "#178A52" if archive_ready else "#D92D20",
             },
         ]
     )
 
     render_section_header(
-        "Core Workspaces",
-        "Use the tabs above to move between the major IARS functions.",
+        "Quick Actions",
+        "Open the workspace needed for your current audit activity.",
     )
-    render_feature_cards(
-        [
-            {
-                "icon": "📄",
-                "title": "Generate Extraction",
-                "text": "Upload one or more audit-report PDFs, review extracted findings and download an import-ready output.",
-            },
-            {
-                "icon": "🏷️",
-                "title": "PDF Tagging",
-                "text": "Place controlled text boxes on PDF pages, generate tagged copies and archive selected versions.",
-            },
-            {
-                "icon": "🗂️",
-                "title": "Shared PDF Archive",
-                "text": "Search, preview and download documents archived by any authorized auditor.",
-            },
-            {
-                "icon": "🛡️",
-                "title": "Controlled Access",
-                "text": "Accounts require administrator approval, while sensitive deletion and Master Data functions remain restricted.",
-            },
-        ]
-    )
+    qa1, qa2, qa3, qa4, qa5 = st.columns(5)
+    with qa1:
+        st.button(
+            "📄 Generate Extraction",
+            use_container_width=True,
+            type="primary",
+            on_click=_navigate_to,
+            args=("📄 Generate Extraction",),
+        )
+    with qa2:
+        st.button(
+            "🏷️ PDF Tagging",
+            use_container_width=True,
+            on_click=_navigate_to,
+            args=("🏷️ PDF Tagging",),
+        )
+    with qa3:
+        st.button(
+            "🗂️ Shared Archive",
+            use_container_width=True,
+            on_click=_navigate_to,
+            args=("🗂️ Shared PDF Archive",),
+        )
+    with qa4:
+        st.button(
+            "📚 Report Templates",
+            use_container_width=True,
+            on_click=_navigate_to,
+            args=("📚 Report Templates",),
+        )
+    with qa5:
+        st.button(
+            "📜 Policies & Memos",
+            use_container_width=True,
+            on_click=_navigate_to,
+            args=("📜 Policies & Memoranda",),
+        )
 
-    left_home, right_home = st.columns([1.45, 1], gap="large")
+    left_home, right_home = st.columns([1.5, 1], gap="large")
     with left_home:
         render_section_header(
             "Recent Archive Activity",
-            "The most recently stored documents across all auditors.",
+            "The most recently stored audit reports across all authorized auditors.",
         )
         if home_archive_records:
             recent_rows = []
-            for record in home_archive_records[:6]:
+            for record in home_archive_records[:7]:
                 recent_rows.append(
                     {
                         "Audit Reference": record.get("audit_reference", ""),
-                        "Auditee": record.get("auditee_name", ""),
                         "Document": record.get("original_filename", ""),
-                        "Type": record.get("document_type", ""),
                         "Uploaded By": record.get("uploaded_by", ""),
-                        "Date": str(record.get("uploaded_at", ""))[:10],
+                        "Type": record.get("document_type", ""),
+                        "Date": str(record.get("uploaded_at", ""))[:16].replace("T", " "),
                     }
                 )
             st.dataframe(pd.DataFrame(recent_rows), width="stretch", hide_index=True)
@@ -777,19 +1173,26 @@ with tab_home:
 
     with right_home:
         render_section_header(
-            "System Controls",
-            "Current access and data protection status.",
+            "Pending Attention",
+            "Configuration and access items that may require review.",
         )
-        st.success("Shared archive access is enabled for all signed-in auditors.")
-        st.info("Original PDFs may be archived directly, with or without generating extraction records.")
-        st.info("PDFs are compressed automatically when the optimized copy is smaller.")
-        if is_admin_user(auth_user):
-            st.warning("Administrator controls are available in the sidebar for accounts and Master Data.")
+        if not MASTER_DATA_PATH.exists():
+            st.warning("Master Data is missing. An administrator must upload data/Master_Data.xlsx.")
         else:
-            st.caption("Archive deletion and Master Data updates remain administrator-only.")
+            st.success("Master Data is loaded and ready for extraction.")
+        if not document_library_ready:
+            st.warning("Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql to activate templates and policy libraries.")
+        else:
+            st.success("Report Templates and Policies & Memoranda libraries are connected.")
+        if home_library_error:
+            st.warning(f"Document-library activity could not be loaded: {home_library_error}")
+        if is_admin_user(auth_user):
+            st.info("User approvals, Master Data maintenance and deletion controls are available to the administrator.")
+        else:
+            st.caption("You can view and download shared records. Deletion and system maintenance remain administrator-only.")
 
 
-with tab_editor:
+if page_key == "PDF Tagging":
     render_section_header(
         "PDF Tagging Editor",
         "Create precise text labels, generate tagged PDFs and save selected versions to the shared archive.",
@@ -1009,7 +1412,7 @@ with tab_editor:
         st.info("Upload a PDF only when tags are needed. Otherwise, use Generate Extraction directly.")
 
 
-with tab_archive:
+if page_key == "Shared PDF Archive":
     st.subheader("Saved PDFs")
     st.caption(
         "Shared permanent archive for original and tagged audit-report PDFs. "
@@ -1258,12 +1661,17 @@ with tab_archive:
                     st.info("No archived PDFs match the selected filters.")
 
 
-with tab_extract:
+if page_key == "Generate Extraction":
     render_section_header(
         "Generate Extraction",
         "Upload audit-report PDFs, review generated records and choose whether originals should also be archived.",
         badge="Extraction Workspace",
     )
+    if master_df.empty:
+        st.warning(
+            "Master Data is required before generating extraction records. Ask the administrator to upload data/Master_Data.xlsx from the Master Data page."
+        )
+        st.stop()
     st.subheader("System Status")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -1444,3 +1852,189 @@ with tab_extract:
 
     else:
         st.info("Upload one or multiple audit report PDFs to start.")
+
+
+if page_key == "Report Templates":
+    render_document_library_page(
+        collection=COLLECTION_TEMPLATES,
+        client=document_client,
+        config=document_config,
+        ready=document_library_ready,
+        current_user=auth_user,
+        admin=is_admin_user(auth_user),
+    )
+
+
+if page_key == "Policies & Memoranda":
+    render_document_library_page(
+        collection=COLLECTION_POLICIES,
+        client=document_client,
+        config=document_config,
+        ready=document_library_ready,
+        current_user=auth_user,
+        admin=is_admin_user(auth_user),
+    )
+
+
+if page_key == "User Management" and is_admin_user(auth_user):
+    render_section_header(
+        "User Management",
+        "Approve registrations, issue activation or reset codes, and manage authorized IARS accounts.",
+        badge="Administrator Only",
+    )
+    render_account_admin_page(auth_client, auth_config)
+
+
+if page_key == "Master Data" and is_admin_user(auth_user):
+    render_section_header(
+        "Master Data Management",
+        "Review the active reference workbook and upload a validated replacement without changing the IARS code.",
+        badge="Administrator Only",
+    )
+
+    current_sheets = list(master_sheets.keys())
+    active_auditors_count = 0
+    if not auditors_df.empty and "Auditor" in auditors_df.columns:
+        if "Status" in auditors_df.columns:
+            active_auditors_count = int(
+                auditors_df["Status"].astype(str).str.strip().str.casefold().isin(["active", ""]).sum()
+            )
+        else:
+            active_auditors_count = len(auditors_df)
+
+    render_metric_cards(
+        [
+            {"label": "Employees", "value": f"{len(master_df):,}", "note": "Current employee records", "icon": "👥", "accent": "#2563EB"},
+            {"label": "Active Auditors", "value": f"{active_auditors_count:,}", "note": "Available in dropdowns", "icon": "🧑‍💼", "accent": "#178A52"},
+            {"label": "Worksheets", "value": f"{len(current_sheets):,}", "note": "Reference tables", "icon": "📑", "accent": "#C78B12"},
+            {"label": "Workbook Status", "value": "Ready" if MASTER_DATA_PATH.exists() else "Missing", "note": str(MASTER_DATA_PATH), "icon": "🗃️", "accent": "#178A52" if MASTER_DATA_PATH.exists() else "#D92D20"},
+        ]
+    )
+
+    with st.container(border=True):
+        st.markdown("### Upload Updated Master Data")
+        st.caption(
+            "The workbook is checked first. The existing active file is replaced only after the new workbook passes validation."
+        )
+        uploaded_master = st.file_uploader(
+            "Select Master_Data.xlsx",
+            type=["xlsx"],
+            key="master_data_page_upload",
+        )
+        if uploaded_master is not None:
+            validation_errors: list[str] = []
+            validation_notes: list[str] = []
+            try:
+                workbook_bytes = uploaded_master.getvalue()
+                test_xls = pd.ExcelFile(BytesIO(workbook_bytes))
+                required_sheets = {"Employees", "Auditors"}
+                missing_sheets = sorted(required_sheets - set(test_xls.sheet_names))
+                if missing_sheets:
+                    validation_errors.append(
+                        "Missing required worksheet(s): " + ", ".join(missing_sheets)
+                    )
+                if "Employees" in test_xls.sheet_names:
+                    test_employees = pd.read_excel(BytesIO(workbook_bytes), sheet_name="Employees")
+                    name_column = next(
+                        (name for name in ("Employee Name", "Full Name", "Name") if name in test_employees.columns),
+                        None,
+                    )
+                    if "Employee ID" not in test_employees.columns:
+                        validation_errors.append("Employees sheet is missing the Employee ID column.")
+                    if not name_column:
+                        validation_errors.append("Employees sheet is missing an employee-name column.")
+                    validation_notes.append(f"Employees detected: {len(test_employees):,}")
+                if "Auditors" in test_xls.sheet_names:
+                    test_auditors = pd.read_excel(BytesIO(workbook_bytes), sheet_name="Auditors")
+                    for required_column in ("Auditor", "User", "Status"):
+                        if required_column not in test_auditors.columns:
+                            validation_errors.append(
+                                f"Auditors sheet is missing the {required_column} column."
+                            )
+                    validation_notes.append(f"Auditors detected: {len(test_auditors):,}")
+                validation_notes.append(f"Worksheets detected: {len(test_xls.sheet_names):,}")
+            except Exception as exc:
+                validation_errors.append(f"Unable to read the workbook: {exc}")
+
+            if validation_errors:
+                for error in validation_errors:
+                    st.error(error)
+            else:
+                st.success("Workbook validation passed. " + " · ".join(validation_notes))
+                if st.button(
+                    "Activate Updated Master Data",
+                    type="primary",
+                    use_container_width=True,
+                    key="activate_master_data",
+                ):
+                    save_uploaded_master(uploaded_master)
+                    st.cache_data.clear()
+                    st.success("Master Data updated successfully. The app will now reload it.")
+                    st.rerun()
+
+    if current_sheets:
+        st.divider()
+        render_section_header(
+            "Current Workbook Preview",
+            "Select a worksheet to review the active values currently used by IARS.",
+        )
+        selected_sheet = st.selectbox(
+            "Worksheet",
+            current_sheets,
+            key="master_data_preview_sheet",
+        )
+        preview_df = master_sheets.get(selected_sheet, pd.DataFrame())
+        if isinstance(preview_df, pd.DataFrame):
+            st.dataframe(preview_df.head(200), width="stretch", hide_index=True)
+            if len(preview_df) > 200:
+                st.caption(f"Showing the first 200 of {len(preview_df):,} rows.")
+
+
+if page_key == "Settings":
+    render_section_header(
+        "System Settings",
+        "Review the active IARS environment, security and storage configuration.",
+        badge="System Information",
+    )
+    render_metric_cards(
+        [
+            {"label": "IARS Version", "value": "4.0.0", "note": "EDL Professional Interface", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
+            {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
+            {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
+        ]
+    )
+
+    general_tab, security_tab, storage_tab = st.tabs(
+        ["General", "Security & Access", "Storage & Libraries"]
+    )
+    with general_tab:
+        with st.container(border=True):
+            st.markdown("### General Configuration")
+            st.text_input("System Name", value="Internal Audit Report System", disabled=True)
+            st.text_input("Organization", value="EDL GROUP OF COMPANIES", disabled=True)
+            st.text_input("Environment", value="Production", disabled=True)
+            st.text_input("Master Data Path", value=str(MASTER_DATA_PATH), disabled=True)
+    with security_tab:
+        with st.container(border=True):
+            st.markdown("### Security Controls")
+            st.checkbox("Administrator approval required for new accounts", value=True, disabled=True)
+            st.checkbox("All users authenticate using username and password", value=True, disabled=True)
+            st.checkbox("Automatic logout after inactivity", value=True, disabled=True)
+            st.checkbox("Archive deletion restricted to administrator", value=True, disabled=True)
+            st.checkbox("Master Data updates restricted to administrator", value=True, disabled=True)
+            st.caption(
+                "Administrator credentials and code secrets are maintained in Streamlit Secrets and are not displayed in the application."
+            )
+    with storage_tab:
+        with st.container(border=True):
+            st.markdown("### Storage Configuration")
+            st.checkbox("Automatic PDF compression", value=True, disabled=True)
+            st.checkbox("All signed-in auditors may view shared PDFs", value=True, disabled=True)
+            st.checkbox("All signed-in auditors may download templates and policies", value=True, disabled=True)
+            st.text_input("PDF Archive Bucket", value=archive_config.bucket, disabled=True)
+            st.text_input("Document Library Bucket", value=document_config.bucket, disabled=True)
+            if not document_library_ready:
+                st.warning(
+                    "Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql to enable Report Templates and Policies & Memoranda."
+                )
