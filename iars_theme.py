@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import html
 from pathlib import Path
+from textwrap import dedent
 from typing import Any, Iterable
 
 import streamlit as st
@@ -493,7 +494,7 @@ def render_app_header(user: dict[str, Any], *, version: str) -> None:
 def render_login_hero() -> None:
     logo = _logo_data_uri()
     image = f'<img src="{logo}" alt="EDL Group logo">' if logo else ""
-    st.markdown(
+    login_html = dedent(
         f"""
         <div class="edl-login-hero">
             {image}
@@ -507,9 +508,9 @@ def render_login_hero() -> None:
                 <div class="edl-login-point">✅ Controlled audit records</div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+    ).strip()
+    st.markdown(login_html, unsafe_allow_html=True)
 
 
 def render_section_header(title: str, subtitle: str = "", badge: str = "") -> None:
