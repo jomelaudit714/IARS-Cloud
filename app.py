@@ -1017,7 +1017,7 @@ with st.sidebar:
     st.divider()
     render_account_sidebar(auth_client, auth_user, auth_config)
 
-render_app_header(auth_user, version="4.0.0")
+render_app_header(auth_user, version="4.0.1")
 
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 

@@ -760,18 +760,18 @@ def render_auth_gate(config: AuthConfig):
     if user is not None:
         return client, user
 
-    left, right = st.columns([1.05, 1], gap="large")
+    left, right = st.columns([1.12, 0.88], gap="large", vertical_alignment="center")
     with left:
         render_login_hero()
     with right:
-        render_section_header(
-            "Secure Account Access",
-            "Sign in using your approved username, or create an account for administrator review.",
-            badge="Authorized Users Only",
-        )
-        with st.container(border=True):
+        with st.container(border=True, key="iars_auth_card"):
+            render_section_header(
+                "Secure Account Access",
+                "Use your approved username and password, or create an account for administrator review.",
+                badge="Authorized Users Only",
+            )
             sign_in_tab, sign_up_tab, verify_tab, forgot_tab = st.tabs(
-                ["Sign In", "Sign Up", "Verify", "Reset Password"]
+                ["Sign In", "Sign Up", "Verify Account", "Reset Password"]
             )
             with sign_in_tab:
                 _render_sign_in(client, config)
@@ -781,7 +781,9 @@ def render_auth_gate(config: AuthConfig):
                 _render_verify_account(client, config)
             with forgot_tab:
                 _render_forgot_password(client, config)
-        st.caption("Authorized EDL Internal Audit personnel only. Account activity may be recorded for security and accountability.")
+            st.caption(
+                "Authorized EDL Internal Audit personnel only. Account activity may be recorded for security and accountability."
+            )
     st.stop()
 
 
