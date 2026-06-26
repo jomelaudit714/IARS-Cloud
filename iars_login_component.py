@@ -84,7 +84,9 @@ LOGIN_CSS = r"""
 button,input { font:inherit; }
 .login-shell {
   width:100%;
-  min-height:calc(100vh - 8px);
+  height:100dvh;
+  min-height:0;
+  overflow:hidden;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:10px;
@@ -94,7 +96,8 @@ button,input { font:inherit; }
 .visual-panel,
 .form-panel {
   min-width:0;
-  min-height:calc(100vh - 24px);
+  min-height:0;
+  height:calc(100dvh - 16px);
   border-radius:16px;
   overflow:hidden;
 }
@@ -116,7 +119,7 @@ button,input { font:inherit; }
   background:#FFF;
   border:1px solid #DCE3EC;
   box-shadow:0 18px 44px rgba(16,24,40,.07);
-  padding:clamp(28px,5vh,66px) clamp(30px,5vw,82px);
+  padding:clamp(18px,3.2vh,42px) clamp(28px,4.5vw,72px);
 }
 .form-wrap {
   width:min(100%,620px);
@@ -124,39 +127,39 @@ button,input { font:inherit; }
 }
 .form-header {
   text-align:center;
-  margin:0 0 clamp(26px,4vh,46px);
+  margin:0 0 clamp(14px,2.4vh,28px);
 }
 .form-header h1 {
   margin:0;
   color:#061A36;
-  font-size:clamp(34px,3vw,52px);
+  font-size:clamp(28px,3.2vw,44px);
   line-height:1.07;
   font-weight:850;
   letter-spacing:-.035em;
 }
 .form-header p {
-  margin:12px 0 0;
+  margin:8px 0 0;
   color:#667085;
-  font-size:clamp(16px,1.25vw,21px);
+  font-size:clamp(14px,1.1vw,18px);
 }
-.field-group { margin-bottom:24px; }
+.field-group { margin-bottom:clamp(12px,2vh,20px); }
 .field-group label {
   display:block;
-  margin-bottom:10px;
+  margin-bottom:7px;
   color:#061A36;
-  font-size:17px;
+  font-size:15px;
   font-weight:750;
 }
 .field-group input {
   width:100%;
-  height:60px;
+  height:clamp(46px,7vh,56px);
   border:1.5px solid #C8D2DF;
   border-radius:8px;
   background:#FFF;
   color:#061A36;
   outline:none;
   padding:0 18px;
-  font-size:17px;
+  font-size:16px;
   transition:border-color .15s,box-shadow .15s;
 }
 .field-group input::placeholder { color:#98A2B3; }
@@ -188,7 +191,7 @@ button,input { font:inherit; }
   justify-content:space-between;
   align-items:center;
   gap:16px;
-  margin:2px 0 28px;
+  margin:0 0 clamp(12px,2vh,20px);
 }
 .remember {
   display:flex;
@@ -223,13 +226,13 @@ button,input { font:inherit; }
 .primary-button,
 .secondary-button {
   width:100%;
-  height:62px;
+  height:clamp(48px,7vh,56px);
   border-radius:8px;
   display:flex;
   align-items:center;
   justify-content:center;
   gap:12px;
-  font-size:19px;
+  font-size:17px;
   font-weight:780;
   cursor:pointer;
   transition:background .15s,border-color .15s,transform .08s;
@@ -250,7 +253,7 @@ button,input { font:inherit; }
   display:flex;
   align-items:center;
   gap:18px;
-  margin:22px 0;
+  margin:clamp(10px,1.8vh,18px) 0;
   color:#667085;
   font-size:16px;
 }
@@ -263,8 +266,8 @@ button,input { font:inherit; }
 .secondary-button:hover { background:#F7FAFD; }
 .verify-button {
   width:100%;
-  min-height:50px;
-  margin-top:18px;
+  min-height:38px;
+  margin-top:8px;
   border:0;
   background:transparent;
   color:#175CD3;
@@ -278,7 +281,7 @@ button,input { font:inherit; }
 }
 .verify-button:hover { color:#0B4DB8; }
 .authorized {
-  margin:clamp(26px,5vh,52px) 0 0;
+  margin:clamp(8px,1.8vh,18px) 0 0;
   text-align:center;
   color:#667085;
   font-size:14px;
@@ -290,18 +293,24 @@ button,input { font:inherit; }
   text-align:center;
   font-size:14px;
 }
-@media (max-height:780px) and (min-width:901px) {
-  .form-panel { padding:24px clamp(30px,5vw,72px); }
-  .form-header { margin-bottom:22px; }
-  .form-header h1 { font-size:36px; }
-  .form-header p { font-size:16px; }
-  .field-group { margin-bottom:16px; }
-  .field-group input { height:52px; }
-  .options-row { margin-bottom:18px; }
-  .primary-button,.secondary-button { height:54px; }
-  .divider { margin:14px 0; }
-  .verify-button { margin-top:10px;min-height:42px; }
-  .authorized { margin-top:20px; }
+@media (max-height:720px) and (min-width:901px) {
+  .login-shell { padding:6px; gap:8px; }
+  .visual-panel,.form-panel { height:calc(100dvh - 12px); border-radius:14px; }
+  .form-panel { padding:12px clamp(24px,4vw,56px); }
+  .form-header { margin-bottom:12px; }
+  .form-header h1 { font-size:30px; }
+  .form-header p { margin-top:5px; font-size:14px; }
+  .field-group { margin-bottom:10px; }
+  .field-group label { margin-bottom:5px; font-size:14px; }
+  .field-group input { height:44px; font-size:15px; }
+  .options-row { margin-bottom:10px; }
+  .remember,.link-button { font-size:14px; }
+  .remember input { width:20px; height:20px; }
+  .primary-button,.secondary-button { height:46px; font-size:16px; }
+  .divider { margin:8px 0; font-size:14px; }
+  .verify-button { margin-top:5px; min-height:32px; font-size:15px; }
+  .authorized { margin-top:6px; font-size:12px; }
+  .inline-error { min-height:14px; margin-top:4px; font-size:12px; }
 }
 @media (max-width:900px) {
   .login-shell { grid-template-columns:1fr; min-height:auto; }
@@ -405,6 +414,13 @@ def apply_exact_login_host_css() -> None:
     st.markdown(
         """
         <style>
+        html, body, #root, .stApp {
+          height:100vh !important;
+          min-height:0 !important;
+          margin:0 !important;
+          padding:0 !important;
+          overflow:hidden !important;
+        }
         header[data-testid="stHeader"],
         [data-testid="stToolbar"],
         [data-testid="stStatusWidget"],
@@ -412,14 +428,29 @@ def apply_exact_login_host_css() -> None:
         #MainMenu,
         footer {display:none !important;}
         section[data-testid="stSidebar"] {display:none !important;}
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        [data-testid="stMainBlockContainer"],
+        .main,
+        .main > div,
         .block-container {
+          height:100vh !important;
+          min-height:0 !important;
           max-width:none !important;
           padding:0 !important;
           margin:0 !important;
+          overflow:hidden !important;
+          background:#F4F6FA !important;
         }
-        [data-testid="stAppViewContainer"],
-        [data-testid="stMain"] {background:#F4F6FA !important;}
-        [data-testid="stCustomComponentV2"] {margin:0 !important;}
+        [data-testid="stCustomComponentV2"],
+        [data-testid="stCustomComponentV2"] > div {
+          height:100vh !important;
+          min-height:0 !important;
+          width:100% !important;
+          margin:0 !important;
+          padding:0 !important;
+          overflow:hidden !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
