@@ -499,10 +499,6 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
         st.error(str(exc) or "Unable to sign in.")
 
 def _render_sign_up(client: Any, config: AuthConfig) -> None:
-    st.subheader("Sign Up")
-    st.caption(
-        "Create a standard user account. The administrator must approve it and personally provide the activation code."
-    )
     with st.form("iars_manual_sign_up_form"):
         full_name = st.text_input("Full Name", placeholder="Sarina Amuraw")
         username_input = st.text_input(
@@ -567,8 +563,6 @@ def _render_sign_up(client: Any, config: AuthConfig) -> None:
 
 
 def _render_verify_account(client: Any, config: AuthConfig) -> None:
-    st.subheader("Verify Account")
-    st.caption("Enter the one-time activation code personally provided by the administrator.")
     with st.form("iars_manual_verify_form"):
         username_input = st.text_input("Username / Nickname", key="verify_username")
         code_input = st.text_input(
@@ -637,11 +631,6 @@ def _render_verify_account(client: Any, config: AuthConfig) -> None:
 
 
 def _render_forgot_password(client: Any, config: AuthConfig) -> None:
-    st.subheader("Forgot Password")
-    st.caption(
-        "Request a reset, then obtain a one-time reset code directly from the administrator. No SMS is used."
-    )
-
     with st.form("iars_password_reset_request_form"):
         request_username_input = st.text_input(
             "Username / Nickname", key="reset_request_username"
@@ -751,7 +740,13 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
 
 
 def render_auth_gate(config: AuthConfig):
-    """Require username/password authentication before rendering IARS."""
+    """Require username/password authentication before rendering IARS.
+
+    The login experience uses native Streamlit forms inside persistent tabs.
+    Tab changes happen in the browser without a Python rerun, so switching
+    between Sign In, Sign Up, Verify, and Reset Password is smooth and typing
+    remains stable.
+    """
 
     def _render_native_shell(render_right) -> None:
         st.markdown('<div class="iars-login-marker"></div>', unsafe_allow_html=True)
@@ -792,20 +787,27 @@ def render_auth_gate(config: AuthConfig):
     if user is not None:
         return client, user
 
-    view = st.session_state.get("iars_auth_view", "sign_in")
+    def _login_workspace() -> None:
+        st.markdown(
+            '<div class="edl-auth-title"><h1>Welcome Back</h1>'
+            '<p>Access your approved Internal Audit workspace.</p></div>',
+            unsafe_allow_html=True,
+        )
 
-    if view == "sign_in":
-        def _sign_in_panel() -> None:
+        sign_in_tab, sign_up_tab, verify_tab, reset_tab = st.tabs(
+            ["Sign In", "Sign Up", "Verify Account", "Reset Password"]
+        )
+
+        with sign_in_tab:
             st.markdown(
-                '<div class="edl-auth-title"><h1>Sign in to your account</h1>'
-                '<p>Access your internal audit workspace</p></div>',
+                '<div class="edl-auth-panel-title"><h2>Sign in to your account</h2>'
+                '<p>Use your username or nickname and password.</p></div>',
                 unsafe_allow_html=True,
             )
-
             with st.form("iars_stable_sign_in_form", clear_on_submit=False):
                 username_input = st.text_input(
-                    "Username",
-                    placeholder="Enter your username",
+                    "Username / Nickname",
+                    placeholder="Enter your username or nickname",
                     autocomplete="username",
                     key="auth_signin_username",
                 )
@@ -816,35 +818,19 @@ def render_auth_gate(config: AuthConfig):
                     autocomplete="current-password",
                     key="auth_signin_password",
                 )
-                st.checkbox("Remember me", key="auth_remember_me")
+                remember_col, help_col = st.columns([1, 1])
+                with remember_col:
+                    st.checkbox("Remember me", key="auth_remember_me")
+                with help_col:
+                    st.markdown(
+                        '<div class="edl-forgot-hint">Forgot password? Use the <strong>Reset Password</strong> tab.</div>',
+                        unsafe_allow_html=True,
+                    )
                 submitted = st.form_submit_button(
                     "🔒  Sign In",
                     type="primary",
                     use_container_width=True,
                 )
-
-            forgot_col, blank_col = st.columns([1, 1])
-            with blank_col:
-                if st.button(
-                    "Forgot password?",
-                    key="auth_forgot_link",
-                    use_container_width=True,
-                ):
-                    st.session_state["iars_auth_view"] = "forgot"
-                    st.rerun()
-
-            st.markdown('<div class="edl-auth-divider">or</div>', unsafe_allow_html=True)
-            if st.button("👤  Sign Up", key="auth_go_signup", use_container_width=True):
-                st.session_state["iars_auth_view"] = "sign_up"
-                st.rerun()
-            if st.button("🛡️  Verify Your Account", key="auth_go_verify", use_container_width=True):
-                st.session_state["iars_auth_view"] = "verify"
-                st.rerun()
-
-            st.markdown(
-                '<div class="edl-login-authorized">Authorized EDL Internal Audit personnel only.</div>',
-                unsafe_allow_html=True,
-            )
 
             if submitted:
                 try:
@@ -852,30 +838,36 @@ def render_auth_gate(config: AuthConfig):
                 except Exception as exc:
                     st.error(str(exc) or "Unable to sign in.")
 
-        _render_native_shell(_sign_in_panel)
-        st.stop()
-
-    def _auth_panel() -> None:
-        if view == "sign_up":
-            render_section_header("Create Account", "Register using only the essential account details.")
+        with sign_up_tab:
+            st.markdown(
+                '<div class="edl-auth-panel-title"><h2>Create your account</h2>'
+                '<p>Registration is subject to administrator approval.</p></div>',
+                unsafe_allow_html=True,
+            )
             _render_sign_up(client, config)
-            if st.button("← Back to Sign In", key="auth_back_signup", use_container_width=True):
-                st.session_state["iars_auth_view"] = "sign_in"
-                st.rerun()
-        elif view == "verify":
-            render_section_header("Verify Account", "Enter the activation code personally provided by the administrator.")
-            _render_verify_account(client, config)
-            if st.button("← Back to Sign In", key="auth_back_verify", use_container_width=True):
-                st.session_state["iars_auth_view"] = "sign_in"
-                st.rerun()
-        else:
-            render_section_header("Reset Password", "Request or complete an administrator-approved password reset.")
-            _render_forgot_password(client, config)
-            if st.button("← Back to Sign In", key="auth_back_forgot", use_container_width=True):
-                st.session_state["iars_auth_view"] = "sign_in"
-                st.rerun()
 
-    _render_native_shell(_auth_panel)
+        with verify_tab:
+            st.markdown(
+                '<div class="edl-auth-panel-title"><h2>Verify your account</h2>'
+                '<p>Enter the activation code provided by the administrator.</p></div>',
+                unsafe_allow_html=True,
+            )
+            _render_verify_account(client, config)
+
+        with reset_tab:
+            st.markdown(
+                '<div class="edl-auth-panel-title"><h2>Reset your password</h2>'
+                '<p>Request an administrator reset code or complete your password change.</p></div>',
+                unsafe_allow_html=True,
+            )
+            _render_forgot_password(client, config)
+
+        st.markdown(
+            '<div class="edl-login-authorized">Authorized EDL Internal Audit personnel only.</div>',
+            unsafe_allow_html=True,
+        )
+
+    _render_native_shell(_login_workspace)
     st.stop()
 
 def _user_label(user: dict[str, Any]) -> str:
