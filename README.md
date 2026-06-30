@@ -1,25 +1,61 @@
-# IARS Login Phase 2 — Smooth Tabs + Approved Interface
+# IARS v4.4.0 — EDL Enterprise UI
 
-This package keeps the current IARS functions and replaces only the login experience.
+# IARS v4.2.0 — EDL Native Streamlit Enterprise UI
 
-## Login changes
+This release keeps the v4.1.0 functions and replaces fragile embedded images and sidebar radio navigation with native Streamlit components for reliable production rendering.
 
-- Uses the approved EDL Internal Audit split-screen design.
-- Uses the approved left visual panel with the original EDL logo.
-- Fits the desktop viewport without page scrolling on the Sign In tab.
-- Uses native Streamlit forms, so typing does not rerun or erase input.
-- Sign In, Sign Up, Verify Account, and Reset Password are persistent tabs.
-- Switching tabs happens in the browser and uses a short fade/slide transition.
-- Long Sign Up and Reset Password forms scroll inside the right card instead of moving the entire page.
-- No custom JavaScript login component is used.
+## Required assets
+
+- `assets/edl_logo.png` — exact original EDL GROUP OF COMPANIES logo
+- `assets/internal_audit_visual.png` — Internal Audit reports, compliance, workpapers and assurance visual
+
+## Main corrections
+
+- Exact EDL logo visible on login and main sidebar
+- Internal Audit image visible on login and Dashboard
+- No radio-button circles in the main navigation
+- Gold active navigation and navy professional sidebar
+- Existing IARS business logic retained
+
+See `DEPLOY_v4_2_0.md` and `CHANGELOG_v4_2_0.md`.
+
+---
+
+# IARS v4.1.0 — EDL Enterprise Internal Audit Interface
+
+This package applies the approved EDL GROUP OF COMPANIES Internal Audit interface to the working IARS application while retaining the existing authentication, extraction, PDF tagging, shared archive, document library, Master Data, and export logic.
+
+## Visual implementation
+
+- Exact original `assets/edl_logo.png` supplied by the user
+- Navy enterprise sidebar with gold active navigation
+- Compact page-specific top bar with user, role, date, and version
+- Professional login split layout with Internal Audit image and white account card
+- Dashboard KPI cards, recent archive activity, quick actions, and system overview
+- Workflow steppers for Generate Extraction and PDF Tagging
+- Summary cards for Shared PDF Archive, Report Templates, Policies & Memoranda, Master Data, User Management, and Settings
+- Responsive layout for smaller screens
+- Direct HTML rendering through `st.html()` when supported to prevent raw tags from appearing
+
+## Existing functions retained
+
+- Admin-approved username/nickname login
+- Sign Up, Verify, and Reset Password
+- Shared PDF archive visible to all signed-in auditors
+- Direct archive upload and automatic PDF compression
+- Report extraction and exact external-system export headers
+- PDF tagging editor
+- Report Templates library for Excel, Word, and PDF
+- Policies & Memoranda archive for Excel, Word, and PDF
+- Administrator-only deletion, account administration, and Master Data updates
 
 ## Deployment
 
 1. Extract the ZIP.
-2. Upload the contents directly to the GitHub repository root.
-3. Replace the current files and folders.
-4. Keep your existing Streamlit Secrets.
-5. Commit the changes and reboot Streamlit.
-6. Refresh the app with Ctrl + F5 at 100% browser zoom.
+2. Upload all files and folders to the GitHub repository used by Streamlit.
+3. Commit them together on the deployed branch.
+4. Keep the existing Streamlit Secrets.
+5. Run the SQL setup files only if the corresponding Supabase tables were not created previously.
+6. Reboot the Streamlit app and hard-refresh the browser with `Ctrl + F5`.
 
-No new Supabase SQL migration is required if the current multi-user login tables already exist.
+The Streamlit implementation follows the approved mockup closely, but native Streamlit controls may not be pixel-identical to a custom React or HTML application.

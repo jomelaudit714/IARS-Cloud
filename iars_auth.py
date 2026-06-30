@@ -456,49 +456,71 @@ def _process_sign_in_credentials(
     st.rerun()
 
 
+def _set_auth_view(view: str) -> None:
+    """Switch the visible account panel during the button-triggered rerun.
+
+    Using a callback avoids the second explicit st.rerun() that previously caused
+    a visible flash between Sign In, Sign Up, Verify, and Forgot Password.
+    """
+    st.session_state["iars_auth_view"] = view
+    try:
+        if "auth_view" in st.query_params:
+            del st.query_params["auth_view"]
+    except Exception:
+        pass
+
+
 def _render_sign_in(client: Any, config: AuthConfig) -> None:
-    username_input = st.text_input(
-        "Username",
-        placeholder="Enter your username",
-        autocomplete="username",
-        key="auth_signin_username",
-    )
-    password = st.text_input(
-        "Password",
-        placeholder="Enter your password",
-        type="password",
-        autocomplete="current-password",
-        key="auth_signin_password",
-    )
+    """Render a stable native Streamlit sign-in form.
 
-    remember_col, forgot_col = st.columns([1, 1])
-    with remember_col:
-        st.checkbox("Remember me", key="auth_remember_me")
-    with forgot_col:
-        if st.button(
-            "Forgot password?",
-            key="auth_forgot_link",
+    Values remain browser-side while the user is typing and are sent to Python
+    only after the form is submitted. This prevents input resets and
+    CachedForwardMsg errors caused by the previous interactive component.
+    """
+    with st.form("iars_native_sign_in_form", clear_on_submit=False, border=False):
+        username_input = st.text_input(
+            "Username",
+            placeholder="Enter your username",
+            autocomplete="username",
+            key="auth_signin_username",
+        )
+        password = st.text_input(
+            "Password",
+            placeholder="Enter your password",
+            type="password",
+            autocomplete="current-password",
+            key="auth_signin_password",
+        )
+        remember_col, forgot_col = st.columns([1, 1], vertical_alignment="center")
+        with remember_col:
+            remember = st.checkbox("Remember me", key="auth_remember_me")
+        with forgot_col:
+            st.markdown(
+                '<div class="iars-forgot-wrap"><a class="iars-forgot-link" href="?auth_view=forgot">Forgot password?</a></div>',
+                unsafe_allow_html=True,
+            )
+        submitted = st.form_submit_button(
+            "🔒  Sign In",
+            type="primary",
             use_container_width=True,
-        ):
-            st.session_state["iars_auth_view"] = "forgot"
-            st.rerun()
-
-    submitted = st.button(
-        "🔒  Sign In",
-        type="primary",
-        key="auth_signin_submit",
-        use_container_width=True,
-    )
+        )
 
     if not submitted:
         return
 
+    # `remember` remains available for future persistent-login handling while
+    # retaining the approved checkbox in the interface.
+    _ = remember
     try:
         _process_sign_in_credentials(client, config, username_input, password)
     except Exception as exc:
         st.error(str(exc) or "Unable to sign in.")
 
 def _render_sign_up(client: Any, config: AuthConfig) -> None:
+    st.subheader("Sign Up")
+    st.caption(
+        "Create a standard user account. The administrator must approve it and personally provide the activation code."
+    )
     with st.form("iars_manual_sign_up_form"):
         full_name = st.text_input("Full Name", placeholder="Sarina Amuraw")
         username_input = st.text_input(
@@ -563,6 +585,8 @@ def _render_sign_up(client: Any, config: AuthConfig) -> None:
 
 
 def _render_verify_account(client: Any, config: AuthConfig) -> None:
+    st.subheader("Verify Account")
+    st.caption("Enter the one-time activation code personally provided by the administrator.")
     with st.form("iars_manual_verify_form"):
         username_input = st.text_input("Username / Nickname", key="verify_username")
         code_input = st.text_input(
@@ -631,6 +655,11 @@ def _render_verify_account(client: Any, config: AuthConfig) -> None:
 
 
 def _render_forgot_password(client: Any, config: AuthConfig) -> None:
+    st.subheader("Forgot Password")
+    st.caption(
+        "Request a reset, then obtain a one-time reset code directly from the administrator. No SMS is used."
+    )
+
     with st.form("iars_password_reset_request_form"):
         request_username_input = st.text_input(
             "Username / Nickname", key="reset_request_username"
@@ -740,13 +769,7 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
 
 
 def render_auth_gate(config: AuthConfig):
-    """Require username/password authentication before rendering IARS.
-
-    The login experience uses native Streamlit forms inside persistent tabs.
-    Tab changes happen in the browser without a Python rerun, so switching
-    between Sign In, Sign Up, Verify, and Reset Password is smooth and typing
-    remains stable.
-    """
+    """Require username/password authentication before rendering IARS."""
 
     def _render_native_shell(render_right) -> None:
         st.markdown('<div class="iars-login-marker"></div>', unsafe_allow_html=True)
@@ -756,6 +779,9 @@ def render_auth_gate(config: AuthConfig):
                 render_login_hero()
             with right:
                 with st.container(key="iars_auth_card"):
+                    # Animate only the account panel. The branded left panel stays
+                    # visually fixed during account-view changes.
+                    st.markdown('<div class="iars-auth-view-marker"></div>', unsafe_allow_html=True)
                     render_right()
 
     if not auth_is_configured(config):
@@ -787,87 +813,70 @@ def render_auth_gate(config: AuthConfig):
     if user is not None:
         return client, user
 
-    def _login_workspace() -> None:
-        st.markdown(
-            '<div class="edl-auth-title"><h1>Welcome Back</h1>'
-            '<p>Access your approved Internal Audit workspace.</p></div>',
-            unsafe_allow_html=True,
-        )
+    requested_view = str(st.query_params.get("auth_view", "") or "").strip()
+    if requested_view in {"sign_in", "sign_up", "verify", "forgot"}:
+        st.session_state["iars_auth_view"] = requested_view
+    view = st.session_state.get("iars_auth_view", "sign_in")
 
-        sign_in_tab, sign_up_tab, verify_tab, reset_tab = st.tabs(
-            ["Sign In", "Sign Up", "Verify Account", "Reset Password"]
-        )
-
-        with sign_in_tab:
+    def _auth_panel() -> None:
+        if view == "sign_in":
             st.markdown(
-                '<div class="edl-auth-panel-title"><h2>Sign in to your account</h2>'
-                '<p>Use your username or nickname and password.</p></div>',
+                '<div class="edl-auth-title"><h1>Sign in to your account</h1>'
+                '<p>Access your internal audit workspace</p></div>',
                 unsafe_allow_html=True,
             )
-            with st.form("iars_stable_sign_in_form", clear_on_submit=False):
-                username_input = st.text_input(
-                    "Username / Nickname",
-                    placeholder="Enter your username or nickname",
-                    autocomplete="username",
-                    key="auth_signin_username",
-                )
-                password = st.text_input(
-                    "Password",
-                    placeholder="Enter your password",
-                    type="password",
-                    autocomplete="current-password",
-                    key="auth_signin_password",
-                )
-                remember_col, help_col = st.columns([1, 1])
-                with remember_col:
-                    st.checkbox("Remember me", key="auth_remember_me")
-                with help_col:
-                    st.markdown(
-                        '<div class="edl-forgot-hint">Forgot password? Use the <strong>Reset Password</strong> tab.</div>',
-                        unsafe_allow_html=True,
-                    )
-                submitted = st.form_submit_button(
-                    "🔒  Sign In",
-                    type="primary",
-                    use_container_width=True,
-                )
-
-            if submitted:
-                try:
-                    _process_sign_in_credentials(client, config, username_input, password)
-                except Exception as exc:
-                    st.error(str(exc) or "Unable to sign in.")
-
-        with sign_up_tab:
+            _render_sign_in(client, config)
+            st.markdown('<div class="edl-auth-divider">or</div>', unsafe_allow_html=True)
+            st.button(
+                "👤  Sign Up",
+                key="auth_go_signup",
+                use_container_width=True,
+                on_click=_set_auth_view,
+                args=("sign_up",),
+            )
+            st.button(
+                "🛡️  Verify Your Account",
+                key="auth_go_verify",
+                use_container_width=True,
+                on_click=_set_auth_view,
+                args=("verify",),
+            )
             st.markdown(
-                '<div class="edl-auth-panel-title"><h2>Create your account</h2>'
-                '<p>Registration is subject to administrator approval.</p></div>',
+                '<div class="edl-login-authorized">Authorized EDL Internal Audit personnel only.</div>',
                 unsafe_allow_html=True,
             )
+        elif view == "sign_up":
+            render_section_header("Create Account", "Register using only the essential account details.")
             _render_sign_up(client, config)
-
-        with verify_tab:
-            st.markdown(
-                '<div class="edl-auth-panel-title"><h2>Verify your account</h2>'
-                '<p>Enter the activation code provided by the administrator.</p></div>',
-                unsafe_allow_html=True,
+            st.button(
+                "← Back to Sign In",
+                key="auth_back_signup",
+                use_container_width=True,
+                on_click=_set_auth_view,
+                args=("sign_in",),
             )
+        elif view == "verify":
+            render_section_header("Verify Account", "Enter the activation code personally provided by the administrator.")
             _render_verify_account(client, config)
-
-        with reset_tab:
-            st.markdown(
-                '<div class="edl-auth-panel-title"><h2>Reset your password</h2>'
-                '<p>Request an administrator reset code or complete your password change.</p></div>',
-                unsafe_allow_html=True,
+            st.button(
+                "← Back to Sign In",
+                key="auth_back_verify",
+                use_container_width=True,
+                on_click=_set_auth_view,
+                args=("sign_in",),
             )
+        else:
+            render_section_header("Reset Password", "Request or complete an administrator-approved password reset.")
             _render_forgot_password(client, config)
+            st.button(
+                "← Back to Sign In",
+                key="auth_back_forgot",
+                use_container_width=True,
+                on_click=_set_auth_view,
+                args=("sign_in",),
+            )
 
-        st.markdown(
-            '<div class="edl-login-authorized">Authorized EDL Internal Audit personnel only.</div>',
-            unsafe_allow_html=True,
-        )
-
-    _render_native_shell(_login_workspace)
+    _render_native_shell(_auth_panel)
     st.stop()
 
 def _user_label(user: dict[str, Any]) -> str:

@@ -442,188 +442,35 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 }}
 
 
-/* Native-form login stability and viewport-fit overrides */
-.stApp:has(.iars-login-marker) html,
-.stApp:has(.iars-login-marker) body {{overflow:hidden!important;}}
-.stApp:has(.iars-login-marker) .block-container {{
-  padding:.25rem!important;
-  height:100vh!important;
-  min-height:0!important;
-  overflow:hidden!important;
+/* Native login form stability + single-rerun account-panel transition */
+@keyframes iarsAuthPanelIn {{
+  from {{ opacity:0; transform:translateY(8px); }}
+  to {{ opacity:1; transform:translateY(0); }}
 }}
-.stApp:has(.iars-login-marker) [data-testid="stAppViewContainer"],
-.stApp:has(.iars-login-marker) [data-testid="stMain"] {{
-  height:100vh!important;
-  min-height:0!important;
-  overflow:hidden!important;
+.iars-auth-view-marker {{ display:none; }}
+.st-key-iars_auth_card:has(.iars-auth-view-marker) > div[data-testid="stVerticalBlock"] {{
+  animation:iarsAuthPanelIn .22s cubic-bezier(.22,.61,.36,1) both;
 }}
-.st-key-iars_login_shell,
-.st-key-iars_login_shell > div[data-testid="stVerticalBlock"],
-.st-key-iars_login_shell [data-testid="stHorizontalBlock"] {{
-  height:calc(100vh - .5rem)!important;
-  min-height:0!important;
+@media (prefers-reduced-motion:reduce) {{
+  .st-key-iars_auth_card:has(.iars-auth-view-marker) > div[data-testid="stVerticalBlock"] {{ animation:none!important; }}
 }}
-.st-key-edl_login_hero_panel,
-.st-key-edl_login_hero_panel > div,
-.st-key-edl_login_hero_panel [data-testid="stImage"] {{
-  height:calc(100vh - .5rem)!important;
-  min-height:0!important;
+.iars-forgot-wrap {{ text-align:right; padding-top:.28rem; }}
+.iars-forgot-link {{
+  color:#175CD3!important;
+  font-size:.95rem;
+  font-weight:680;
+  text-decoration:none!important;
+  white-space:nowrap;
 }}
-.st-key-edl_login_hero_panel img {{
-  object-position:center top!important;
+.iars-forgot-link:hover {{ color:#0B4FB3!important; text-decoration:underline!important; }}
+.st-key-auth_signin_username input {{
+  padding-left:3rem!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%2366788F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 21a8 8 0 0 0-16 0'/%3E%3Ccircle cx='12' cy='7' r='4'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;
+  background-position:1rem center!important;
+  background-size:1.25rem 1.25rem!important;
 }}
-.st-key-iars_auth_card {{
-  height:calc(100vh - .5rem)!important;
-  min-height:0!important;
-  overflow:hidden!important;
-  padding:clamp(1rem,2.6vh,2.2rem) clamp(2rem,4vw,4.5rem)!important;
-  display:flex!important;
-  justify-content:center!important;
-}}
-.st-key-iars_auth_card > div[data-testid="stVerticalBlock"] {{
-  width:100%!important;
-  max-width:620px!important;
-  gap:.5rem!important;
-}}
-.stApp:has(.iars-login-marker) .edl-auth-title {{margin-bottom:.7rem!important;}}
-.stApp:has(.iars-login-marker) .edl-auth-title h1 {{font-size:clamp(1.8rem,2.6vw,2.7rem)!important;}}
-.stApp:has(.iars-login-marker) .edl-auth-title p {{margin-top:.3rem!important;font-size:.95rem!important;}}
-.stApp:has(.iars-login-marker) .stTextInput input {{min-height:50px!important;}}
-.stApp:has(.iars-login-marker) button[kind="primary"],
-.st-key-auth_go_signup button {{min-height:50px!important;}}
-.stApp:has(.iars-login-marker) div[data-testid="stForm"] {{margin-bottom:.15rem!important;}}
-@media(max-height:700px) and (min-width:901px) {{
-  .st-key-iars_auth_card {{padding:.8rem 2.4rem!important;}}
-  .stApp:has(.iars-login-marker) .edl-auth-title h1 {{font-size:1.85rem!important;}}
-  .stApp:has(.iars-login-marker) .stTextInput input {{min-height:44px!important;}}
-  .stApp:has(.iars-login-marker) button[kind="primary"],
-  .st-key-auth_go_signup button {{min-height:44px!important;}}
-  .edl-auth-divider {{margin:.15rem 0!important;}}
-  .edl-login-authorized {{margin-top:.35rem!important;font-size:.74rem!important;}}
-}}
-
-
-
-/* Phase 2: approved login interface + smooth native-tab transitions */
-.stApp:has(.iars-login-marker) header[data-testid="stHeader"],
-.stApp:has(.iars-login-marker) section[data-testid="stSidebar"],
-.stApp:has(.iars-login-marker) footer {{display:none!important;}}
-.stApp:has(.iars-login-marker) {{overflow:hidden!important;background:#F4F6FA!important;}}
-.stApp:has(.iars-login-marker) [data-testid="stAppViewContainer"],
-.stApp:has(.iars-login-marker) [data-testid="stMain"] {{height:100vh!important;overflow:hidden!important;background:#F4F6FA!important;}}
-.stApp:has(.iars-login-marker) .block-container {{
-  max-width:none!important;
-  width:100%!important;
-  height:100vh!important;
-  min-height:100vh!important;
-  padding:6px!important;
-  margin:0!important;
-  overflow:hidden!important;
-}}
-.stApp:has(.iars-login-marker) [data-testid="stVerticalBlock"] {{gap:0!important;}}
-.iars-login-marker {{display:none!important;}}
-.st-key-iars_login_shell {{height:calc(100vh - 12px)!important;min-height:0!important;overflow:hidden!important;}}
-.st-key-iars_login_shell > div[data-testid="stVerticalBlock"] {{height:100%!important;}}
-.st-key-iars_login_shell [data-testid="stHorizontalBlock"] {{height:100%!important;gap:10px!important;align-items:stretch!important;}}
-.st-key-iars_login_shell [data-testid="column"] {{height:100%!important;min-width:0!important;}}
-
-.st-key-edl_login_hero_panel {{
-  height:100%!important;min-height:0!important;padding:0!important;margin:0!important;
-  border-radius:15px!important;overflow:hidden!important;background:#061A36!important;
-  border:1px solid #D7DEE8!important;box-shadow:0 10px 28px rgba(6,26,54,.14)!important;
-}}
-.st-key-edl_login_hero_panel > div[data-testid="stVerticalBlock"],
-.st-key-edl_login_hero_panel [data-testid="stImage"],
-.st-key-edl_login_hero_panel [data-testid="stImage"] > div {{height:100%!important;margin:0!important;padding:0!important;}}
-.st-key-edl_login_hero_panel [data-testid="stImage"] img {{
-  display:block!important;width:100%!important;height:100%!important;
-  object-fit:cover!important;object-position:center top!important;border-radius:0!important;
-}}
-
-.st-key-iars_auth_card {{
-  height:100%!important;min-height:0!important;overflow:hidden!important;
-  display:flex!important;flex-direction:column!important;justify-content:center!important;
-  background:#FFF!important;border:1px solid #D7DEE8!important;border-radius:15px!important;
-  padding:clamp(18px,2.6vh,30px) clamp(24px,3.2vw,48px)!important;
-  box-shadow:0 10px 28px rgba(16,24,40,.075)!important;
-}}
-.st-key-iars_auth_card > div[data-testid="stVerticalBlock"] {{max-height:100%!important;overflow:hidden!important;gap:.45rem!important;}}
-.edl-auth-title {{text-align:center;margin:0 0 clamp(8px,1.5vh,16px)!important;}}
-.edl-auth-title h1 {{margin:0!important;color:#061A36!important;font-size:clamp(1.55rem,2.4vw,2.25rem)!important;font-weight:850!important;letter-spacing:-.04em!important;}}
-.edl-auth-title p {{margin:.28rem 0 0!important;color:#667085!important;font-size:clamp(.76rem,1.2vw,.96rem)!important;}}
-.edl-auth-panel-title {{margin:.35rem 0 .65rem!important;}}
-.edl-auth-panel-title h2 {{margin:0!important;color:#061A36!important;font-size:clamp(1.15rem,1.8vw,1.55rem)!important;font-weight:800!important;letter-spacing:-.025em!important;}}
-.edl-auth-panel-title p {{margin:.22rem 0 0!important;color:#667085!important;font-size:.76rem!important;}}
-.edl-login-authorized {{text-align:center;color:#667085;font-size:.72rem;margin-top:.45rem;}}
-.edl-forgot-hint {{text-align:right;color:#175CD3;font-size:.70rem;line-height:1.35;padding-top:.45rem;}}
-
-.st-key-iars_auth_card .stTabs {{min-height:0!important;overflow:hidden!important;}}
-.st-key-iars_auth_card .stTabs [data-baseweb="tab-list"] {{
-  display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
-  gap:2px!important;padding:3px!important;margin:0 0 .45rem!important;
-  background:#F7F9FC!important;border:1px solid #DCE3EC!important;border-radius:9px!important;
-  box-shadow:none!important;
-}}
-.st-key-iars_auth_card .stTabs [data-baseweb="tab"] {{
-  min-width:0!important;border-radius:7px!important;padding:.52rem .25rem!important;
-  color:#475467!important;font-size:clamp(.64rem,.9vw,.76rem)!important;font-weight:700!important;
-  white-space:nowrap!important;
-}}
-.st-key-iars_auth_card .stTabs [aria-selected="true"] {{
-  background:#FFF!important;color:#061A36!important;box-shadow:0 2px 7px rgba(16,24,40,.08)!important;
-}}
-.st-key-iars_auth_card .stTabs [data-baseweb="tab-highlight"] {{display:none!important;}}
-.st-key-iars_auth_card .stTabs [role="tabpanel"] {{
-  max-height:calc(100vh - 210px)!important;overflow-y:auto!important;overflow-x:hidden!important;
-  padding:0 .2rem .2rem!important;scrollbar-width:thin;
-  animation:iarsTabEnter .20s ease-out both;
-}}
-@keyframes iarsTabEnter {{from{{opacity:0;transform:translateY(5px)}}to{{opacity:1;transform:translateY(0)}}}}
-
-.st-key-iars_auth_card .stTextInput {{margin-bottom:.05rem!important;}}
-.st-key-iars_auth_card .stTextInput label,
-.st-key-iars_auth_card .stCheckbox label {{font-weight:650!important;color:#061A36!important;font-size:.78rem!important;}}
-.st-key-iars_auth_card .stTextInput input {{
-  min-height:46px!important;background:#FFF!important;border:1px solid #C9D3E0!important;
-  border-radius:8px!important;font-size:.88rem!important;padding:.6rem .8rem!important;
-}}
-.st-key-iars_auth_card .stTextInput input:focus {{border-color:#174A86!important;box-shadow:0 0 0 3px rgba(23,74,134,.10)!important;}}
-.st-key-iars_auth_card .stButton>button,
-.st-key-iars_auth_card .stFormSubmitButton>button {{
-  min-height:45px!important;border-radius:8px!important;font-weight:760!important;font-size:.88rem!important;
-  transition:background .16s ease,border-color .16s ease,transform .16s ease,box-shadow .16s ease!important;
-}}
-.st-key-iars_auth_card .stButton>button:hover,
-.st-key-iars_auth_card .stFormSubmitButton>button:hover {{transform:translateY(-1px)!important;box-shadow:0 7px 15px rgba(6,26,54,.12)!important;}}
-.st-key-iars_auth_card .stFormSubmitButton>button,
-.st-key-iars_auth_card button[kind="primary"] {{background:#061A36!important;border-color:#061A36!important;color:#FFF!important;}}
-.st-key-iars_auth_card .stFormSubmitButton>button:hover,
-.st-key-iars_auth_card button[kind="primary"]:hover {{background:#0A2C59!important;border-color:#0A2C59!important;}}
-.st-key-iars_auth_card div[data-testid="stForm"] {{padding:.2rem 0!important;border:none!important;box-shadow:none!important;background:transparent!important;}}
-.st-key-iars_auth_card hr {{margin:.55rem 0!important;}}
-
-@media (max-height:760px) and (min-width:901px) {{
-  .st-key-iars_auth_card {{padding:14px 30px!important;}}
-  .edl-auth-title {{margin-bottom:7px!important;}}
-  .edl-auth-title h1 {{font-size:1.55rem!important;}}
-  .edl-auth-title p {{font-size:.76rem!important;}}
-  .edl-auth-panel-title {{margin:.2rem 0 .4rem!important;}}
-  .edl-auth-panel-title h2 {{font-size:1.12rem!important;}}
-  .st-key-iars_auth_card .stTabs [data-baseweb="tab"] {{padding:.40rem .15rem!important;font-size:.63rem!important;}}
-  .st-key-iars_auth_card .stTextInput input {{min-height:40px!important;}}
-  .st-key-iars_auth_card .stButton>button,.st-key-iars_auth_card .stFormSubmitButton>button {{min-height:40px!important;}}
-  .st-key-iars_auth_card .stTabs [role="tabpanel"] {{max-height:calc(100vh - 170px)!important;}}
-}}
-@media (max-width:900px) {{
-  .stApp:has(.iars-login-marker) {{overflow:auto!important;}}
-  .stApp:has(.iars-login-marker) [data-testid="stAppViewContainer"],
-  .stApp:has(.iars-login-marker) [data-testid="stMain"],
-  .stApp:has(.iars-login-marker) .block-container {{height:auto!important;min-height:100vh!important;overflow:visible!important;}}
-  .st-key-iars_login_shell,.st-key-iars_login_shell [data-testid="stHorizontalBlock"],.st-key-iars_login_shell [data-testid="column"] {{height:auto!important;}}
-  .st-key-edl_login_hero_panel {{height:min(62vw,520px)!important;min-height:340px!important;}}
-  .st-key-iars_auth_card {{height:auto!important;min-height:560px!important;padding:1.25rem!important;}}
-  .st-key-iars_auth_card .stTabs [role="tabpanel"] {{max-height:none!important;overflow:visible!important;}}
-}}
+.stApp:has(.iars-login-marker) .stFormSubmitButton {{ margin-top:.15rem; }}
 </style>
 """
     _render_html(css)
