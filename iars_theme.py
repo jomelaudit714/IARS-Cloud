@@ -471,6 +471,110 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
   background-size:1.25rem 1.25rem!important;
 }}
 .stApp:has(.iars-login-marker) .stFormSubmitButton {{ margin-top:.15rem; }}
+
+
+/* Login equal-height + full-artwork final layout */
+html:has(.iars-login-marker),
+body:has(.iars-login-marker),
+.stApp:has(.iars-login-marker) {{
+  height:100%!important;
+  min-height:100%!important;
+  overflow:hidden!important;
+}}
+.stApp:has(.iars-login-marker) .block-container {{
+  padding:.35rem!important;
+  height:100dvh!important;
+  min-height:100dvh!important;
+  overflow:hidden!important;
+}}
+.stApp:has(.iars-login-marker) [data-testid="stAppViewContainer"],
+.stApp:has(.iars-login-marker) [data-testid="stMain"],
+.stApp:has(.iars-login-marker) .main {{
+  height:100dvh!important;
+  min-height:100dvh!important;
+  overflow:hidden!important;
+}}
+.st-key-iars_login_shell,
+.st-key-iars_login_shell > div[data-testid="stVerticalBlock"],
+.st-key-iars_login_shell [data-testid="stHorizontalBlock"] {{
+  height:calc(100dvh - .70rem)!important;
+  min-height:0!important;
+  max-height:calc(100dvh - .70rem)!important;
+}}
+.st-key-iars_login_shell [data-testid="stHorizontalBlock"] {{
+  align-items:stretch!important;
+  gap:.65rem!important;
+}}
+.st-key-iars_login_shell [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"],
+.st-key-iars_login_shell [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {{
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+}}
+.st-key-edl_login_hero_panel,
+.st-key-edl_login_hero_panel > div,
+.st-key-edl_login_hero_panel [data-testid="stImage"],
+.st-key-edl_login_hero_panel [data-testid="stImage"] > div {{
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+  overflow:hidden!important;
+}}
+.st-key-edl_login_hero_panel img {{
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+  object-fit:fill!important;
+  object-position:center!important;
+  border-radius:14px!important;
+  display:block!important;
+}}
+.st-key-iars_auth_card {{
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+  overflow:hidden!important;
+  padding:clamp(1.05rem,2.5vh,2rem) clamp(1.35rem,3.5vw,3.4rem)!important;
+  display:flex!important;
+  flex-direction:column!important;
+  justify-content:center!important;
+}}
+.st-key-iars_auth_card > div[data-testid="stVerticalBlock"] {{
+  height:auto!important;
+  max-height:100%!important;
+  overflow-y:auto!important;
+  justify-content:center!important;
+  padding:.15rem .1rem!important;
+  scrollbar-width:thin;
+}}
+.stApp:has(.iars-login-marker) .edl-auth-title {{ margin-bottom:clamp(.55rem,1.8vh,1.15rem)!important; }}
+.stApp:has(.iars-login-marker) .edl-auth-title h1 {{ font-size:clamp(1.7rem,3.1vh,2.25rem)!important; }}
+.stApp:has(.iars-login-marker) .edl-auth-title p {{ font-size:clamp(.78rem,1.5vh,.98rem)!important; }}
+.stApp:has(.iars-login-marker) .stTextInput input {{ min-height:clamp(44px,6.6vh,54px)!important; }}
+.stApp:has(.iars-login-marker) button[kind="primary"],
+.st-key-auth_go_signup button {{ min-height:clamp(46px,7vh,56px)!important; }}
+.st-key-auth_go_verify button {{ min-height:clamp(34px,5.2vh,42px)!important; }}
+.edl-login-authorized {{ margin-top:clamp(.55rem,1.6vh,1.1rem)!important; }}
+@media (max-height:720px) and (min-width:901px) {{
+  .st-key-iars_auth_card {{ padding:.8rem 2rem!important; }}
+  .stApp:has(.iars-login-marker) .edl-auth-title {{ margin-bottom:.45rem!important; }}
+  .stApp:has(.iars-login-marker) [data-testid="stVerticalBlock"] {{ gap:.38rem!important; }}
+  .edl-auth-divider {{ margin:.1rem 0!important; }}
+  .edl-login-authorized {{ margin-top:.35rem!important; font-size:.76rem!important; }}
+}}
+@media(max-width:900px) {{
+  .stApp:has(.iars-login-marker) .block-container,
+  .stApp:has(.iars-login-marker) [data-testid="stAppViewContainer"],
+  .stApp:has(.iars-login-marker) [data-testid="stMain"],
+  .stApp:has(.iars-login-marker) .main {{ height:auto!important; min-height:100dvh!important; overflow:auto!important; }}
+  .st-key-iars_login_shell,
+  .st-key-iars_login_shell > div[data-testid="stVerticalBlock"],
+  .st-key-iars_login_shell [data-testid="stHorizontalBlock"] {{ height:auto!important; max-height:none!important; }}
+  .st-key-edl_login_hero_panel {{ height:46dvh!important; min-height:360px!important; }}
+  .st-key-iars_auth_card {{ height:auto!important; max-height:none!important; overflow:visible!important; }}
+}}
+
 </style>
 """
     _render_html(css)
