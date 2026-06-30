@@ -12,7 +12,6 @@ from typing import Any
 import streamlit as st
 
 from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards
-from iars_login_component import apply_exact_login_host_css, render_exact_login
 
 
 DEFAULT_USERS_TABLE = "iars_users"
@@ -796,30 +795,64 @@ def render_auth_gate(config: AuthConfig):
     view = st.session_state.get("iars_auth_view", "sign_in")
 
     if view == "sign_in":
-        apply_exact_login_host_css()
-        result = render_exact_login(key="iars_exact_login")
+        def _sign_in_panel() -> None:
+            st.markdown(
+                '<div class="edl-auth-title"><h1>Sign in to your account</h1>'
+                '<p>Access your internal audit workspace</p></div>',
+                unsafe_allow_html=True,
+            )
 
-        submit_payload = getattr(result, "submit", None)
-        if isinstance(submit_payload, dict):
-            try:
-                _process_sign_in_credentials(
-                    client,
-                    config,
-                    str(submit_payload.get("username", "")),
-                    str(submit_payload.get("password", "")),
+            with st.form("iars_stable_sign_in_form", clear_on_submit=False):
+                username_input = st.text_input(
+                    "Username",
+                    placeholder="Enter your username",
+                    autocomplete="username",
+                    key="auth_signin_username",
                 )
-            except Exception as exc:
-                st.error(str(exc) or "Unable to sign in.")
+                password = st.text_input(
+                    "Password",
+                    placeholder="Enter your password",
+                    type="password",
+                    autocomplete="current-password",
+                    key="auth_signin_password",
+                )
+                st.checkbox("Remember me", key="auth_remember_me")
+                submitted = st.form_submit_button(
+                    "🔒  Sign In",
+                    type="primary",
+                    use_container_width=True,
+                )
 
-        if getattr(result, "forgot", None):
-            st.session_state["iars_auth_view"] = "forgot"
-            st.rerun()
-        if getattr(result, "signup", None):
-            st.session_state["iars_auth_view"] = "sign_up"
-            st.rerun()
-        if getattr(result, "verify", None):
-            st.session_state["iars_auth_view"] = "verify"
-            st.rerun()
+            forgot_col, blank_col = st.columns([1, 1])
+            with blank_col:
+                if st.button(
+                    "Forgot password?",
+                    key="auth_forgot_link",
+                    use_container_width=True,
+                ):
+                    st.session_state["iars_auth_view"] = "forgot"
+                    st.rerun()
+
+            st.markdown('<div class="edl-auth-divider">or</div>', unsafe_allow_html=True)
+            if st.button("👤  Sign Up", key="auth_go_signup", use_container_width=True):
+                st.session_state["iars_auth_view"] = "sign_up"
+                st.rerun()
+            if st.button("🛡️  Verify Your Account", key="auth_go_verify", use_container_width=True):
+                st.session_state["iars_auth_view"] = "verify"
+                st.rerun()
+
+            st.markdown(
+                '<div class="edl-login-authorized">Authorized EDL Internal Audit personnel only.</div>',
+                unsafe_allow_html=True,
+            )
+
+            if submitted:
+                try:
+                    _process_sign_in_credentials(client, config, username_input, password)
+                except Exception as exc:
+                    st.error(str(exc) or "Unable to sign in.")
+
+        _render_native_shell(_sign_in_panel)
         st.stop()
 
     def _auth_panel() -> None:

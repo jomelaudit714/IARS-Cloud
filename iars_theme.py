@@ -441,6 +441,67 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
   .st-key-iars_auth_card {{min-height:auto!important;padding:2rem 1.2rem 2.5rem!important;margin-top:.65rem!important;}}
 }}
 
+
+/* Native-form login stability and viewport-fit overrides */
+.stApp:has(.iars-login-marker) html,
+.stApp:has(.iars-login-marker) body {{overflow:hidden!important;}}
+.stApp:has(.iars-login-marker) .block-container {{
+  padding:.25rem!important;
+  height:100vh!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}}
+.stApp:has(.iars-login-marker) [data-testid="stAppViewContainer"],
+.stApp:has(.iars-login-marker) [data-testid="stMain"] {{
+  height:100vh!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}}
+.st-key-iars_login_shell,
+.st-key-iars_login_shell > div[data-testid="stVerticalBlock"],
+.st-key-iars_login_shell [data-testid="stHorizontalBlock"] {{
+  height:calc(100vh - .5rem)!important;
+  min-height:0!important;
+}}
+.st-key-edl_login_hero_panel,
+.st-key-edl_login_hero_panel > div,
+.st-key-edl_login_hero_panel [data-testid="stImage"] {{
+  height:calc(100vh - .5rem)!important;
+  min-height:0!important;
+}}
+.st-key-edl_login_hero_panel img {{
+  object-position:center top!important;
+}}
+.st-key-iars_auth_card {{
+  height:calc(100vh - .5rem)!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  padding:clamp(1rem,2.6vh,2.2rem) clamp(2rem,4vw,4.5rem)!important;
+  display:flex!important;
+  justify-content:center!important;
+}}
+.st-key-iars_auth_card > div[data-testid="stVerticalBlock"] {{
+  width:100%!important;
+  max-width:620px!important;
+  gap:.5rem!important;
+}}
+.stApp:has(.iars-login-marker) .edl-auth-title {{margin-bottom:.7rem!important;}}
+.stApp:has(.iars-login-marker) .edl-auth-title h1 {{font-size:clamp(1.8rem,2.6vw,2.7rem)!important;}}
+.stApp:has(.iars-login-marker) .edl-auth-title p {{margin-top:.3rem!important;font-size:.95rem!important;}}
+.stApp:has(.iars-login-marker) .stTextInput input {{min-height:50px!important;}}
+.stApp:has(.iars-login-marker) button[kind="primary"],
+.st-key-auth_go_signup button {{min-height:50px!important;}}
+.stApp:has(.iars-login-marker) div[data-testid="stForm"] {{margin-bottom:.15rem!important;}}
+@media(max-height:700px) and (min-width:901px) {{
+  .st-key-iars_auth_card {{padding:.8rem 2.4rem!important;}}
+  .stApp:has(.iars-login-marker) .edl-auth-title h1 {{font-size:1.85rem!important;}}
+  .stApp:has(.iars-login-marker) .stTextInput input {{min-height:44px!important;}}
+  .stApp:has(.iars-login-marker) button[kind="primary"],
+  .st-key-auth_go_signup button {{min-height:44px!important;}}
+  .edl-auth-divider {{margin:.15rem 0!important;}}
+  .edl-login-authorized {{margin-top:.35rem!important;font-size:.74rem!important;}}
+}}
+
 </style>
 """
     _render_html(css)
