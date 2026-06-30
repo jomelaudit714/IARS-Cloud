@@ -1606,6 +1606,7 @@ if page_key == "Generate Extraction":
         st.warning(
             "Master Data is required before generating extraction records. Ask the administrator to upload data/Master_Data.xlsx from the Master Data page."
         )
+        st.markdown('<div class="iars-app-ready-marker"></div>', unsafe_allow_html=True)
         st.stop()
     render_stepper(["Upload PDFs", "Choose Action", "Process Reports", "Review & Export"], active_index=0)
     render_metric_cards(
@@ -1666,6 +1667,7 @@ if page_key == "Generate Extraction":
 
             if archive_requested and not extraction_uploaded_by.strip():
                 st.error("Uploaded By is required when saving PDFs to the archive.")
+                st.markdown('<div class="iars-app-ready-marker"></div>', unsafe_allow_html=True)
                 st.stop()
 
             progress = st.progress(0)
@@ -1973,3 +1975,7 @@ if page_key == "Settings":
                 st.warning(
                     "Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql to enable Report Templates and Policies & Memoranda."
                 )
+
+# Signals that the authenticated page has completed rendering. The login-exit
+# mask remains fully opaque until this marker reaches the browser.
+st.markdown('<div class="iars-app-ready-marker"></div>', unsafe_allow_html=True)

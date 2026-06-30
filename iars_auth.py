@@ -285,6 +285,10 @@ def _set_session(user: dict[str, Any]) -> None:
     st.session_state[SESSION_USERNAME] = str(user.get("username", ""))
     st.session_state[SESSION_ROLE] = str(user.get("role", "user"))
     st.session_state[SESSION_LAST_ACTIVITY] = _iso(_utc_now())
+    # Show a short full-screen mask during the first authenticated rerun.
+    # This prevents stale login widgets from remaining visible while the
+    # dashboard DOM is being reconciled by Streamlit.
+    st.session_state["iars_show_login_exit_mask"] = True
 
 
 def clear_auth_session() -> None:
@@ -471,11 +475,10 @@ def _set_auth_view(view: str) -> None:
 
 
 def _render_sign_in(client: Any, config: AuthConfig) -> None:
-    """Render a stable native Streamlit sign-in form.
+    """Render the approved sign-in interface with stable native controls.
 
-    Values remain browser-side while the user is typing and are sent to Python
-    only after the form is submitted. This prevents input resets and
-    CachedForwardMsg errors caused by the previous interactive component.
+    All typing remains inside the browser until a form button is pressed.
+    This avoids per-keystroke reruns and CachedForwardMsg errors.
     """
     with st.form("iars_native_sign_in_form", clear_on_submit=False, border=False):
         username_input = st.text_input(
@@ -491,25 +494,33 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
             autocomplete="current-password",
             key="auth_signin_password",
         )
+
         remember_col, forgot_col = st.columns([1, 1], vertical_alignment="center")
         with remember_col:
             remember = st.checkbox("Remember me", key="auth_remember_me")
         with forgot_col:
-            st.markdown(
-                '<div class="iars-forgot-wrap"><a class="iars-forgot-link" href="?auth_view=forgot">Forgot password?</a></div>',
-                unsafe_allow_html=True,
+            forgot_clicked = st.form_submit_button(
+                "Forgot password?",
+                key="auth_forgot_submit",
+                type="tertiary",
+                use_container_width=True,
             )
+
         submitted = st.form_submit_button(
-            "🔒  Sign In",
+            "Sign In",
+            key="auth_signin_submit",
             type="primary",
+            icon=":material/lock:",
             use_container_width=True,
         )
+
+    if forgot_clicked:
+        _set_auth_view("forgot")
+        st.rerun()
 
     if not submitted:
         return
 
-    # `remember` remains available for future persistent-login handling while
-    # retaining the approved checkbox in the interface.
     _ = remember
     try:
         _process_sign_in_credentials(client, config, username_input, password)
@@ -811,6 +822,15 @@ def render_auth_gate(config: AuthConfig):
         st.stop()
 
     if user is not None:
+        if st.session_state.pop("iars_show_login_exit_mask", False):
+            st.markdown(
+                '<div class="iars-login-exit-mask">'
+                '<div class="iars-login-exit-card">'
+                '<div class="iars-login-exit-spinner"></div>'
+                '<strong>Opening IARS</strong><span>Loading your audit workspace…</span>'
+                '</div></div>',
+                unsafe_allow_html=True,
+            )
         return client, user
 
     requested_view = str(st.query_params.get("auth_view", "") or "").strip()
@@ -821,6 +841,7 @@ def render_auth_gate(config: AuthConfig):
     def _auth_panel() -> None:
         if view == "sign_in":
             st.markdown(
+                '<div class="iars-signin-view"></div>'
                 '<div class="edl-auth-title"><h1>Sign in to your account</h1>'
                 '<p>Access your internal audit workspace</p></div>',
                 unsafe_allow_html=True,
@@ -828,16 +849,17 @@ def render_auth_gate(config: AuthConfig):
             _render_sign_in(client, config)
             st.markdown('<div class="edl-auth-divider">or</div>', unsafe_allow_html=True)
             st.button(
-                "👤  Sign Up",
+                "Sign Up",
                 key="auth_go_signup",
                 use_container_width=True,
                 on_click=_set_auth_view,
                 args=("sign_up",),
             )
             st.button(
-                "🛡️  Verify Your Account",
+                "Verify Your Account",
                 key="auth_go_verify",
-                use_container_width=True,
+                type="tertiary",
+                use_container_width=False,
                 on_click=_set_auth_view,
                 args=("verify",),
             )
