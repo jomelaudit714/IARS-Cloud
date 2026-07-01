@@ -1110,7 +1110,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.6", page_title=page_key)
+render_app_header(auth_user, version="4.4.8", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
@@ -1203,11 +1203,6 @@ if page_key == "Dashboard":
 
 
 if page_key == "PDF Tagging":
-    render_section_header(
-        "PDF Tagging Editor",
-        "Create precise text labels, generate tagged PDFs and save selected versions to the shared archive.",
-        badge="PDF Workspace",
-    )
     render_stepper(["Upload PDF", "Add & Position Tags", "Review", "Generate / Archive"], active_index=0)
     st.caption(
         "Double-right-click the PDF to add a textbox. Click inside to type, "
@@ -1237,8 +1232,8 @@ if page_key == "PDF Tagging":
         if page_count:
             reset_key = f"pdf_editor_reset_{file_id}"
             reset_version = int(st.session_state.get(reset_key, 0))
-            component_key = f"iars_pdf_editor_{file_id}_v24_reset_{reset_version}"
-            storage_key = f"iars_pdf_editor_{file_id}_v24_reset_{reset_version}"
+            component_key = f"iars_pdf_editor_{file_id}_v25_reset_{reset_version}"
+            storage_key = f"iars_pdf_editor_{file_id}_v25_reset_{reset_version}"
 
             controls_left, controls_right = st.columns([1, 2])
             with controls_left:
@@ -1424,11 +1419,6 @@ if page_key == "PDF Tagging":
 
 
 if page_key == "Shared PDF Archive":
-    render_section_header(
-        "Shared PDF Archive",
-        "Browse, upload, preview and download audit-report PDFs from all authorized auditors.",
-        badge="Shared Archive",
-    )
     render_library_note(
         "Controlled shared access",
         "All signed-in auditors may view and download archived PDFs. Files are compressed automatically; deletion remains administrator-only.",
@@ -1689,11 +1679,6 @@ if page_key == "Shared PDF Archive":
 
 
 if page_key == "Generate Extraction":
-    render_section_header(
-        "Generate Extraction",
-        "Upload audit-report PDFs, review generated records and choose whether originals should also be archived.",
-        badge="Extraction Workspace",
-    )
     if master_df.empty:
         st.warning(
             "Master Data is required before generating extraction records. Ask the administrator to upload data/Master_Data.xlsx from the Master Data page."
@@ -1701,7 +1686,8 @@ if page_key == "Generate Extraction":
         st.markdown('<div class="iars-app-ready-marker"></div>', unsafe_allow_html=True)
         st.stop()
     render_stepper(["Upload PDFs", "Choose Action", "Process Reports", "Review & Export"], active_index=0)
-    render_section_header("Upload Audit Reports", "Drag and drop one or multiple searchable PDF reports.")
+    st.markdown("### Upload Audit Reports")
+    st.caption("Drag and drop one or multiple searchable PDF reports.")
     pdf_files = st.file_uploader(
         "Upload one or multiple audit report PDFs",
         type=["pdf"],

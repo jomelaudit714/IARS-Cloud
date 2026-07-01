@@ -1,42 +1,37 @@
-# IARS v4.4.5
+# IARS v4.4.8
 
-Complete Internal Audit Report System deployment package with the approved login interface, compact dashboard navigation, and the refined professional dashboard theme.
+Complete Internal Audit Report System deployment package containing all previously approved login, dashboard, sidebar, Generate Extraction, and Audit Report updates.
 
-## v4.4.5 refinements
+## v4.4.8 refinements
 
-- Professional color treatment applied to all Dashboard metric cards
-- Distinct professional colors applied to every Dashboard Quick Action
-- Colored status pills added to System Overview
-- Recent Archive Activity styling improved for readability
-- Archive Status value fixed so **Not configured** displays completely
-- Long Dashboard values given additional clearance from icon areas
-- Login **or** divider spacing fixed so the Sign Up box no longer covers it
-- Sign In and Sign Up remain exactly equal in width
+- Removed duplicate secondary titles from Generate Extraction, PDF Tagging, and Shared PDF Archive.
+- Retained one primary header title with a brief page description.
+- Added a per-textbox **Font size** control in PDF Tagging.
+- Font-size range: **6–48 pt**.
+- Each textbox can retain its own font size for tagged-PDF generation.
+- Improved existing-textbox editing after adding or selecting another textbox.
+- Keystrokes are saved browser-side without rebuilding the textbox layer on every character.
+- Streamlit synchronization occurs after idle/blur instead of on every keystroke.
+- Reduced lag while deleting and retyping inside a previously completed textbox.
 
-## Retained from v4.4.3 and v4.4.2
+## Retained approved updates
 
-- EDL/IARS navy gradient top header with gold border and brand accent line
-- Themed signed-in user panel for the name, initials, and role
-- Reduced unused space above the dashboard
-- Left-aligned and evenly oriented sidebar menu items
-- Expandable **Audit Report** category containing:
-  - Generate Extraction
-  - PDF Tagging
-  - Shared PDF Archive
-- **Report Templates** renamed to **Audit Workpapers** throughout the interface
+- Generate Extraction duplicate-report warning listing all repeated IAD reference numbers.
+- Compact, light color-coded extraction choices.
+- Professional dashboard colors and readable status pills.
+- Expandable Audit Report sidebar category.
+- Audit Workpapers naming.
+- Corrected Sign Up, Forgot Password, login, and sidebar alignment.
 
 ## Security
 
-The preview-only authentication bypass used for testing is **not included** in this package. A private `.streamlit/secrets.toml` is also not included.
+The preview-only authentication bypass and private `.streamlit/secrets.toml` are not included. Keep real credentials only in Streamlit Secrets.
 
 ## Deployment
 
 1. Extract the ZIP.
 2. Upload the extracted contents directly to the GitHub repository root connected to Streamlit.
-3. Replace the existing files, especially `app.py`, `iars_theme.py`, and `iars_auth.py`.
-4. Keep real credentials only in Streamlit Secrets.
-5. Commit the changes to the deployed branch.
-6. Select **Manage app → Reboot app** in Streamlit.
-7. Use **Ctrl + F5** after the reboot.
-
-See `TEST_RESULTS_V4_4_4.md` and the v4.4.5 preview files in `docs/`.
+3. Replace the existing files, especially `app.py`, `iars_pdf_editor.py`, `iars_theme.py`, and `iars_auth.py`.
+4. Commit the changes to the deployed branch.
+5. Select **Manage app → Reboot app**.
+6. Refresh the browser with **Ctrl + F5**.

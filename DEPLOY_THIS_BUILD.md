@@ -1,8 +1,8 @@
-# Deploy IARS v4.4.5
+# Deploy IARS v4.4.8
 
 1. Extract the ZIP on your computer.
 2. Upload the extracted contents directly into the GitHub repository root.
-3. Replace the existing files, especially `app.py`, `iars_auth.py`, and `iars_theme.py`.
+3. Replace the existing files, especially `app.py`, `iars_pdf_editor.py`, `iars_theme.py`, and `iars_auth.py`.
 4. Commit to the branch used by Streamlit Community Cloud.
 5. In Streamlit, select **Manage app → Reboot app**.
 6. Refresh with **Ctrl + F5**.

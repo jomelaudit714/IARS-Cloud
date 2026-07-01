@@ -1,11 +1,12 @@
-"""IARS PDF textbox editor v2.4.
+"""IARS PDF textbox editor v2.5.
 
 Fixes in this version:
 - one persistent component state for all PDF pages
-- browser-local backup while typing, so page changes cannot discard text
-- tighter text padding and single-line labels
-- automatic font fitting after typing/resizing
-- Fit text toolbar action
+- per-textbox font-size control from 6 to 48 pt
+- browser-local backup while typing, with idle synchronization to Streamlit
+- no textbox-layer rebuild and no expensive font fitting on every keystroke
+- smoother return, delete, and retyping behavior in existing textboxes
+- tighter text padding, Fit text, duplicate, resize, and page persistence
 - component registration repeated safely on every Streamlit rerun
 """
 from __future__ import annotations
@@ -23,6 +24,11 @@ EDITOR_HTML = r"""
       <span id="zoom-label">100%</span>
       <button type="button" id="zoom-in" title="Zoom in">+</button>
       <button type="button" id="zoom-fit" title="Fit width">Fit width</button>
+    </div>
+    <div class="toolbar-group font-size-group">
+      <label for="font-size-input">Font size</label>
+      <input id="font-size-input" type="number" min="6" max="48" step="1" value="11" disabled />
+      <span class="font-unit">pt</span>
     </div>
     <div class="toolbar-group">
       <button type="button" id="fit-text" disabled>Fit text</button>
@@ -130,6 +136,43 @@ button.danger-light {
   text-align: center;
   font-size: 0.84rem;
   font-variant-numeric: tabular-nums;
+}
+
+.font-size-group {
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--st-text-color, #111827) 22%, transparent);
+  border-radius: 7px;
+  background: var(--st-background-color, #ffffff);
+}
+
+.font-size-group label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#font-size-input {
+  box-sizing: border-box;
+  width: 58px;
+  height: 29px;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--st-text-color, #111827) 28%, transparent);
+  border-radius: 5px;
+  background: var(--st-background-color, #ffffff);
+  color: var(--st-text-color, #111827);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+#font-size-input:disabled {
+  opacity: 0.48;
+}
+
+.font-unit {
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--st-text-color, #111827) 65%, transparent);
 }
 
 .editor-viewport {
@@ -297,6 +340,7 @@ export default function(component) {
   const layer = parentElement.querySelector('#box-layer');
   const status = parentElement.querySelector('#editor-status');
   const zoomLabel = parentElement.querySelector('#zoom-label');
+  const fontSizeInput = parentElement.querySelector('#font-size-input');
   const fitTextButton = parentElement.querySelector('#fit-text');
   const deleteButton = parentElement.querySelector('#delete-box');
   const duplicateButton = parentElement.querySelector('#duplicate-box');
@@ -342,6 +386,8 @@ export default function(component) {
   let lastRightClick = { time: 0, x: 0, y: 0 };
   let contextHint = null;
   let lastSnapshot = null;
+  let localSaveTimer = null;
+  let streamlitSyncTimer = null;
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const makeId = () => `tag_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -386,7 +432,35 @@ export default function(component) {
     return value;
   }
 
-  function commit(message = 'Saved.') {
+  function queueLocalSave(delay = 140) {
+    if (localSaveTimer) window.clearTimeout(localSaveTimer);
+    localSaveTimer = window.setTimeout(() => {
+      localSaveTimer = null;
+      saveLocal();
+    }, delay);
+  }
+
+  function syncToStreamlit(message = 'Saved.', delay = 700) {
+    if (streamlitSyncTimer) window.clearTimeout(streamlitSyncTimer);
+    streamlitSyncTimer = window.setTimeout(() => {
+      streamlitSyncTimer = null;
+      const value = saveLocal();
+      setStateValue('editor', value);
+      setStatus(message);
+    }, delay);
+  }
+
+  function commit(message = 'Saved.', delay = 520) {
+    saveLocal();
+    syncToStreamlit(message, delay);
+    setStatus(message);
+  }
+
+  function commitImmediately(message = 'Saved.') {
+    if (streamlitSyncTimer) {
+      window.clearTimeout(streamlitSyncTimer);
+      streamlitSyncTimer = null;
+    }
     const value = saveLocal();
     setStateValue('editor', value);
     setStatus(message);
@@ -413,15 +487,36 @@ export default function(component) {
     layer.querySelectorAll('.tag-box').forEach((element) => {
       element.classList.toggle('selected', element.dataset.boxId === selectedId);
     });
-    const disabled = !selectedId;
+    const selected = currentBox();
+    const disabled = !selected;
     deleteButton.disabled = disabled;
     duplicateButton.disabled = disabled;
     fitTextButton.disabled = disabled;
+    fontSizeInput.disabled = disabled;
+    if (selected) {
+      fontSizeInput.value = String(Math.round(Number(selected.base_font_size ?? selected.font_size ?? 11)));
+    } else {
+      fontSizeInput.value = '11';
+    }
   }
 
   function selectBox(id) {
     selectedId = id;
     refreshSelectionStyles();
+  }
+
+  function setSelectedFontSize(rawValue) {
+    const box = currentBox();
+    if (!box) return;
+    const size = clamp(Number(rawValue) || 11, 6, 48);
+    box.base_font_size = size;
+    box.font_size = size;
+    fontSizeInput.value = String(Math.round(size));
+    const textElement = layer.querySelector(`[data-box-id="${box.id}"] .tag-text`);
+    if (textElement) textElement.style.fontSize = `${size}px`;
+    saveLocal();
+    syncToStreamlit(`Font size set to ${Math.round(size)} pt.`, 500);
+    setStatus(`Font size set to ${Math.round(size)} pt.`);
   }
 
   function showContextHint(clientX, clientY, message) {
@@ -551,11 +646,12 @@ export default function(component) {
       });
       textElement.addEventListener('focus', () => selectBox(box.id));
       textElement.addEventListener('input', () => {
+        // Keep typing entirely inside the browser. Do not rebuild the layer,
+        // measure text, or notify Streamlit on every character.
         box.text = textElement.innerText;
-        fitFontToBox(box);
-        textElement.style.fontSize = `${box.font_size}px`;
-        saveLocal();
-        setStatus('Typing saved locally. Click outside or change page to sync.');
+        queueLocalSave(160);
+        syncToStreamlit('Text synchronized.', 900);
+        setStatus('Typing saved locally. Changes sync after a short pause.');
       });
       textElement.addEventListener('paste', (event) => {
         event.preventDefault();
@@ -565,8 +661,9 @@ export default function(component) {
       textElement.addEventListener('blur', () => {
         box.text = normalizeText(textElement.innerText);
         textElement.innerText = box.text;
-        fitFontToBox(box);
-        commit('Text saved.');
+        saveLocal();
+        syncToStreamlit('Text saved.', 500);
+        setStatus('Text saved.');
       });
       textElement.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -712,7 +809,7 @@ export default function(component) {
     commit('All textboxes on this page were removed.');
   }
 
-  function flushFocusedText() {
+  function flushFocusedText({ immediate = false } = {}) {
     const focused = layer.querySelector('.tag-text:focus');
     if (!focused) return false;
     const boxElement = focused.closest('.tag-box');
@@ -720,8 +817,13 @@ export default function(component) {
     if (!box) return false;
     box.text = normalizeText(focused.innerText);
     focused.innerText = box.text;
-    fitFontToBox(box);
-    commit('Text saved before leaving the page.');
+    if (immediate) {
+      commitImmediately('Text saved before leaving the page.');
+    } else {
+      saveLocal();
+      syncToStreamlit('Text saved.', 800);
+      setStatus('Text saved locally.');
+    }
     return true;
   }
 
@@ -766,8 +868,11 @@ export default function(component) {
   window.addEventListener('pointermove', updateOperation);
   window.addEventListener('pointerup', finishOperation);
   window.addEventListener('pointercancel', finishOperation);
-  window.addEventListener('pagehide', flushFocusedText);
+  const handlePageHide = () => flushFocusedText({ immediate: true });
+  window.addEventListener('pagehide', handlePageHide);
   window.addEventListener('keydown', handleKeydown);
+  fontSizeInput.addEventListener('input', () => setSelectedFontSize(fontSizeInput.value));
+  fontSizeInput.addEventListener('change', () => setSelectedFontSize(fontSizeInput.value));
   fitTextButton.addEventListener('click', fitSelectedToText);
   deleteButton.addEventListener('click', deleteSelected);
   duplicateButton.addEventListener('click', duplicateSelected);
@@ -799,7 +904,9 @@ export default function(component) {
     window.removeEventListener('pointermove', updateOperation);
     window.removeEventListener('pointerup', finishOperation);
     window.removeEventListener('pointercancel', finishOperation);
-    window.removeEventListener('pagehide', flushFocusedText);
+    if (localSaveTimer) window.clearTimeout(localSaveTimer);
+    if (streamlitSyncTimer) window.clearTimeout(streamlitSyncTimer);
+    window.removeEventListener('pagehide', handlePageHide);
     window.removeEventListener('keydown', handleKeydown);
     if (contextHint) contextHint.remove();
   };
@@ -816,7 +923,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v24",
+        name="iars_pdf_textbox_editor_v25",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
