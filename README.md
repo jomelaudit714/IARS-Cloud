@@ -35,3 +35,11 @@ The preview-only authentication bypass and private `.streamlit/secrets.toml` are
 4. Commit the changes to the deployed branch.
 5. Select **Manage app → Reboot app**.
 6. Refresh the browser with **Ctrl + F5**.
+
+
+## v4.4.12 PDF Tagging improvements
+
+- 1.8-second true inactivity delay before Streamlit autosave synchronization.
+- Returning to an existing textbox with one left click places the caret at the clicked character.
+- Browser default caret-at-end behavior is suppressed.
+- Long-press drag and blue-handle resizing remain supported.

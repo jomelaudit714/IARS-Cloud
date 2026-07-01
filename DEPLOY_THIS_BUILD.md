@@ -1,4 +1,4 @@
-# Deploy IARS v4.4.11
+# Deploy IARS v4.4.12
 
 1. Extract the ZIP on your computer.
 2. Upload the extracted contents directly into the GitHub repository root.
@@ -8,3 +8,6 @@
 6. Refresh with **Ctrl + F5**.
 
 Do not upload the ZIP as an unextracted file and do not place the contents inside an extra nested folder.
+
+
+This build includes the 1.8-second autosave idle delay and exact clicked-character caret placement in PDF Tagging.

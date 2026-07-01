@@ -1,4 +1,4 @@
-"""IARS PDF textbox editor v2.8.
+"""IARS PDF textbox editor v2.9.
 
 Fixes in this version:
 - exact per-textbox font sizes from 6 to 48 pt without automatic shrinking
@@ -424,6 +424,8 @@ export default function(component) {
   let autoSyncTimer = null;
   let dirty = localUpdated > pythonUpdated;
   let syncing = false;
+  const AUTOSAVE_IDLE_MS = 1800;
+  let lastInteractionAt = performance.now();
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const clampFontSize = (value) => clamp(Number(value) || 11, 6, 48);
@@ -491,24 +493,36 @@ export default function(component) {
     );
   }
 
-  function scheduleAutoSync(delay = 900) {
+  function noteUserInteraction() {
+    lastInteractionAt = performance.now();
+    if (autoSyncTimer) {
+      window.clearTimeout(autoSyncTimer);
+      autoSyncTimer = null;
+    }
+  }
+
+  function scheduleAutoSync(delay = AUTOSAVE_IDLE_MS) {
     if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
+    const elapsed = performance.now() - lastInteractionAt;
+    const wait = Math.max(120, Number(delay) || AUTOSAVE_IDLE_MS, AUTOSAVE_IDLE_MS - elapsed);
     autoSyncTimer = window.setTimeout(() => {
       autoSyncTimer = null;
       if (!dirty || syncing) return;
-      if (editorHasActiveInput()) {
-        scheduleAutoSync(700);
+      const idleFor = performance.now() - lastInteractionAt;
+      if (editorHasActiveInput() || idleFor < AUTOSAVE_IDLE_MS) {
+        scheduleAutoSync(Math.max(180, AUTOSAVE_IDLE_MS - idleFor));
         return;
       }
       syncToStreamlit();
-    }, delay);
+    }, wait);
   }
 
-  function markDirty(message = 'Saving changes automatically…', delay = 900) {
+  function markDirty(message = 'Saving changes automatically…', delay = AUTOSAVE_IDLE_MS) {
     dirty = true;
+    noteUserInteraction();
     queueLocalSave(60);
     setStatus(message);
-    scheduleAutoSync(delay);
+    scheduleAutoSync(Math.max(delay, AUTOSAVE_IDLE_MS));
   }
 
   function syncToStreamlit(message = 'All changes saved automatically.') {
@@ -574,34 +588,88 @@ export default function(component) {
     refreshSelectionStyles();
   }
 
+  function geometricCaretRange(textElement, clientX, clientY) {
+    const walker = document.createTreeWalker(textElement, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    if (!nodes.length) {
+      const emptyRange = document.createRange();
+      emptyRange.selectNodeContents(textElement);
+      emptyRange.collapse(true);
+      return emptyRange;
+    }
+
+    let best = null;
+    nodes.forEach((node) => {
+      const length = node.textContent?.length ?? 0;
+      for (let offset = 0; offset <= length; offset += 1) {
+        const probe = document.createRange();
+        let rect = null;
+        let caretX = null;
+        let centerY = null;
+        if (length === 0) {
+          probe.setStart(node, 0);
+          probe.collapse(true);
+          rect = probe.getBoundingClientRect();
+          caretX = rect.left;
+          centerY = rect.top + rect.height / 2;
+        } else if (offset < length) {
+          probe.setStart(node, offset);
+          probe.setEnd(node, offset + 1);
+          rect = probe.getBoundingClientRect();
+          caretX = rect.left;
+          centerY = rect.top + rect.height / 2;
+        } else {
+          probe.setStart(node, Math.max(0, length - 1));
+          probe.setEnd(node, length);
+          rect = probe.getBoundingClientRect();
+          caretX = rect.right;
+          centerY = rect.top + rect.height / 2;
+        }
+        if (!rect || (!rect.width && !rect.height)) continue;
+        const distance = Math.abs(clientX - caretX) + Math.abs(clientY - centerY) * 3.2;
+        if (!best || distance < best.distance) {
+          const range = document.createRange();
+          range.setStart(node, offset);
+          range.collapse(true);
+          best = { distance, range };
+        }
+      }
+    });
+    return best?.range ?? null;
+  }
+
   function placeCaretAtPoint(textElement, clientX, clientY) {
     if (!textElement) return;
-    textElement.focus({ preventScroll: true });
-    const selection = window.getSelection?.();
-    if (!selection) return;
+    let range = geometricCaretRange(textElement, clientX, clientY);
 
-    let range = null;
-    if (typeof document.caretPositionFromPoint === 'function') {
+    if (!range && typeof document.caretPositionFromPoint === 'function') {
       const position = document.caretPositionFromPoint(clientX, clientY);
       if (position && textElement.contains(position.offsetNode)) {
         range = document.createRange();
         range.setStart(position.offsetNode, position.offset);
         range.collapse(true);
       }
-    } else if (typeof document.caretRangeFromPoint === 'function') {
-      const candidate = document.caretRangeFromPoint(clientX, clientY);
-      if (candidate && textElement.contains(candidate.startContainer)) {
-        range = candidate;
-      }
     }
-
+    if (!range && typeof document.caretRangeFromPoint === 'function') {
+      const candidate = document.caretRangeFromPoint(clientX, clientY);
+      if (candidate && textElement.contains(candidate.startContainer)) range = candidate;
+    }
     if (!range) {
       range = document.createRange();
       range.selectNodeContents(textElement);
       range.collapse(false);
     }
-    selection.removeAllRanges();
-    selection.addRange(range);
+
+    const applyRange = () => {
+      const selection = window.getSelection?.();
+      if (!selection || !textElement.isConnected) return;
+      selection.removeAllRanges();
+      selection.addRange(range.cloneRange());
+    };
+    textElement.focus({ preventScroll: true });
+    applyRange();
+    window.requestAnimationFrame(applyRange);
   }
 
   function clearTextGestureTimer() {
@@ -646,14 +714,14 @@ export default function(component) {
 
   function handleTextPointerDown(event, id, textElement) {
     if (event.button !== 0) return;
+    event.preventDefault();
     event.stopPropagation();
+    noteUserInteraction();
     clearTextGestureTimer();
     selectBox(id);
 
-    // A normal single left click must immediately enter editing mode and place
-    // the caret at the clicked text position—no second click is required.
-    placeCaretAtPoint(textElement, event.clientX, event.clientY);
-
+    // Defer caret placement until pointer-up. Preventing the native pointer-down
+    // default stops Chromium from overriding our exact character position.
     textGesture = {
       id,
       textElement,
@@ -699,10 +767,13 @@ export default function(component) {
     }
 
     if (!cancelled && gesture.maxMovement <= CLICK_MOVE_PX) {
+      event.preventDefault();
       event.stopPropagation();
+      suppressTextClickUntil = performance.now() + 300;
+      noteUserInteraction();
       selectBox(gesture.id);
-      placeCaretAtPoint(gesture.textElement, event.clientX, event.clientY);
-      setStatus('Editing… changes are saved automatically when you pause.');
+      placeCaretAtPoint(gesture.textElement, gesture.startX, gesture.startY);
+      setStatus('Editing… changes are saved automatically after 1.8 seconds of inactivity.');
     }
   }
 
@@ -834,7 +905,7 @@ export default function(component) {
     boxes.push(box);
     selectedId = box.id;
     renderBoxes();
-    markDirty('Textbox added — changes save automatically.', 1000);
+    markDirty('Textbox added — changes save automatically.', AUTOSAVE_IDLE_MS);
     window.setTimeout(() => {
       const text = layer.querySelector(`[data-box-id="${box.id}"] .tag-text`);
       if (text) text.focus({ preventScroll: true });
@@ -877,12 +948,10 @@ export default function(component) {
         handleTextPointerDown(event, box.id, textElement);
       });
       textElement.addEventListener('click', (event) => {
-        if (performance.now() < suppressTextClickUntil) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
+        event.preventDefault();
         event.stopPropagation();
+        if (performance.now() < suppressTextClickUntil) return;
+        noteUserInteraction();
         selectBox(box.id);
         placeCaretAtPoint(textElement, event.clientX, event.clientY);
       });
@@ -894,7 +963,8 @@ export default function(component) {
         dirty = true;
         queueLocalSave(50);
         setStatus('Editing… changes are saved automatically when you pause.');
-        scheduleAutoSync(1200);
+        noteUserInteraction();
+        scheduleAutoSync(AUTOSAVE_IDLE_MS);
       });
       textElement.addEventListener('paste', (event) => {
         event.preventDefault();
@@ -904,7 +974,7 @@ export default function(component) {
       textElement.addEventListener('blur', () => {
         box.text = normalizeText(textElement.innerText);
         textElement.innerText = box.text;
-        markDirty('Text updated — saving automatically…', 500);
+        markDirty('Text updated — saving automatically after a short pause…', AUTOSAVE_IDLE_MS);
       });
       textElement.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -952,6 +1022,7 @@ export default function(component) {
 
   function startDrag(event, id) {
     event.preventDefault();
+    noteUserInteraction();
     event.stopPropagation();
     selectBox(id);
     const box = boxes.find((item) => item.id === id);
@@ -967,6 +1038,7 @@ export default function(component) {
 
   function startResize(event, id, direction) {
     event.preventDefault();
+    noteUserInteraction();
     event.stopPropagation();
     selectBox(id);
     const box = boxes.find((item) => item.id === id);
@@ -1040,7 +1112,7 @@ export default function(component) {
     operation = null;
     layer.querySelectorAll('.tag-box.dragging').forEach((element) => element.classList.remove('dragging'));
     if (!moved) return;
-    markDirty(finishedType === 'resize' ? 'Textbox resized — saving automatically…' : 'Textbox repositioned — saving automatically…', 500);
+    markDirty(finishedType === 'resize' ? 'Textbox resized — saving automatically…' : 'Textbox repositioned — saving automatically…', AUTOSAVE_IDLE_MS);
   }
 
   function deleteSelected() {
@@ -1048,7 +1120,7 @@ export default function(component) {
     boxes = boxes.filter((box) => box.id !== selectedId);
     selectedId = null;
     renderBoxes();
-    markDirty('Textbox deleted — saving automatically…', 450);
+    markDirty('Textbox deleted — saving automatically…', AUTOSAVE_IDLE_MS);
   }
 
   function duplicateSelected() {
@@ -1061,7 +1133,7 @@ export default function(component) {
     boxes.push(duplicate);
     selectedId = duplicate.id;
     renderBoxes();
-    markDirty('Textbox duplicated — saving automatically…', 650);
+    markDirty('Textbox duplicated — saving automatically…', AUTOSAVE_IDLE_MS);
   }
 
   function clearPage() {
@@ -1069,7 +1141,7 @@ export default function(component) {
     boxes = [];
     selectedId = null;
     renderBoxes();
-    markDirty('Page cleared — saving automatically…', 450);
+    markDirty('Page cleared — saving automatically…', AUTOSAVE_IDLE_MS);
   }
 
   function flushFocusedText() {
@@ -1083,7 +1155,7 @@ export default function(component) {
     dirty = true;
     saveLocal();
     setStatus('Text updated — saving automatically…');
-    scheduleAutoSync(500);
+    scheduleAutoSync(AUTOSAVE_IDLE_MS);
     return true;
   }
 
@@ -1122,6 +1194,7 @@ export default function(component) {
 
   layer.addEventListener('contextmenu', handleContextMenu);
   layer.addEventListener('pointerdown', (event) => {
+    noteUserInteraction();
     if (event.target === layer) selectBox(null);
   });
   document.addEventListener('pointerdown', handleDocumentPointerDown, true);
@@ -1155,7 +1228,7 @@ export default function(component) {
   if (localEditor && localUpdated > pythonUpdated) {
     dirty = true;
     setStatus('Recovered local changes — saving automatically…');
-    scheduleAutoSync(650);
+    scheduleAutoSync(AUTOSAVE_IDLE_MS);
   } else {
     dirty = false;
     setStatus(pythonUpdated > 0
@@ -1193,7 +1266,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v28",
+        name="iars_pdf_textbox_editor_v29",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,

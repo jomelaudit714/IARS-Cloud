@@ -1109,7 +1109,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.11", page_title=page_key)
+render_app_header(auth_user, version="4.4.12", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
@@ -1231,7 +1231,7 @@ if page_key == "PDF Tagging":
         if page_count:
             reset_key = f"pdf_editor_reset_{file_id}"
             reset_version = int(st.session_state.get(reset_key, 0))
-            component_key = f"iars_pdf_editor_{file_id}_v28_reset_{reset_version}"
+            component_key = f"iars_pdf_editor_{file_id}_v29_reset_{reset_version}"
             storage_key = f"iars_pdf_editor_{file_id}_v26_reset_{reset_version}"
 
             controls_left, controls_right = st.columns([1, 2])
