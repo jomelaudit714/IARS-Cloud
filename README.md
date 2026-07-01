@@ -1,61 +1,30 @@
-# IARS v4.4.0 — EDL Enterprise UI
+# IARS v4.4.1 — Deployment-Fixed Login UI
 
-# IARS v4.2.0 — EDL Native Streamlit Enterprise UI
+This is the complete IARS application package with the corrected, tested login interface.
 
-This release keeps the v4.1.0 functions and replaces fragile embedded images and sidebar radio navigation with native Streamlit components for reliable production rendering.
+## Login corrections
 
-## Required assets
-
-- `assets/edl_logo.png` — exact original EDL GROUP OF COMPANIES logo
-- `assets/internal_audit_visual.png` — Internal Audit reports, compliance, workpapers and assurance visual
-
-## Main corrections
-
-- Exact EDL logo visible on login and main sidebar
-- Internal Audit image visible on login and Dashboard
-- No radio-button circles in the main navigation
-- Gold active navigation and navy professional sidebar
-- Existing IARS business logic retained
-
-See `DEPLOY_v4_2_0.md` and `CHANGELOG_v4_2_0.md`.
-
----
-
-# IARS v4.1.0 — EDL Enterprise Internal Audit Interface
-
-This package applies the approved EDL GROUP OF COMPANIES Internal Audit interface to the working IARS application while retaining the existing authentication, extraction, PDF tagging, shared archive, document library, Master Data, and export logic.
-
-## Visual implementation
-
-- Exact original `assets/edl_logo.png` supplied by the user
-- Navy enterprise sidebar with gold active navigation
-- Compact page-specific top bar with user, role, date, and version
-- Professional login split layout with Internal Audit image and white account card
-- Dashboard KPI cards, recent archive activity, quick actions, and system overview
-- Workflow steppers for Generate Extraction and PDF Tagging
-- Summary cards for Shared PDF Archive, Report Templates, Policies & Memoranda, Master Data, User Management, and Settings
-- Responsive layout for smaller screens
-- Direct HTML rendering through `st.html()` when supported to prevent raw tags from appearing
-
-## Existing functions retained
-
-- Admin-approved username/nickname login
-- Sign Up, Verify, and Reset Password
-- Shared PDF archive visible to all signed-in auditors
-- Direct archive upload and automatic PDF compression
-- Report extraction and exact external-system export headers
-- PDF tagging editor
-- Report Templates library for Excel, Word, and PDF
-- Policies & Memoranda archive for Excel, Word, and PDF
-- Administrator-only deletion, account administration, and Master Data updates
+- Left and right panels are equal height at 1365 × 768.
+- Username and password fields have complete borders.
+- The password-eye section is inside and aligned with the password field.
+- “Remember me” stays on one line.
+- The “or” divider does not overlap the account actions.
+- Sign Up is exactly the same width and height as Sign In, with a complete 2 px border and approved plus-person icon.
+- Verify Your Account is centered, blue, borderless, and uses the approved shield-check icon.
+- The authorization notice remains at the bottom of the right panel.
+- The native Streamlit sign-in form remains stable while typing.
+- The full-screen transition mask remains in place until the authenticated workspace is ready.
 
 ## Deployment
 
 1. Extract the ZIP.
-2. Upload all files and folders to the GitHub repository used by Streamlit.
-3. Commit them together on the deployed branch.
-4. Keep the existing Streamlit Secrets.
-5. Run the SQL setup files only if the corresponding Supabase tables were not created previously.
-6. Reboot the Streamlit app and hard-refresh the browser with `Ctrl + F5`.
+2. Upload the **contents** of the extracted folder to the root of the GitHub branch connected to Streamlit.
+3. Confirm that `app.py`, `iars_auth.py`, and `iars_theme.py` are directly in the repository root—not inside another folder.
+4. Keep your existing Streamlit Secrets. This ZIP includes only `.streamlit/secrets.toml.example`.
+5. Commit all replaced files together.
+6. In Streamlit, open **Manage app → Reboot app**.
+7. Hard refresh the deployed page using `Ctrl + F5`.
 
-The Streamlit implementation follows the approved mockup closely, but native Streamlit controls may not be pixel-identical to a custom React or HTML application.
+Build marker: `4.4.1-deployment-fixed`
+
+See `TEST_RESULTS_V4_4_1.md` and the files in `docs/` for the browser-tested preview and measurements.

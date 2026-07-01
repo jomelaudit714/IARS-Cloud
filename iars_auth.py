@@ -848,20 +848,23 @@ def render_auth_gate(config: AuthConfig):
             )
             _render_sign_in(client, config)
             st.markdown('<div class="edl-auth-divider">or</div>', unsafe_allow_html=True)
-            st.button(
-                "Sign Up",
-                key="auth_go_signup",
-                use_container_width=True,
-                on_click=_set_auth_view,
-                args=("sign_up",),
-            )
-            st.button(
-                "Verify Your Account",
-                key="auth_go_verify",
-                type="tertiary",
-                use_container_width=False,
-                on_click=_set_auth_view,
-                args=("verify",),
+            # Use dedicated HTML actions instead of Streamlit buttons so the
+            # approved border, icon, width, and link treatment cannot be changed
+            # by Streamlit's generated button markup or older button selectors.
+            st.markdown(
+                """
+                <div class="iars-login-actions" data-iars-build="4.4.1-deployment-fixed">
+                  <a class="iars-signup-action" href="?auth_view=sign_up" target="_self" aria-label="Sign Up">
+                    <span class="iars-signup-icon" aria-hidden="true"></span>
+                    <span class="iars-signup-label">Sign Up</span>
+                  </a>
+                  <a class="iars-verify-action" href="?auth_view=verify" target="_self" aria-label="Verify Your Account">
+                    <span class="iars-verify-icon" aria-hidden="true"></span>
+                    <span class="iars-verify-label">Verify Your Account</span>
+                  </a>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
             st.markdown(
                 '<div class="edl-login-authorized">Authorized EDL Internal Audit personnel only.</div>',

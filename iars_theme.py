@@ -599,22 +599,19 @@ body:has(.iars-login-marker),
   flex:1!important;
   background:#DCE3EC!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_signup {{
+.iars-login-actions {{
+  box-sizing:border-box!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
   width:100%!important;
   max-width:none!important;
   margin:0!important;
   padding:0!important;
-  overflow:visible!important;
+  gap:14px!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_signup > div,
-.stApp:has(.iars-login-marker) .st-key-auth_go_signup [data-testid="stButton"] {{
-  width:100%!important;
-  max-width:none!important;
-  margin:0!important;
-  padding:0!important;
-  overflow:visible!important;
-}}
-.stApp:has(.iars-login-marker) .st-key-auth_go_signup button {{
+a.iars-signup-action,
+a.iars-signup-action:visited {{
   box-sizing:border-box!important;
   display:flex!important;
   align-items:center!important;
@@ -632,27 +629,23 @@ body:has(.iars-login-marker),
   border-radius:8px!important;
   outline:0!important;
   box-shadow:none!important;
-  overflow:visible!important;
+  overflow:hidden!important;
+  text-decoration:none!important;
   font-size:1rem!important;
+  line-height:1!important;
   font-weight:760!important;
+  cursor:pointer!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_signup button:hover {{
+a.iars-signup-action:hover,
+a.iars-signup-action:focus-visible {{
   color:#061A36!important;
   background:#F8FAFC!important;
   border-color:#0A2C59!important;
+  box-shadow:0 0 0 3px rgba(23,74,134,.10)!important;
+  text-decoration:none!important;
   transform:none!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_signup button p {{
-  display:inline-flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:10px!important;
-  margin:0!important;
-  white-space:nowrap!important;
-  letter-spacing:0!important;
-}}
-.stApp:has(.iars-login-marker) .st-key-auth_go_signup button p::before {{
-  content:""!important;
+.iars-signup-icon {{
   display:inline-block!important;
   flex:0 0 31px!important;
   width:31px!important;
@@ -662,28 +655,19 @@ body:has(.iars-login-marker),
   background-size:31px 22px!important;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='31' height='22' viewBox='0 0 31 22' fill='none'%3E%3Cpath d='M4 5v6M1 8h6' stroke='%23061A36' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='19' cy='6' r='4' stroke='%23061A36' stroke-width='1.8'/%3E%3Cpath d='M11.5 20c.35-5.1 3-7.5 7.5-7.5s7.15 2.4 7.5 7.5' stroke='%23061A36' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_verify {{
-  width:100%!important;
-  margin:6px 0 0!important;
-  padding:0!important;
-  display:flex!important;
-  justify-content:center!important;
-  align-items:center!important;
-}}
-.stApp:has(.iars-login-marker) .st-key-auth_go_verify > div,
-.stApp:has(.iars-login-marker) .st-key-auth_go_verify [data-testid="stButton"] {{
-  width:100%!important;
-  display:flex!important;
-  justify-content:center!important;
-  align-items:center!important;
+.iars-signup-label {{
+  display:inline-block!important;
   margin:0!important;
-  padding:0!important;
+  white-space:nowrap!important;
+  color:#061A36!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_verify button {{
+a.iars-verify-action,
+a.iars-verify-action:visited {{
   box-sizing:border-box!important;
   display:inline-flex!important;
   align-items:center!important;
   justify-content:center!important;
+  align-self:center!important;
   width:auto!important;
   min-width:0!important;
   min-height:44px!important;
@@ -696,12 +680,22 @@ body:has(.iars-login-marker),
   border:0!important;
   border-radius:4px!important;
   box-shadow:none!important;
+  text-decoration:none!important;
   font-size:17px!important;
   line-height:1!important;
   font-weight:700!important;
+  cursor:pointer!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_verify button::before {{
-  content:""!important;
+a.iars-verify-action:hover,
+a.iars-verify-action:focus-visible {{
+  color:#0B4FB3!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  text-decoration:underline!important;
+  transform:none!important;
+}}
+.iars-verify-icon {{
   display:inline-block!important;
   flex:0 0 22px!important;
   width:22px!important;
@@ -711,21 +705,11 @@ body:has(.iars-login-marker),
   background-size:22px 22px!important;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 3l7 3v5c0 4.8-2.8 8.2-7 10-4.2-1.8-7-5.2-7-10V6l7-3z' stroke='%23061A36' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M9 12l2 2 4-4' stroke='%23061A36' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;
 }}
-.stApp:has(.iars-login-marker) .st-key-auth_go_verify button p {{
+.iars-verify-label {{
+  display:inline-block!important;
   margin:0!important;
-  color:#175CD3!important;
   white-space:nowrap!important;
-  font-size:17px!important;
-  line-height:1!important;
-  font-weight:700!important;
-}}
-.stApp:has(.iars-login-marker) .st-key-auth_go_verify button:hover {{
-  color:#0B4FB3!important;
-  background:transparent!important;
-  border:0!important;
-  box-shadow:none!important;
-  transform:none!important;
-  text-decoration:underline!important;
+  color:inherit!important;
 }}
 .edl-login-authorized {{
   margin-top:auto!important;
@@ -776,7 +760,7 @@ body:has(.iars-login-marker),
   .stApp:has(.iars-login-marker) .stTextInput [data-baseweb="input"]{{min-height:46px!important;}}
   .stApp:has(.iars-login-marker) .stTextInput input{{min-height:43px!important;}}
   .stApp:has(.iars-login-marker) button[kind="primary"],
-  .stApp:has(.iars-login-marker) .st-key-auth_go_signup button{{min-height:47px!important;}}
+  .stApp:has(.iars-login-marker) .iars-signup-action{{min-height:47px!important;height:47px!important;}}
   .edl-auth-divider{{margin:3px 0!important;}}
   .edl-login-authorized{{padding-top:2px!important;font-size:.74rem!important;}}
 }}
