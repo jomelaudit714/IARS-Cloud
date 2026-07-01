@@ -67,14 +67,17 @@ def apply_iars_theme() -> None:
 }}
 html,body,.stApp,[class*="css"] {{font-family:Inter,"Segoe UI",Roboto,Arial,sans-serif;}}
 .stApp {{background:linear-gradient(180deg,#FBFCFE 0%,var(--edl-bg) 100%);color:var(--edl-text);}}
-.block-container {{max-width:1580px;padding:1.05rem 1.55rem 3rem;}}
-header[data-testid="stHeader"] {{height:2.4rem;background:rgba(250,252,255,.88);backdrop-filter:blur(12px);border-bottom:1px solid rgba(225,230,238,.65);}}
+.block-container {{max-width:1580px;padding:.35rem 1.55rem 3rem;}}
+header[data-testid="stHeader"] {{height:0!important;min-height:0!important;background:transparent!important;border-bottom:0!important;box-shadow:none!important;}}
 #MainMenu,footer {{visibility:hidden;}}
-[data-testid="stToolbar"] {{top:.25rem;}}
+[data-testid="stToolbar"] {{top:.08rem;}}
 
 /* Sidebar */
 section[data-testid="stSidebar"] {{background:linear-gradient(180deg,#05162E 0%,#07264D 58%,#061A36 100%);border-right:1px solid rgba(255,255,255,.08);}}
-section[data-testid="stSidebar"] > div {{padding-top:.45rem;}}
+section[data-testid="stSidebar"] > div {{padding-top:0;}}
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{height:28px!important;min-height:28px!important;padding:0 6px!important;}}
+section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {{display:none!important;}}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{margin-left:auto!important;align-self:center!important;}}
 section[data-testid="stSidebar"] * {{color:#F8FAFC;}}
 section[data-testid="stSidebar"] hr {{border-color:rgba(255,255,255,.10);margin:.7rem 0;}}
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],section[data-testid="stSidebar"] .stCaption {{color:rgba(255,255,255,.62)!important;}}
@@ -85,10 +88,26 @@ section[data-testid="stSidebar"] [data-testid="stRadio"] label {{
 section[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {{background:rgba(255,255,255,.075);border-color:rgba(255,255,255,.06);}}
 section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {{background:linear-gradient(135deg,#B87905,#DCA423);box-shadow:0 7px 18px rgba(199,139,18,.22);}}
 section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p {{color:#FFF!important;font-weight:760;}}
-section[data-testid="stSidebar"] .stButton>button {{border-radius:9px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#FFF;}}
+section[data-testid="stSidebar"] .stButton>button {{
+  border-radius:9px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#FFF;
+  display:flex!important;align-items:center!important;justify-content:flex-start!important;text-align:left!important;
+  padding-left:.78rem!important;padding-right:.65rem!important;
+}}
+section[data-testid="stSidebar"] .stButton>button > div,
+section[data-testid="stSidebar"] .stButton>button > div > span,
+section[data-testid="stSidebar"] .stButton>button [data-testid="stMarkdownContainer"] {{
+  width:100%!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;
+}}
+section[data-testid="stSidebar"] .stButton>button p {{width:100%!important;text-align:left!important;margin:0!important;}}
 section[data-testid="stSidebar"] .stButton>button:hover {{background:rgba(199,139,18,.22);border-color:rgba(229,177,60,.48);}}
+section[data-testid="stSidebar"] [data-testid="stExpander"] {{border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.05);margin:.18rem 0 .35rem;overflow:hidden;}}
+section[data-testid="stSidebar"] [data-testid="stExpander"] details {{background:transparent;}}
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary {{padding:.2rem .38rem .15rem;justify-content:flex-start!important;text-align:left!important;}}
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary p {{color:#FFF!important;font-weight:720;text-align:left!important;width:100%!important;}}
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] {{padding:0 .18rem .2rem;}}
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] .stButton>button {{padding-left:1rem!important;}}
 
-.edl-sidebar-brand {{text-align:center;padding:.1rem .15rem .85rem;}}
+.edl-sidebar-brand {{text-align:center;padding:0 .15rem .55rem;}}
 .edl-sidebar-logo-shell {{display:inline-flex;background:#FFF;border-radius:14px;padding:.35rem;box-shadow:0 12px 28px rgba(0,0,0,.22);}}
 .edl-sidebar-brand img {{width:118px;height:118px;object-fit:contain;border-radius:10px;}}
 .edl-sidebar-brand h3 {{margin:.7rem 0 .08rem;color:#FFF;font-size:1.02rem;line-height:1.15;letter-spacing:.035em;}}
@@ -103,32 +122,34 @@ section[data-testid="stSidebar"] .stButton>button:hover {{background:rgba(199,13
 .edl-status-dot {{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.38rem;background:var(--dot,var(--edl-green));box-shadow:0 0 0 3px rgba(23,138,82,.15);}}
 
 /* Top bar */
-.edl-topbar {{display:flex;align-items:center;gap:1rem;padding:.7rem .9rem;background:#FFF;border:1px solid var(--edl-border);border-radius:12px;box-shadow:0 4px 18px rgba(16,24,40,.045);margin:.05rem 0 .85rem;}}
-.edl-topbar-title {{min-width:0;}}
-.edl-topbar-title h1 {{margin:0;color:var(--edl-navy);font-size:1.32rem;font-weight:800;letter-spacing:-.025em;}}
-.edl-topbar-title p {{margin:.15rem 0 0;color:var(--edl-muted);font-size:.75rem;}}
+.edl-topbar {{position:relative;display:flex;align-items:center;gap:1rem;padding:.72rem .9rem;background:linear-gradient(112deg,#061A36 0%,#0A2C59 68%,#123F78 100%);border:1px solid rgba(228,174,47,.42);border-radius:12px;box-shadow:0 8px 22px rgba(6,26,54,.16);margin:-16px 0 .62rem;overflow:hidden;}}
+.edl-topbar:after {{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,#E4AE2F 0 32%,#1F6FDA 32% 56%,#149A49 56% 78%,#E62D32 78% 100%);opacity:.95;}}
+.edl-topbar-title {{min-width:0;position:relative;z-index:1;}}
+.edl-topbar-title h1 {{margin:0!important;padding:0!important;color:#FFF;font-size:1.34rem;font-weight:820;letter-spacing:-.025em;}}
+.edl-topbar-title p {{margin:.16rem 0 0;color:#D7E2F1;font-size:.75rem;}}
 .edl-topbar-spacer {{flex:1;}}
-.edl-topbar-date {{color:var(--edl-muted);font-size:.72rem;white-space:nowrap;}}
-.edl-user-chip {{display:flex;align-items:center;gap:.55rem;background:#F8FAFC;border:1px solid var(--edl-border);border-radius:10px;padding:.42rem .58rem;min-width:170px;}}
-.edl-user-avatar {{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#E9EEF6;color:var(--edl-navy);font-size:.75rem;font-weight:800;}}
-.edl-user-chip strong {{display:block;color:var(--edl-navy);font-size:.77rem;}}
-.edl-user-chip span {{display:block;color:var(--edl-muted);font-size:.64rem;margin-top:.04rem;}}
+.edl-topbar-date {{position:relative;z-index:1;color:#D8E3F2;font-size:.72rem;white-space:nowrap;font-weight:560;}}
+.edl-user-chip {{position:relative;z-index:1;display:flex;align-items:center;gap:.58rem;background:rgba(255,255,255,.10);border:1px solid rgba(228,174,47,.55);border-radius:10px;padding:.44rem .62rem;min-width:174px;box-shadow:inset 0 1px 0 rgba(255,255,255,.09);}}
+.edl-user-avatar {{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#F6D46B,#C88A08);color:#061A36;font-size:.76rem;font-weight:850;box-shadow:0 3px 10px rgba(0,0,0,.18);}}
+.edl-user-chip strong {{display:block;color:#FFF;font-size:.78rem;font-weight:780;}}
+.edl-user-chip span {{display:block;color:#F2CF68;font-size:.65rem;margin-top:.04rem;font-weight:650;}}
 .edl-brand-stripe {{height:3px;border-radius:99px;background:linear-gradient(90deg,#1F6FDA 0 24%,#149A49 24% 49%,#E5B22D 49% 74%,#E62D32 74% 100%);margin-bottom:.45rem;}}
 
 /* Page headings and cards */
 .edl-section-head {{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin:.35rem 0 .72rem;}}
-.edl-section-head h2 {{margin:0;color:var(--edl-navy);font-size:1.26rem;letter-spacing:-.018em;font-weight:800;}}
+.edl-section-head h2 {{margin:0!important;padding:0!important;color:var(--edl-navy);font-size:1.26rem;letter-spacing:-.018em;font-weight:800;}}
 .edl-section-head p {{margin:.16rem 0 0;color:var(--edl-muted);font-size:.78rem;}}
 .edl-section-badge {{white-space:nowrap;border:1px solid rgba(199,139,18,.25);background:#FFF8E8;color:#815B08;border-radius:999px;padding:.32rem .56rem;font-size:.66rem;font-weight:760;}}
 .edl-panel {{background:#FFF;border:1px solid var(--edl-border);border-radius:13px;padding:.9rem 1rem;box-shadow:0 4px 18px rgba(16,24,40,.04);}}
 
-.edl-metric-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.62rem;margin:.08rem 0 .85rem;}}
-.edl-metric-card {{position:relative;min-height:106px;background:#FFF;border:1px solid var(--edl-border);border-radius:12px;padding:.78rem .84rem;box-shadow:0 4px 16px rgba(16,24,40,.04);overflow:hidden;}}
-.edl-metric-card:after {{content:"";position:absolute;right:-24px;top:-24px;width:80px;height:80px;border-radius:50%;background:color-mix(in srgb,var(--accent) 11%,transparent);}}
-.edl-metric-icon {{position:absolute;right:.75rem;top:.66rem;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 11%,white);font-size:1.05rem;z-index:1;}}
-.edl-metric-label {{color:#475467;font-size:.68rem;font-weight:750;max-width:70%;}}
-.edl-metric-value {{color:var(--edl-navy);font-size:1.4rem;font-weight:830;line-height:1.12;margin:.38rem 0 .14rem;}}
-.edl-metric-note {{color:var(--edl-muted);font-size:.66rem;}}
+.edl-metric-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.68rem;margin:.08rem 0 .92rem;}}
+.edl-metric-card {{position:relative;min-height:116px;background:linear-gradient(150deg,#FFFFFF 0%,color-mix(in srgb,var(--accent) 7%,#FFFFFF) 100%);border:1px solid color-mix(in srgb,var(--accent) 24%,#DCE3EC);border-top:4px solid var(--accent);border-radius:12px;padding:.82rem 1rem .84rem .9rem;box-shadow:0 6px 18px rgba(16,24,40,.06);overflow:hidden;}}
+.edl-metric-card:after {{content:"";position:absolute;right:0;top:-28px;width:78px;height:78px;border-radius:50%;background:color-mix(in srgb,var(--accent) 10%,transparent);}}
+.edl-metric-icon {{position:absolute;right:.72rem;top:.68rem;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 15%,#FFFFFF);border:1px solid color-mix(in srgb,var(--accent) 26%,#FFFFFF);font-size:1.08rem;z-index:1;box-shadow:0 2px 7px rgba(16,24,40,.05);}}
+.edl-metric-label {{color:#344054;font-size:.71rem;font-weight:800;letter-spacing:.005em;padding-right:3rem;max-width:none;}}
+.edl-metric-value {{color:#061A36;font-size:1.34rem;font-weight:850;line-height:1.12;margin:.4rem 0 .18rem;letter-spacing:-.018em;padding-right:3rem;max-width:none;overflow-wrap:anywhere;word-break:break-word;}}
+.edl-metric-value.long {{font-size:1.05rem;line-height:1.18;}}
+.edl-metric-note {{color:#596780;font-size:.68rem;font-weight:560;line-height:1.3;padding-right:2.6rem;max-width:none;}}
 
 .edl-feature-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:.62rem;margin:.08rem 0 .85rem;}}
 .edl-feature-card {{min-height:118px;background:#FFF;border:1px solid var(--edl-border);border-radius:12px;padding:.8rem;box-shadow:0 4px 16px rgba(16,24,40,.035);}}
@@ -158,19 +179,40 @@ section[data-testid="stSidebar"] .stButton>button:hover {{background:rgba(199,13
 .edl-step.done .edl-step-number {{background:#EAF7EF;color:var(--edl-green);border-color:#B9E4CA;}}
 
 /* Lists */
-.edl-list {{background:#FFF;border:1px solid var(--edl-border);border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(16,24,40,.035);}}
-.edl-list-row {{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:.58rem;align-items:center;padding:.66rem .72rem;border-bottom:1px solid #EEF1F5;}}
+.edl-list {{background:linear-gradient(180deg,#FFFFFF 0%,#FCFDFE 100%);border:1px solid #DCE6F2;border-radius:12px;overflow:hidden;box-shadow:0 5px 16px rgba(16,24,40,.04);}}
+.edl-list-row {{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:.58rem;align-items:center;padding:.72rem .78rem;border-bottom:1px solid #EEF1F5;background:linear-gradient(90deg,var(--rowtone,#FFFFFF) 0%,#FFFFFF 18%);}}
 .edl-list-row:last-child {{border-bottom:0;}}
 .edl-list-icon {{width:31px;height:31px;border-radius:9px;background:var(--tone,#EEF4FF);display:flex;align-items:center;justify-content:center;font-size:.92rem;}}
-.edl-list-title {{color:var(--edl-navy);font-size:.74rem;font-weight:720;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
-.edl-list-sub {{color:var(--edl-muted);font-size:.64rem;margin-top:.08rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
-.edl-list-meta {{color:var(--edl-muted);font-size:.62rem;text-align:right;white-space:nowrap;}}
-.edl-overview {{background:#FFF;border:1px solid var(--edl-border);border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(16,24,40,.035);}}
-.edl-overview-row {{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.66rem .75rem;border-bottom:1px solid #EEF1F5;font-size:.70rem;}}
+.edl-list-title {{color:var(--edl-navy);font-size:.74rem;font-weight:760;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+.edl-list-sub {{color:#5B6B82;font-size:.64rem;margin-top:.08rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+.edl-list-meta {{color:#526077;font-size:.62rem;text-align:right;white-space:nowrap;font-weight:620;}}
+.edl-overview {{background:linear-gradient(180deg,#FFFFFF 0%,#FCFDFE 100%);border:1px solid #DCE6F2;border-radius:12px;overflow:hidden;box-shadow:0 5px 16px rgba(16,24,40,.04);}}
+.edl-overview-row {{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.72rem .78rem;border-bottom:1px solid #EEF1F5;font-size:.70rem;}}
 .edl-overview-row:last-child {{border-bottom:0;}}
-.edl-overview-row strong {{color:var(--edl-navy);font-weight:700;}}
-.edl-overview-row span {{color:var(--edl-muted);text-align:right;}}
-.edl-overview-row .ok {{color:var(--edl-green);font-weight:750;}}
+.edl-overview-row strong {{color:var(--edl-navy);font-weight:760;}}
+.edl-overview-row span {{color:var(--edl-muted);text-align:right;display:inline-flex;align-items:center;justify-content:center;padding:.22rem .55rem;border-radius:999px;min-height:24px;white-space:normal;line-height:1.1;max-width:58%;font-size:.66rem;font-weight:760;word-break:break-word;}}
+.edl-overview-row .ok {{color:#0F7A43;font-weight:780;background:#ECFDF3;border:1px solid #ABEFC6;}}
+.edl-overview-row .warn {{color:#9A3412;font-weight:780;background:#FFF2E8;border:1px solid #F7CFA8;}}
+.edl-overview-row .neutral {{color:#175CD3;font-weight:780;background:#EEF4FF;border:1px solid #C7D7FE;}}
+
+/* Dashboard quick actions */
+.st-key-dash_action_generate button,
+.st-key-dash_action_archive button,
+.st-key-dash_action_tagging button,
+.st-key-dash_action_workpapers button,
+.st-key-dash_action_policies button,
+.st-key-dash_action_users button {{font-weight:760!important;border-width:1px!important;box-shadow:0 4px 12px rgba(16,24,40,.045)!important;}}
+.st-key-dash_action_generate button {{background:linear-gradient(135deg,#061A36,#0A2C59)!important;color:#FFF!important;border-color:#061A36!important;}}
+.st-key-dash_action_archive button {{background:#F4F0FF!important;color:#4C1D95!important;border-color:#D8C7FF!important;}}
+.st-key-dash_action_tagging button {{background:#FFF8E8!important;color:#7A5200!important;border-color:#F0D58E!important;}}
+.st-key-dash_action_workpapers button {{background:#ECFDF3!important;color:#116B3B!important;border-color:#ABEFC6!important;}}
+.st-key-dash_action_policies button {{background:#EAFBFD!important;color:#0A6570!important;border-color:#AEE3E9!important;}}
+.st-key-dash_action_users button {{background:#EEF4FF!important;color:#174EA6!important;border-color:#C7D7FE!important;}}
+.st-key-dash_action_archive button:hover,
+.st-key-dash_action_tagging button:hover,
+.st-key-dash_action_workpapers button:hover,
+.st-key-dash_action_policies button:hover,
+.st-key-dash_action_users button:hover {{filter:brightness(.98);transform:translateY(-1px)!important;}}
 
 .edl-library-note {{display:flex;gap:.65rem;align-items:flex-start;padding:.76rem .84rem;border:1px solid #D5E2F4;background:#F6F9FE;border-radius:10px;margin:.2rem 0 .65rem;}}
 .edl-library-note strong {{color:var(--edl-navy);font-size:.76rem;}}
@@ -227,6 +269,13 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 .stButton>button[kind="primary"], .stFormSubmitButton>button, [data-testid="stDownloadButton"]>button {{background:#061A36!important;color:white!important;border:1px solid #061A36!important;border-radius:6px!important;box-shadow:none!important;}}
 .stButton>button[kind="primary"]:hover, .stFormSubmitButton>button:hover, [data-testid="stDownloadButton"]>button:hover {{background:#0A2C59!important;border-color:#0A2C59!important;}}
 .stButton>button[kind="secondary"] {{border:1px solid #C7D0DD!important;background:#fff!important;color:#061A36!important;border-radius:6px!important;}}
+/* Dashboard action colors override the global button theme. */
+.stElementContainer.st-key-dash_action_generate .stButton>button[kind="primary"] {{background:linear-gradient(135deg,#061A36,#0A2C59)!important;color:#FFF!important;border-color:#061A36!important;}}
+.stElementContainer.st-key-dash_action_archive .stButton>button[kind="secondary"] {{background:#F4F0FF!important;color:#4C1D95!important;border-color:#D8C7FF!important;}}
+.stElementContainer.st-key-dash_action_tagging .stButton>button[kind="secondary"] {{background:#FFF8E8!important;color:#7A5200!important;border-color:#F0D58E!important;}}
+.stElementContainer.st-key-dash_action_workpapers .stButton>button[kind="secondary"] {{background:#ECFDF3!important;color:#116B3B!important;border-color:#ABEFC6!important;}}
+.stElementContainer.st-key-dash_action_policies .stButton>button[kind="secondary"] {{background:#EAFBFD!important;color:#0A6570!important;border-color:#AEE3E9!important;}}
+.stElementContainer.st-key-dash_action_users .stButton>button[kind="secondary"] {{background:#EEF4FF!important;color:#174EA6!important;border-color:#C7D7FE!important;}}
 .stTabs [data-baseweb="tab-list"] {{gap:0!important;border-bottom:1px solid #D9E0EA!important;background:#fff!important;}}
 .stTabs [data-baseweb="tab"] {{border-radius:0!important;padding:.65rem .9rem!important;color:#475467!important;}}
 .stTabs [aria-selected="true"] {{color:#061A36!important;border-bottom:2px solid #C88A08!important;background:#fff!important;}}
@@ -234,8 +283,8 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 .edl-panel,.edl-metric-card,.edl-feature-card,.edl-topbar {{border-radius:8px!important;box-shadow:0 2px 8px rgba(16,24,40,.035)!important;}}
 .edl-topbar {{padding:.58rem .72rem!important;}}
 .edl-metric-grid {{grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:.48rem!important;}}
-.edl-metric-card {{min-height:96px!important;padding:.66rem .7rem!important;}}
-.edl-metric-value {{font-size:1.23rem!important;}}
+.edl-metric-card {{min-height:104px!important;padding:.7rem .74rem!important;}}
+.edl-metric-value {{font-size:1.22rem!important;}}
 @media(max-width:1200px){{.edl-metric-grid{{grid-template-columns:repeat(3,minmax(0,1fr))!important;}}}}
 @media(max-width:760px){{.edl-metric-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}section[data-testid="stSidebar"]{{width:230px!important;min-width:230px!important;}}}}
 
@@ -423,7 +472,7 @@ body:has(.iars-login-marker),
 }}
 .st-key-iars_auth_card:has(.iars-signin-view) {{
   justify-content:flex-start!important;
-  overflow:hidden!important;
+  overflow:visible!important;
 }}
 .st-key-iars_auth_card > div[data-testid="stElementContainer"]:has(.edl-login-authorized) {{
   margin-top:auto!important;
@@ -584,13 +633,13 @@ body:has(.iars-login-marker),
   z-index:auto!important;
   display:flex!important;
   align-items:center!important;
-  min-height:22px!important;
-  margin:7px 0 9px!important;
+  min-height:24px!important;
+  margin:10px 0 12px!important;
   gap:14px!important;
   color:#667085!important;
   background:transparent!important;
   font-size:.78rem!important;
-  line-height:22px!important;
+  line-height:24px!important;
   text-align:center!important;
 }}
 .edl-auth-divider:before,.edl-auth-divider:after {{
@@ -606,9 +655,9 @@ body:has(.iars-login-marker),
   align-items:stretch!important;
   width:100%!important;
   max-width:none!important;
-  margin:0!important;
+  margin:2px 0 0!important;
   padding:0!important;
-  gap:14px!important;
+  gap:10px!important;
 }}
 a.iars-signup-action,
 a.iars-signup-action:visited {{
@@ -761,7 +810,7 @@ a.iars-verify-action:focus-visible {{
   .stApp:has(.iars-login-marker) .stTextInput input{{min-height:43px!important;}}
   .stApp:has(.iars-login-marker) button[kind="primary"],
   .stApp:has(.iars-login-marker) .iars-signup-action{{min-height:47px!important;height:47px!important;}}
-  .edl-auth-divider{{margin:3px 0!important;}}
+  .edl-auth-divider{{margin:6px 0 8px!important;}}
   .edl-login-authorized{{padding-top:2px!important;font-size:.74rem!important;}}
 }}
 @media(max-width:900px) {{
@@ -817,7 +866,7 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
         "Generate Extraction": "Upload audit reports, extract data and prepare import-ready records",
         "PDF Tagging": "Review, tag and archive audit-report PDFs",
         "Shared PDF Archive": "Browse shared audit reports uploaded by all authorized auditors",
-        "Report Templates": "Access reusable count sheets, working papers and report templates",
+        "Audit Workpapers": "Access reusable count sheets, working papers and audit workpapers",
         "Policies & Memoranda": "Access controlled policies, memoranda, procedures and manuals",
         "User Management": "Manage authorized accounts and account approvals",
         "Master Data": "Maintain the reference workbook used across IARS",
@@ -886,10 +935,11 @@ def render_metric_cards(cards: Iterable[dict[str, Any]]) -> None:
         note = html.escape(str(card.get("note", "")))
         icon = html.escape(str(card.get("icon", "")))
         accent = html.escape(str(card.get("accent") or accents[index % len(accents)]))
+        value_class = "edl-metric-value long" if len(str(card.get("value", ""))) >= 12 else "edl-metric-value"
         chunks.append(
             f'<div class="edl-metric-card" style="--accent:{accent}">'
             f'<div class="edl-metric-icon">{icon}</div><div class="edl-metric-label">{label}</div>'
-            f'<div class="edl-metric-value">{value}</div><div class="edl-metric-note">{note}</div></div>'
+            f'<div class="{value_class}">{value}</div><div class="edl-metric-note">{note}</div></div>'
         )
     _render_html(f'<div class="edl-metric-grid">{"".join(chunks)}</div>')
 
@@ -927,8 +977,9 @@ def render_activity_list(rows: Iterable[dict[str, Any]]) -> None:
         title = html.escape(str(row.get("title", "")))
         subtitle = html.escape(str(row.get("subtitle", "")))
         meta = html.escape(str(row.get("meta", "")))
+        tone = palette[index % len(palette)]
         chunks.append(
-            f'<div class="edl-list-row"><div class="edl-list-icon" style="--tone:{palette[index % len(palette)]}">{icon}</div>'
+            f'<div class="edl-list-row" style="--rowtone:{tone}"><div class="edl-list-icon" style="--tone:{tone}">{icon}</div>'
             f'<div><div class="edl-list-title">{title}</div><div class="edl-list-sub">{subtitle}</div></div>'
             f'<div class="edl-list-meta">{meta}</div></div>'
         )
@@ -941,9 +992,16 @@ def render_system_overview(rows: Iterable[dict[str, Any]]) -> None:
     chunks: list[str] = []
     for row in rows:
         label = html.escape(str(row.get("label", "")))
-        value = html.escape(str(row.get("value", "")))
+        raw_value = str(row.get("value", ""))
+        value = html.escape(raw_value)
         ok = bool(row.get("ok", False))
-        cls = "ok" if ok else ""
+        lowered = raw_value.strip().lower()
+        if ok:
+            cls = "ok"
+        elif any(token in lowered for token in ["not configured", "missing", "review", "setup", "offline"]):
+            cls = "warn"
+        else:
+            cls = "neutral"
         chunks.append(f'<div class="edl-overview-row"><strong>{label}</strong><span class="{cls}">{value}</span></div>')
     _render_html(f'<div class="edl-overview">{"".join(chunks)}</div>')
 

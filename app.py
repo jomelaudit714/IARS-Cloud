@@ -646,9 +646,9 @@ def render_document_library_page(
     admin: bool,
 ) -> None:
     is_templates = collection == COLLECTION_TEMPLATES
-    page_title = "Report Templates Library" if is_templates else "Policies & Memoranda Archive"
+    page_title = "Audit Workpapers Library" if is_templates else "Policies & Memoranda Archive"
     page_subtitle = (
-        "Upload, organize and download reusable count sheets, inventory forms, working papers and report templates."
+        "Upload, organize and download reusable count sheets, inventory forms, working papers and audit workpapers."
         if is_templates
         else "Maintain a controlled reference library for policies, memoranda, procedures, manuals and guidelines."
     )
@@ -981,7 +981,17 @@ nav_options = [
     "📄 Generate Extraction",
     "🏷️ PDF Tagging",
     "🗂️ Shared PDF Archive",
-    "📚 Report Templates",
+    "📚 Audit Workpapers",
+    "📜 Policies & Memoranda",
+]
+audit_report_nav = [
+    "📄 Generate Extraction",
+    "🏷️ PDF Tagging",
+    "🗂️ Shared PDF Archive",
+]
+standalone_nav = [
+    "🏠 Dashboard",
+    "📚 Audit Workpapers",
     "📜 Policies & Memoranda",
 ]
 if is_admin_user(auth_user):
@@ -989,14 +999,46 @@ if is_admin_user(auth_user):
         "👥 User Management",
         "🗃️ Master Data",
     ])
+    standalone_nav.extend([
+        "👥 User Management",
+        "🗃️ Master Data",
+    ])
 nav_options.append("⚙️ Settings")
+standalone_nav.append("⚙️ Settings")
 if st.session_state.get("main_navigation") not in nav_options:
     st.session_state["main_navigation"] = nav_options[0]
 
 with st.sidebar:
     render_sidebar_brand()
     selected_page = st.session_state["main_navigation"]
-    for nav_index, nav_label in enumerate(nav_options):
+
+    dashboard_label = "🏠 Dashboard"
+    dashboard_selected = selected_page == dashboard_label
+    if st.button(
+        dashboard_label,
+        key="sidebar_nav_dashboard",
+        use_container_width=True,
+        type="primary" if dashboard_selected else "secondary",
+    ):
+        st.session_state["main_navigation"] = dashboard_label
+        st.rerun()
+
+    audit_expanded = selected_page in audit_report_nav
+    with st.expander("📂 Audit Report", expanded=audit_expanded):
+        for audit_index, nav_label in enumerate(audit_report_nav):
+            nav_key = re.sub(r"[^a-z0-9]+", "_", nav_label.lower()).strip("_")
+            is_selected = nav_label == selected_page
+            if st.button(
+                nav_label,
+                key=f"audit_nav_{audit_index}_{nav_key}",
+                use_container_width=True,
+                type="primary" if is_selected else "secondary",
+            ):
+                st.session_state["main_navigation"] = nav_label
+                st.rerun()
+
+    remaining_nav = [label for label in standalone_nav if label != dashboard_label]
+    for nav_index, nav_label in enumerate(remaining_nav):
         nav_key = re.sub(r"[^a-z0-9]+", "_", nav_label.lower()).strip("_")
         is_selected = nav_label == selected_page
         if st.button(
@@ -1007,6 +1049,7 @@ with st.sidebar:
         ):
             st.session_state["main_navigation"] = nav_label
             st.rerun()
+
     st.divider()
     system_ok = archive_ready and document_library_ready and MASTER_DATA_PATH.exists()
     render_sidebar_status(
@@ -1018,7 +1061,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.1", page_title=page_key)
+render_app_header(auth_user, version="4.4.4", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
@@ -1061,7 +1104,7 @@ if page_key == "Dashboard":
             {"label": "Employees", "value": f"{len(master_df):,}", "note": "Master Data records", "icon": "👥", "accent": "#175CD3"},
             {"label": "Active Auditors", "value": f"{len(auditor_options):,}", "note": "Approved users", "icon": "🧑‍💼", "accent": "#148A4B"},
             {"label": "Archived PDFs", "value": f"{len(home_archive_records):,}" if archive_ready else "Offline", "note": "Shared archive", "icon": "🗂️", "accent": "#6938EF"},
-            {"label": "Report Templates", "value": f"{len(home_template_records):,}" if document_library_ready else "Setup", "note": "Reusable resources", "icon": "📚", "accent": "#C88A08"},
+            {"label": "Audit Workpapers", "value": f"{len(home_template_records):,}" if document_library_ready else "Setup", "note": "Reusable resources", "icon": "📚", "accent": "#C88A08"},
             {"label": "Policies & Memos", "value": f"{len(home_policy_records):,}" if document_library_ready else "Setup", "note": "Controlled references", "icon": "📜", "accent": "#087E8B"},
             {"label": "Archive Status", "value": "Connected" if archive_ready else "Not configured", "note": "Automatic compression", "icon": "🛡️", "accent": "#148A4B" if archive_ready else "#D92D20"},
         ]
@@ -1086,13 +1129,13 @@ if page_key == "Dashboard":
 
     with action_col:
         render_section_header("Quick Actions", "Open a core workspace.")
-        st.button("📄 Generate Extraction", use_container_width=True, type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
-        st.button("🗂️ Archive PDFs", use_container_width=True, on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
-        st.button("🏷️ PDF Tagging", use_container_width=True, on_click=_navigate_to, args=("🏷️ PDF Tagging",))
-        st.button("📚 Report Templates", use_container_width=True, on_click=_navigate_to, args=("📚 Report Templates",))
-        st.button("📜 Policies & Memos", use_container_width=True, on_click=_navigate_to, args=("📜 Policies & Memoranda",))
+        st.button("📄 Generate Extraction", key="dash_action_generate", use_container_width=True, type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
+        st.button("🗂️ Archive PDFs", key="dash_action_archive", use_container_width=True, on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
+        st.button("🏷️ PDF Tagging", key="dash_action_tagging", use_container_width=True, on_click=_navigate_to, args=("🏷️ PDF Tagging",))
+        st.button("📚 Audit Workpapers", key="dash_action_workpapers", use_container_width=True, on_click=_navigate_to, args=("📚 Audit Workpapers",))
+        st.button("📜 Policies & Memos", key="dash_action_policies", use_container_width=True, on_click=_navigate_to, args=("📜 Policies & Memoranda",))
         if is_admin_user(auth_user):
-            st.button("👥 User Management", use_container_width=True, on_click=_navigate_to, args=("👥 User Management",))
+            st.button("👥 User Management", key="dash_action_users", use_container_width=True, on_click=_navigate_to, args=("👥 User Management",))
 
     with overview_col:
         render_section_header("System Overview", "Current environment status.")
@@ -1791,7 +1834,7 @@ if page_key == "Generate Extraction":
         st.info("Upload one or multiple audit report PDFs to start.")
 
 
-if page_key == "Report Templates":
+if page_key == "Audit Workpapers":
     render_document_library_page(
         collection=COLLECTION_TEMPLATES,
         client=document_client,
@@ -1973,7 +2016,7 @@ if page_key == "Settings":
             st.text_input("Document Library Bucket", value=document_config.bucket, disabled=True)
             if not document_library_ready:
                 st.warning(
-                    "Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql to enable Report Templates and Policies & Memoranda."
+                    "Run SUPABASE_DOCUMENT_LIBRARY_SETUP.sql to enable Audit Workpapers and Policies & Memoranda."
                 )
 
 # Signals that the authenticated page has completed rendering. The login-exit

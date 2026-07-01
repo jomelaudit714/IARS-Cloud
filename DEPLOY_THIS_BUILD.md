@@ -1,9 +1,9 @@
-# Deploy this exact build
+# Deploy IARS v4.4.4
 
-Upload the **contents of this folder** to the root of the GitHub branch connected to Streamlit.
-
-The repository root must directly contain `app.py`, `iars_auth.py`, `iars_theme.py`, `requirements.txt`, `assets/`, `data/`, and `.streamlit/`. Do not upload the ZIP as a single unextracted file and do not place these files inside another folder.
-
-After committing, open Streamlit **Manage app → Reboot app**, then perform a hard refresh (`Ctrl+F5`).
-
-Build marker in the login HTML: `4.4.1-deployment-fixed`.
+1. Extract the ZIP locally.
+2. Upload the extracted contents directly to the GitHub repository root.
+3. Replace the existing files, especially `app.py`, `iars_theme.py`, and `iars_auth.py`.
+4. Do not upload `.streamlit/secrets.toml`; keep real credentials only in Streamlit Secrets.
+5. Commit to the branch connected to Streamlit.
+6. Open Streamlit **Manage app → Reboot app**.
+7. Press **Ctrl + F5** after the reboot.

@@ -1,30 +1,42 @@
-# IARS v4.4.1 — Deployment-Fixed Login UI
+# IARS v4.4.4
 
-This is the complete IARS application package with the corrected, tested login interface.
+Complete Internal Audit Report System deployment package with the approved login interface, compact dashboard navigation, and the refined professional dashboard theme.
 
-## Login corrections
+## v4.4.4 refinements
 
-- Left and right panels are equal height at 1365 × 768.
-- Username and password fields have complete borders.
-- The password-eye section is inside and aligned with the password field.
-- “Remember me” stays on one line.
-- The “or” divider does not overlap the account actions.
-- Sign Up is exactly the same width and height as Sign In, with a complete 2 px border and approved plus-person icon.
-- Verify Your Account is centered, blue, borderless, and uses the approved shield-check icon.
-- The authorization notice remains at the bottom of the right panel.
-- The native Streamlit sign-in form remains stable while typing.
-- The full-screen transition mask remains in place until the authenticated workspace is ready.
+- Professional color treatment applied to all Dashboard metric cards
+- Distinct professional colors applied to every Dashboard Quick Action
+- Colored status pills added to System Overview
+- Recent Archive Activity styling improved for readability
+- Archive Status value fixed so **Not configured** displays completely
+- Long Dashboard values given additional clearance from icon areas
+- Login **or** divider spacing fixed so the Sign Up box no longer covers it
+- Sign In and Sign Up remain exactly equal in width
+
+## Retained from v4.4.3 and v4.4.2
+
+- EDL/IARS navy gradient top header with gold border and brand accent line
+- Themed signed-in user panel for the name, initials, and role
+- Reduced unused space above the dashboard
+- Left-aligned and evenly oriented sidebar menu items
+- Expandable **Audit Report** category containing:
+  - Generate Extraction
+  - PDF Tagging
+  - Shared PDF Archive
+- **Report Templates** renamed to **Audit Workpapers** throughout the interface
+
+## Security
+
+The preview-only authentication bypass used for testing is **not included** in this package. A private `.streamlit/secrets.toml` is also not included.
 
 ## Deployment
 
 1. Extract the ZIP.
-2. Upload the **contents** of the extracted folder to the root of the GitHub branch connected to Streamlit.
-3. Confirm that `app.py`, `iars_auth.py`, and `iars_theme.py` are directly in the repository root—not inside another folder.
-4. Keep your existing Streamlit Secrets. This ZIP includes only `.streamlit/secrets.toml.example`.
-5. Commit all replaced files together.
-6. In Streamlit, open **Manage app → Reboot app**.
-7. Hard refresh the deployed page using `Ctrl + F5`.
+2. Upload the extracted contents directly to the GitHub repository root connected to Streamlit.
+3. Replace the existing files, especially `app.py`, `iars_theme.py`, and `iars_auth.py`.
+4. Keep real credentials only in Streamlit Secrets.
+5. Commit the changes to the deployed branch.
+6. Select **Manage app → Reboot app** in Streamlit.
+7. Use **Ctrl + F5** after the reboot.
 
-Build marker: `4.4.1-deployment-fixed`
-
-See `TEST_RESULTS_V4_4_1.md` and the files in `docs/` for the browser-tested preview and measurements.
+See `TEST_RESULTS_V4_4_4.md` and the v4.4.4 preview files in `docs/`.
