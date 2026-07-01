@@ -1,27 +1,26 @@
-# IARS v4.4.10
+# IARS v4.4.11
 
 Complete Internal Audit Report System deployment package containing the approved login, dashboard, sidebar, Generate Extraction, header-cleanup, and PDF Tagging updates.
 
-## v4.4.10 refinements
+## v4.4.11 PDF Tagging interaction refinements
 
-- Removed duplicate secondary titles from Generate Extraction, PDF Tagging, and Shared PDF Archive.
-- Retained one primary header title with a brief page description.
-- Added a per-textbox **Font size** control in PDF Tagging, from **6–48 pt**.
-- The selected font size remains after deselecting or reselecting a textbox.
-- New textboxes inherit the latest selected font size.
-- Removed the manual Save Changes button.
-- Textbox edits are saved automatically after a short pause or control change.
-- Editing remains browser-local while typing, deleting, resizing, or moving to reduce reruns and lag.
-- Added automatic-save status feedback: Editing, Saving, and All changes saved automatically.
-- Tagged-PDF generation uses the saved textbox font size.
+- A single normal left click inside existing textbox text immediately selects the textbox, focuses the editor, and places the caret at the clicked position.
+- No second left click is required after clicking outside the textbox.
+- Long-press and drag inside textbox text repositions the whole textbox.
+- Dragging the plain sides or border repositions the whole textbox.
+- Dragging the small blue handles resizes the textbox only.
+- Click-versus-long-press detection prevents editing, moving, and resizing actions from conflicting.
+- Automatic save and per-textbox font size controls remain enabled.
 
 ## Retained approved updates
 
+- Removed duplicate secondary titles from Generate Extraction, PDF Tagging, and Shared PDF Archive.
+- Per-textbox font size control from 6–48 pt, with the selected size retained.
+- Automatic saving with no manual Save Changes button.
 - Generate Extraction duplicate-report warning listing all repeated IAD reference numbers.
 - Compact, light color-coded extraction choices.
 - Professional dashboard colors and readable status pills.
-- Expandable Audit Report sidebar category.
-- Audit Workpapers naming.
+- Expandable Audit Report sidebar category and Audit Workpapers naming.
 - Corrected Sign Up, Forgot Password, login, and sidebar alignment.
 
 ## Security

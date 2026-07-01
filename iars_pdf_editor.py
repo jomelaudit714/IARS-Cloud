@@ -1,10 +1,12 @@
-"""IARS PDF textbox editor v2.6.
+"""IARS PDF textbox editor v2.8.
 
 Fixes in this version:
 - exact per-textbox font sizes from 6 to 48 pt without automatic shrinking
 - font-size value remains visible when a textbox is deselected
 - browser-local editing with no Streamlit rerun while typing, resizing, or selecting
 - automatic idle synchronization to Streamlit with no manual save button
+- one-click text editing after deselection
+- long-press drag from text interior, immediate drag from plain borders, blue-handle resize
 - no synchronization while a textbox or font-size field is actively being edited
 - smoother return, delete, and retyping behavior in existing textboxes
 - tighter text padding, Fit text, duplicate, resize, and page persistence
@@ -300,6 +302,25 @@ button.save:not(:disabled) {
   pointer-events: none;
 }
 
+.drag-edge {
+  position: absolute;
+  z-index: 13;
+  background: transparent;
+  cursor: move;
+  touch-action: none;
+}
+
+.drag-edge[data-side="top"] { left: 8px; right: 8px; top: -4px; height: 8px; }
+.drag-edge[data-side="right"] { top: 8px; bottom: 8px; right: -4px; width: 8px; }
+.drag-edge[data-side="bottom"] { left: 8px; right: 8px; bottom: -4px; height: 8px; }
+.drag-edge[data-side="left"] { top: 8px; bottom: 8px; left: -4px; width: 8px; }
+
+.tag-box.dragging,
+.tag-box.dragging .tag-text {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
 .resize-handle {
   position: absolute;
   width: 9px;
@@ -392,6 +413,10 @@ export default function(component) {
   let defaultFontSize = Number(editor?.default_font_size ?? 11);
   let zoom = Number(data?.zoom ?? 1);
   let operation = null;
+  let textGesture = null;
+  let suppressTextClickUntil = 0;
+  const LONG_PRESS_MS = 360;
+  const CLICK_MOVE_PX = 5;
   let lastRightClick = { time: 0, x: 0, y: 0 };
   let contextHint = null;
   let lastSnapshot = null;
@@ -547,6 +572,142 @@ export default function(component) {
   function selectBox(id) {
     selectedId = id;
     refreshSelectionStyles();
+  }
+
+  function placeCaretAtPoint(textElement, clientX, clientY) {
+    if (!textElement) return;
+    textElement.focus({ preventScroll: true });
+    const selection = window.getSelection?.();
+    if (!selection) return;
+
+    let range = null;
+    if (typeof document.caretPositionFromPoint === 'function') {
+      const position = document.caretPositionFromPoint(clientX, clientY);
+      if (position && textElement.contains(position.offsetNode)) {
+        range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+        range.collapse(true);
+      }
+    } else if (typeof document.caretRangeFromPoint === 'function') {
+      const candidate = document.caretRangeFromPoint(clientX, clientY);
+      if (candidate && textElement.contains(candidate.startContainer)) {
+        range = candidate;
+      }
+    }
+
+    if (!range) {
+      range = document.createRange();
+      range.selectNodeContents(textElement);
+      range.collapse(false);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function clearTextGestureTimer() {
+    if (textGesture?.timer) {
+      window.clearTimeout(textGesture.timer);
+      textGesture.timer = null;
+    }
+  }
+
+  function beginLongPressTextDrag() {
+    if (!textGesture || textGesture.dragging) return;
+    const gesture = textGesture;
+    const box = boxes.find((item) => item.id === gesture.id);
+    if (!box) return;
+
+    gesture.dragging = true;
+    gesture.textElement.blur();
+    window.getSelection?.()?.removeAllRanges();
+    selectBox(gesture.id);
+    const rect = stage.getBoundingClientRect();
+    operation = {
+      type: 'drag',
+      id: gesture.id,
+      pointerId: gesture.pointerId,
+      startX: gesture.startX,
+      startY: gesture.startY,
+      startBox: structuredClone(box),
+      stageWidth: rect.width,
+      stageHeight: rect.height,
+      moved: false,
+      fromTextLongPress: true,
+    };
+    try {
+      gesture.textElement.setPointerCapture(gesture.pointerId);
+    } catch (_) {
+      // Pointer capture is optional; window-level handlers remain active.
+    }
+    const boxElement = gesture.textElement.closest('.tag-box');
+    boxElement?.classList.add('dragging');
+    setStatus('Dragging textbox… release to save automatically.');
+  }
+
+  function handleTextPointerDown(event, id, textElement) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    clearTextGestureTimer();
+    selectBox(id);
+
+    // A normal single left click must immediately enter editing mode and place
+    // the caret at the clicked text position—no second click is required.
+    placeCaretAtPoint(textElement, event.clientX, event.clientY);
+
+    textGesture = {
+      id,
+      textElement,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTime: performance.now(),
+      maxMovement: 0,
+      dragging: false,
+      timer: window.setTimeout(beginLongPressTextDrag, LONG_PRESS_MS),
+    };
+  }
+
+  function handleTextPointerMove(event) {
+    if (!textGesture || event.pointerId !== textGesture.pointerId) return;
+    const distance = Math.hypot(
+      event.clientX - textGesture.startX,
+      event.clientY - textGesture.startY,
+    );
+    textGesture.maxMovement = Math.max(textGesture.maxMovement, distance);
+
+    if (!textGesture.dragging && performance.now() - textGesture.startTime >= LONG_PRESS_MS) {
+      beginLongPressTextDrag();
+    }
+    if (textGesture.dragging) {
+      event.preventDefault();
+    }
+  }
+
+  function endTextGesture(event, cancelled = false) {
+    if (!textGesture || event.pointerId !== textGesture.pointerId) return;
+    const gesture = textGesture;
+    clearTextGestureTimer();
+    textGesture = null;
+
+    if (gesture.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressTextClickUntil = performance.now() + 350;
+      finishOperation();
+      layer.querySelectorAll('.tag-box.dragging').forEach((element) => element.classList.remove('dragging'));
+      return;
+    }
+
+    if (!cancelled && gesture.maxMovement <= CLICK_MOVE_PX) {
+      event.stopPropagation();
+      selectBox(gesture.id);
+      placeCaretAtPoint(gesture.textElement, event.clientX, event.clientY);
+      setStatus('Editing… changes are saved automatically when you pause.');
+    }
+  }
+
+  function handleTextPointerCancel(event) {
+    endTextGesture(event, true);
   }
 
   function measureTextWidth(text, size) {
@@ -713,13 +874,17 @@ export default function(component) {
       textElement.style.fontSize = `${box.font_size ?? 11}px`;
       textElement.innerText = normalizeText(box.text);
       textElement.addEventListener('pointerdown', (event) => {
-        event.stopPropagation();
-        selectBox(box.id);
+        handleTextPointerDown(event, box.id, textElement);
       });
       textElement.addEventListener('click', (event) => {
+        if (performance.now() < suppressTextClickUntil) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         event.stopPropagation();
         selectBox(box.id);
-        textElement.focus({ preventScroll: true });
+        placeCaretAtPoint(textElement, event.clientX, event.clientY);
       });
       textElement.addEventListener('focus', () => selectBox(box.id));
       textElement.addEventListener('input', () => {
@@ -753,11 +918,23 @@ export default function(component) {
       });
 
       boxElement.addEventListener('pointerdown', (event) => {
-        if (event.target === boxElement) selectBox(box.id);
+        // The plain border/sides move the whole textbox. Blue handles remain
+        // dedicated to resizing, and the text interior uses click-to-edit /
+        // long-press-to-drag behavior.
+        if (event.target === boxElement && event.button === 0) startDrag(event, box.id);
       });
 
       boxElement.appendChild(dragStrip);
       boxElement.appendChild(textElement);
+
+      ['top', 'right', 'bottom', 'left'].forEach((side) => {
+        const edge = document.createElement('div');
+        edge.className = 'drag-edge';
+        edge.dataset.side = side;
+        edge.title = 'Drag to reposition';
+        edge.addEventListener('pointerdown', (event) => startDrag(event, box.id));
+        boxElement.appendChild(edge);
+      });
 
       ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].forEach((direction) => {
         const handle = document.createElement('div');
@@ -783,6 +960,7 @@ export default function(component) {
       type: 'drag', id, pointerId: event.pointerId,
       startX: event.clientX, startY: event.clientY,
       startBox: structuredClone(box), stageWidth: rect.width, stageHeight: rect.height,
+      moved: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -797,16 +975,21 @@ export default function(component) {
       type: 'resize', id, direction, pointerId: event.pointerId,
       startX: event.clientX, startY: event.clientY,
       startBox: structuredClone(box), stageWidth: rect.width, stageHeight: rect.height,
+      moved: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function updateOperation(event) {
     if (!operation) return;
+    if (operation.fromTextLongPress) event.preventDefault();
     const box = boxes.find((item) => item.id === operation.id);
     if (!box) return;
-    const dxPct = ((event.clientX - operation.startX) / operation.stageWidth) * 100;
-    const dyPct = ((event.clientY - operation.startY) / operation.stageHeight) * 100;
+    const dxPx = event.clientX - operation.startX;
+    const dyPx = event.clientY - operation.startY;
+    const dxPct = (dxPx / operation.stageWidth) * 100;
+    const dyPct = (dyPx / operation.stageHeight) * 100;
+    if (Math.hypot(dxPx, dyPx) > 1.5) operation.moved = true;
     const start = operation.startBox;
 
     if (operation.type === 'drag') {
@@ -853,7 +1036,10 @@ export default function(component) {
   function finishOperation() {
     if (!operation) return;
     const finishedType = operation.type;
+    const moved = Boolean(operation.moved);
     operation = null;
+    layer.querySelectorAll('.tag-box.dragging').forEach((element) => element.classList.remove('dragging'));
+    if (!moved) return;
     markDirty(finishedType === 'resize' ? 'Textbox resized — saving automatically…' : 'Textbox repositioned — saving automatically…', 500);
   }
 
@@ -939,8 +1125,11 @@ export default function(component) {
     if (event.target === layer) selectBox(null);
   });
   document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-  window.addEventListener('pointermove', updateOperation);
+  window.addEventListener('pointermove', handleTextPointerMove, { passive: false });
+  window.addEventListener('pointermove', updateOperation, { passive: false });
+  window.addEventListener('pointerup', endTextGesture);
   window.addEventListener('pointerup', finishOperation);
+  window.addEventListener('pointercancel', handleTextPointerCancel);
   window.addEventListener('pointercancel', finishOperation);
   const handlePageHide = () => flushFocusedText();
   window.addEventListener('pagehide', handlePageHide);
@@ -978,8 +1167,12 @@ export default function(component) {
     flushFocusedText();
     layer.removeEventListener('contextmenu', handleContextMenu);
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+    clearTextGestureTimer();
+    window.removeEventListener('pointermove', handleTextPointerMove);
     window.removeEventListener('pointermove', updateOperation);
+    window.removeEventListener('pointerup', endTextGesture);
     window.removeEventListener('pointerup', finishOperation);
+    window.removeEventListener('pointercancel', handleTextPointerCancel);
     window.removeEventListener('pointercancel', finishOperation);
     if (localSaveTimer) window.clearTimeout(localSaveTimer);
     if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
@@ -1000,7 +1193,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v27",
+        name="iars_pdf_textbox_editor_v28",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
