@@ -528,7 +528,6 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
         st.error(str(exc) or "Unable to sign in.")
 
 def _render_sign_up(client: Any, config: AuthConfig) -> None:
-    st.subheader("Sign Up")
     st.caption(
         "Create a standard user account. The administrator must approve it and personally provide the activation code."
     )
@@ -596,7 +595,6 @@ def _render_sign_up(client: Any, config: AuthConfig) -> None:
 
 
 def _render_verify_account(client: Any, config: AuthConfig) -> None:
-    st.subheader("Verify Account")
     st.caption("Enter the one-time activation code personally provided by the administrator.")
     with st.form("iars_manual_verify_form"):
         username_input = st.text_input("Username / Nickname", key="verify_username")
@@ -666,7 +664,6 @@ def _render_verify_account(client: Any, config: AuthConfig) -> None:
 
 
 def _render_forgot_password(client: Any, config: AuthConfig) -> None:
-    st.subheader("Forgot Password")
     st.caption(
         "Request a reset, then obtain a one-time reset code directly from the administrator. No SMS is used."
     )
@@ -871,7 +868,8 @@ def render_auth_gate(config: AuthConfig):
                 unsafe_allow_html=True,
             )
         elif view == "sign_up":
-            render_section_header("Create Account", "Register using only the essential account details.")
+            st.markdown('<div class="iars-signup-view"></div>', unsafe_allow_html=True)
+            render_section_header("Sign Up", "Register using only the essential account details.")
             _render_sign_up(client, config)
             st.button(
                 "← Back to Sign In",
@@ -881,6 +879,7 @@ def render_auth_gate(config: AuthConfig):
                 args=("sign_in",),
             )
         elif view == "verify":
+            st.markdown('<div class="iars-verify-view"></div>', unsafe_allow_html=True)
             render_section_header("Verify Account", "Enter the activation code personally provided by the administrator.")
             _render_verify_account(client, config)
             st.button(
@@ -891,7 +890,8 @@ def render_auth_gate(config: AuthConfig):
                 args=("sign_in",),
             )
         else:
-            render_section_header("Reset Password", "Request or complete an administrator-approved password reset.")
+            st.markdown('<div class="iars-forgot-view"></div>', unsafe_allow_html=True)
+            render_section_header("Forgot Password", "Request or complete an administrator-approved password reset.")
             _render_forgot_password(client, config)
             st.button(
                 "← Back to Sign In",

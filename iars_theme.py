@@ -75,7 +75,7 @@ header[data-testid="stHeader"] {{height:0!important;min-height:0!important;backg
 /* Sidebar */
 section[data-testid="stSidebar"] {{background:linear-gradient(180deg,#05162E 0%,#07264D 58%,#061A36 100%);border-right:1px solid rgba(255,255,255,.08);}}
 section[data-testid="stSidebar"] > div {{padding-top:0;}}
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{height:28px!important;min-height:28px!important;padding:0 6px!important;}}
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{position:absolute!important;top:2px!important;right:4px!important;z-index:5!important;height:28px!important;min-height:28px!important;padding:0!important;background:transparent!important;}}
 section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {{display:none!important;}}
 section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{margin-left:auto!important;align-self:center!important;}}
 section[data-testid="stSidebar"] * {{color:#F8FAFC;}}
@@ -241,7 +241,7 @@ div[data-testid="stForm"],div[data-testid="stVerticalBlockBorderWrapper"] {{bord
 
 /* v4.2: native Streamlit image and navigation layout for reliable rendering */
 [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{display:none!important;}}
-section[data-testid="stSidebar"] [data-testid="stImage"] {{display:flex;justify-content:center;margin:.15rem auto .35rem;}}
+section[data-testid="stSidebar"] [data-testid="stImage"] {{display:flex;justify-content:center;margin:0 auto .25rem!important;}}
 section[data-testid="stSidebar"] [data-testid="stImage"] img {{width:126px!important;height:126px!important;object-fit:contain;background:#FFF;border-radius:16px;padding:5px;box-shadow:0 12px 28px rgba(0,0,0,.24);}}
 section[data-testid="stSidebar"] .stButton {{margin:.08rem 0;}}
 section[data-testid="stSidebar"] .stButton>button {{width:100%;justify-content:flex-start;text-align:left;min-height:43px;padding:.52rem .68rem;font-size:.78rem;}}
@@ -261,7 +261,7 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 
 /* v4.4 exact-reference refinements */
 section[data-testid="stSidebar"] {{width:238px!important;min-width:238px!important;}}
-section[data-testid="stSidebar"] > div:first-child {{padding:10px 10px 18px!important;}}
+section[data-testid="stSidebar"] > div:first-child {{padding:18px 10px 18px!important;}}
 section[data-testid="stSidebar"] [data-testid="stImage"] img {{background:transparent!important;border:none!important;box-shadow:none!important;}}
 section[data-testid="stSidebar"] .stButton>button {{min-height:40px!important;border:none!important;background:transparent!important;text-align:left!important;font-weight:620!important;padding:.46rem .62rem!important;}}
 section[data-testid="stSidebar"] .stButton>button:hover {{background:rgba(255,255,255,.08)!important;}}
@@ -316,6 +316,9 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 .iars-login-marker,
 .iars-auth-view-marker,
 .iars-signin-view,
+.iars-signup-view,
+.iars-verify-view,
+.iars-forgot-view,
 .iars-app-ready-marker {{display:none!important;}}
 
 html:has(.iars-login-marker),
@@ -469,6 +472,15 @@ body:has(.iars-login-marker),
 }}
 .st-key-iars_auth_card:has(.iars-auth-view-marker) {{
   animation:iarsAuthPanelIn .22s cubic-bezier(.22,.61,.36,1) both;
+  justify-content:flex-start!important;
+}}
+.st-key-iars_auth_card:has(.iars-signup-view),
+.st-key-iars_auth_card:has(.iars-verify-view),
+.st-key-iars_auth_card:has(.iars-forgot-view) {{
+  justify-content:flex-start!important;
+  overflow-y:auto!important;
+  padding-top:18px!important;
+  scroll-padding-top:18px!important;
 }}
 .st-key-iars_auth_card:has(.iars-signin-view) {{
   justify-content:flex-start!important;

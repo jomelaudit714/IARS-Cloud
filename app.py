@@ -1061,7 +1061,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.4", page_title=page_key)
+render_app_header(auth_user, version="4.4.5", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
