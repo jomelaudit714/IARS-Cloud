@@ -1,4 +1,4 @@
-# Deploy IARS v4.4.8
+# Deploy IARS v4.4.10
 
 1. Extract the ZIP on your computer.
 2. Upload the extracted contents directly into the GitHub repository root.

@@ -1,10 +1,11 @@
-"""IARS PDF textbox editor v2.5.
+"""IARS PDF textbox editor v2.6.
 
 Fixes in this version:
-- one persistent component state for all PDF pages
-- per-textbox font-size control from 6 to 48 pt
-- browser-local backup while typing, with idle synchronization to Streamlit
-- no textbox-layer rebuild and no expensive font fitting on every keystroke
+- exact per-textbox font sizes from 6 to 48 pt without automatic shrinking
+- font-size value remains visible when a textbox is deselected
+- browser-local editing with no Streamlit rerun while typing, resizing, or selecting
+- automatic idle synchronization to Streamlit with no manual save button
+- no synchronization while a textbox or font-size field is actively being edited
 - smoother return, delete, and retyping behavior in existing textboxes
 - tighter text padding, Fit text, duplicate, resize, and page persistence
 - component registration repeated safely on every Streamlit rerun
@@ -27,7 +28,7 @@ EDITOR_HTML = r"""
     </div>
     <div class="toolbar-group font-size-group">
       <label for="font-size-input">Font size</label>
-      <input id="font-size-input" type="number" min="6" max="48" step="1" value="11" disabled />
+      <input id="font-size-input" type="number" min="6" max="48" step="1" value="11" />
       <span class="font-unit">pt</span>
     </div>
     <div class="toolbar-group">
@@ -131,6 +132,16 @@ button.danger-light {
   color: #991b1b;
 }
 
+button.save {
+  color: #0f5132;
+  border-color: #86d6a7;
+  background: #ecfdf3;
+}
+
+button.save:not(:disabled) {
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.10);
+}
+
 #zoom-label {
   min-width: 45px;
   text-align: center;
@@ -166,9 +177,6 @@ button.danger-light {
   text-align: center;
 }
 
-#font-size-input:disabled {
-  opacity: 0.48;
-}
 
 .font-unit {
   font-size: 0.78rem;
@@ -381,15 +389,20 @@ export default function(component) {
   let selectedId = Number(editor?.active_page ?? pageNumber) === pageNumber
     ? (editor?.selected_id ?? null)
     : null;
+  let defaultFontSize = Number(editor?.default_font_size ?? 11);
   let zoom = Number(data?.zoom ?? 1);
   let operation = null;
   let lastRightClick = { time: 0, x: 0, y: 0 };
   let contextHint = null;
   let lastSnapshot = null;
   let localSaveTimer = null;
-  let streamlitSyncTimer = null;
+  let autoSyncTimer = null;
+  let dirty = localUpdated > pythonUpdated;
+  let syncing = false;
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const clampFontSize = (value) => clamp(Number(value) || 11, 6, 48);
+  defaultFontSize = clampFontSize(defaultFontSize);
   const makeId = () => `tag_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const currentBox = () => boxes.find((box) => box.id === selectedId) ?? null;
 
@@ -398,17 +411,20 @@ export default function(component) {
   }
 
   function normalizedBoxes() {
-    return boxes.map((box) => ({
-      id: String(box.id),
-      x_pct: Number(box.x_pct),
-      y_pct: Number(box.y_pct),
-      w_pct: Number(box.w_pct),
-      h_pct: Number(box.h_pct),
-      text: normalizeText(box.text),
-      style: String(box.style ?? 'Box'),
-      font_size: Number(box.font_size ?? 11),
-      base_font_size: Number(box.base_font_size ?? 11),
-    }));
+    return boxes.map((box) => {
+      const exactFontSize = clampFontSize(box.font_size ?? box.base_font_size ?? 11);
+      return {
+        id: String(box.id),
+        x_pct: Number(box.x_pct),
+        y_pct: Number(box.y_pct),
+        w_pct: Number(box.w_pct),
+        h_pct: Number(box.h_pct),
+        text: normalizeText(box.text),
+        style: String(box.style ?? 'Box'),
+        font_size: exactFontSize,
+        base_font_size: exactFontSize,
+      };
+    });
   }
 
   function snapshot() {
@@ -417,6 +433,7 @@ export default function(component) {
       pages: structuredClone(pages),
       selected_id: selectedId,
       active_page: pageNumber,
+      default_font_size: defaultFontSize,
       updated_at: Date.now(),
     };
     return lastSnapshot;
@@ -432,7 +449,7 @@ export default function(component) {
     return value;
   }
 
-  function queueLocalSave(delay = 140) {
+  function queueLocalSave(delay = 120) {
     if (localSaveTimer) window.clearTimeout(localSaveTimer);
     localSaveTimer = window.setTimeout(() => {
       localSaveTimer = null;
@@ -440,30 +457,54 @@ export default function(component) {
     }, delay);
   }
 
-  function syncToStreamlit(message = 'Saved.', delay = 700) {
-    if (streamlitSyncTimer) window.clearTimeout(streamlitSyncTimer);
-    streamlitSyncTimer = window.setTimeout(() => {
-      streamlitSyncTimer = null;
-      const value = saveLocal();
-      setStateValue('editor', value);
-      setStatus(message);
+  function editorHasActiveInput() {
+    const active = document.activeElement;
+    return Boolean(
+      operation ||
+      layer.querySelector('.tag-text:focus') ||
+      active === fontSizeInput
+    );
+  }
+
+  function scheduleAutoSync(delay = 900) {
+    if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
+    autoSyncTimer = window.setTimeout(() => {
+      autoSyncTimer = null;
+      if (!dirty || syncing) return;
+      if (editorHasActiveInput()) {
+        scheduleAutoSync(700);
+        return;
+      }
+      syncToStreamlit();
     }, delay);
   }
 
-  function commit(message = 'Saved.', delay = 520) {
-    saveLocal();
-    syncToStreamlit(message, delay);
+  function markDirty(message = 'Saving changes automatically…', delay = 900) {
+    dirty = true;
+    queueLocalSave(60);
     setStatus(message);
+    scheduleAutoSync(delay);
   }
 
-  function commitImmediately(message = 'Saved.') {
-    if (streamlitSyncTimer) {
-      window.clearTimeout(streamlitSyncTimer);
-      streamlitSyncTimer = null;
+  function syncToStreamlit(message = 'All changes saved automatically.') {
+    if (!dirty || syncing) return;
+    if (localSaveTimer) {
+      window.clearTimeout(localSaveTimer);
+      localSaveTimer = null;
+    }
+    if (autoSyncTimer) {
+      window.clearTimeout(autoSyncTimer);
+      autoSyncTimer = null;
     }
     const value = saveLocal();
+    syncing = true;
+    dirty = false;
+    setStatus('Saving…');
     setStateValue('editor', value);
-    setStatus(message);
+    window.setTimeout(() => {
+      syncing = false;
+      setStatus(message);
+    }, 220);
   }
 
   function setStatus(message) {
@@ -492,11 +533,14 @@ export default function(component) {
     deleteButton.disabled = disabled;
     duplicateButton.disabled = disabled;
     fitTextButton.disabled = disabled;
-    fontSizeInput.disabled = disabled;
     if (selected) {
-      fontSizeInput.value = String(Math.round(Number(selected.base_font_size ?? selected.font_size ?? 11)));
+      const selectedSize = clampFontSize(selected.font_size ?? selected.base_font_size ?? defaultFontSize);
+      selected.font_size = selectedSize;
+      selected.base_font_size = selectedSize;
+      defaultFontSize = selectedSize;
+      fontSizeInput.value = String(Math.round(selectedSize));
     } else {
-      fontSizeInput.value = '11';
+      fontSizeInput.value = String(Math.round(defaultFontSize));
     }
   }
 
@@ -505,18 +549,66 @@ export default function(component) {
     refreshSelectionStyles();
   }
 
-  function setSelectedFontSize(rawValue) {
-    const box = currentBox();
+  function measureTextWidth(text, size) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return Math.max(34, normalizeText(text).length * size * 0.58);
+    ctx.font = `${size}px Arial, sans-serif`;
+    return Math.max(1, ctx.measureText(normalizeText(text)).width);
+  }
+
+  function ensureBoxSupportsFont(box, { fitWidthToText = false } = {}) {
     if (!box) return;
-    const size = clamp(Number(rawValue) || 11, 6, 48);
-    box.base_font_size = size;
+    const rect = stage.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const size = clampFontSize(box.font_size ?? defaultFontSize);
     box.font_size = size;
+    box.base_font_size = size;
+
+    const requiredHeightPx = Math.max(18, size * 1.35 + 4);
+    const requiredHeightPct = (requiredHeightPx / rect.height) * 100;
+    if (box.h_pct < requiredHeightPct) {
+      box.h_pct = Math.min(requiredHeightPct, 100 - box.y_pct);
+    }
+
+    if (fitWidthToText && normalizeText(box.text)) {
+      const requiredWidthPx = measureTextWidth(box.text, size) + 10;
+      const requiredWidthPct = (requiredWidthPx / rect.width) * 100;
+      const desiredWidth = clamp(requiredWidthPct, 2.5, 88);
+      if (desiredWidth > box.w_pct) {
+        if (box.x_pct + desiredWidth <= 100) {
+          box.w_pct = desiredWidth;
+        } else {
+          box.x_pct = Math.max(0, 100 - desiredWidth);
+          box.w_pct = desiredWidth;
+        }
+      }
+    }
+  }
+
+  function setSelectedFontSize(rawValue) {
+    const parsed = Number(rawValue);
+    if (String(rawValue).trim() === '' || !Number.isFinite(parsed)) return;
+    const size = clampFontSize(parsed);
+    defaultFontSize = size;
     fontSizeInput.value = String(Math.round(size));
-    const textElement = layer.querySelector(`[data-box-id="${box.id}"] .tag-text`);
+    const box = currentBox();
+    if (!box) {
+      markDirty(`Default font size ${Math.round(size)} pt — saving automatically…`, 650);
+      return;
+    }
+    box.font_size = size;
+    box.base_font_size = size;
+    ensureBoxSupportsFont(box, { fitWidthToText: true });
+    const boxElement = layer.querySelector(`[data-box-id="${box.id}"]`);
+    const textElement = boxElement?.querySelector('.tag-text');
+    if (boxElement) {
+      boxElement.style.left = `${box.x_pct}%`;
+      boxElement.style.width = `${box.w_pct}%`;
+      boxElement.style.height = `${box.h_pct}%`;
+    }
     if (textElement) textElement.style.fontSize = `${size}px`;
-    saveLocal();
-    syncToStreamlit(`Font size set to ${Math.round(size)} pt.`, 500);
-    setStatus(`Font size set to ${Math.round(size)} pt.`);
+    markDirty(`Font size ${Math.round(size)} pt — saving automatically…`, 650);
   }
 
   function showContextHint(clientX, clientY, message) {
@@ -535,46 +627,28 @@ export default function(component) {
     }, 800);
   }
 
-  function fitFontToBox(box) {
-    if (!box || !stage.getBoundingClientRect().width) return;
-    const stageRect = stage.getBoundingClientRect();
-    const text = normalizeText(box.text);
-    const baseSize = Number(box.base_font_size ?? 11);
-    const availableWidth = Math.max(1, (box.w_pct / 100) * stageRect.width - 6);
-    const availableHeight = Math.max(1, (box.h_pct / 100) * stageRect.height - 2);
-    let size = Math.min(baseSize, Math.max(6, availableHeight * 0.78));
-
-    if (text) {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.font = `${size}px Arial, sans-serif`;
-        const measured = Math.max(1, ctx.measureText(text).width);
-        if (measured > availableWidth) {
-          size = Math.max(6, size * (availableWidth / measured));
-        }
-      }
-    }
-    box.font_size = Math.round(size * 10) / 10;
-  }
-
   function fitSelectedToText() {
     const box = currentBox();
     if (!box) return;
     const stageRect = stage.getBoundingClientRect();
-    const element = layer.querySelector(`[data-box-id="${box.id}"]`);
-    const textElement = element?.querySelector('.tag-text');
-    if (!stageRect.width || !stageRect.height || !textElement) return;
+    if (!stageRect.width || !stageRect.height) return;
 
-    const baseSize = Number(box.base_font_size ?? 11);
-    textElement.style.fontSize = `${baseSize}px`;
-    const desiredWidthPx = clamp(textElement.scrollWidth + 8, 34, stageRect.width * 0.75);
-    const desiredHeightPx = clamp(Math.max(baseSize + 6, 18), 16, 40);
-    box.w_pct = Math.min((desiredWidthPx / stageRect.width) * 100, 100 - box.x_pct);
-    box.h_pct = Math.min((desiredHeightPx / stageRect.height) * 100, 100 - box.y_pct);
-    fitFontToBox(box);
+    const exactSize = clampFontSize(box.font_size ?? defaultFontSize);
+    box.font_size = exactSize;
+    box.base_font_size = exactSize;
+    const desiredWidthPx = clamp(measureTextWidth(box.text, exactSize) + 10, 34, stageRect.width * 0.88);
+    const desiredHeightPx = clamp(exactSize * 1.35 + 4, 18, 72);
+    let desiredWidthPct = (desiredWidthPx / stageRect.width) * 100;
+    let desiredHeightPct = (desiredHeightPx / stageRect.height) * 100;
+    desiredWidthPct = Math.min(desiredWidthPct, 100);
+    desiredHeightPct = Math.min(desiredHeightPct, 100);
+
+    if (box.x_pct + desiredWidthPct > 100) box.x_pct = Math.max(0, 100 - desiredWidthPct);
+    if (box.y_pct + desiredHeightPct > 100) box.y_pct = Math.max(0, 100 - desiredHeightPct);
+    box.w_pct = desiredWidthPct;
+    box.h_pct = desiredHeightPct;
     renderBoxes();
-    commit('Textbox fitted closely to its text.');
+    markDirty('Textbox fitted — saving automatically…', 650);
   }
 
   function createBoxAt(clientX, clientY) {
@@ -583,7 +657,8 @@ export default function(component) {
     const xPct = clamp(((clientX - rect.left) / rect.width) * 100, 0, 96);
     const yPct = clamp(((clientY - rect.top) / rect.height) * 100, 0, 97);
     const defaultWidthPct = clamp((180 / rect.width) * 100, 15, 28);
-    const defaultHeightPct = clamp((24 / rect.height) * 100, 1.6, 3.4);
+    const defaultHeightPx = Math.max(24, defaultFontSize * 1.35 + 4);
+    const defaultHeightPct = clamp((defaultHeightPx / rect.height) * 100, 1.6, 8);
     const box = {
       id: makeId(),
       x_pct: xPct,
@@ -592,13 +667,13 @@ export default function(component) {
       h_pct: Math.min(defaultHeightPct, 99 - yPct),
       text: '',
       style: 'Box',
-      font_size: 11,
-      base_font_size: 11,
+      font_size: defaultFontSize,
+      base_font_size: defaultFontSize,
     };
     boxes.push(box);
     selectedId = box.id;
     renderBoxes();
-    commit('Textbox added and saved. Click inside to type.');
+    markDirty('Textbox added — changes save automatically.', 1000);
     window.setTimeout(() => {
       const text = layer.querySelector(`[data-box-id="${box.id}"] .tag-text`);
       if (text) text.focus({ preventScroll: true });
@@ -614,7 +689,9 @@ export default function(component) {
   function renderBoxes() {
     layer.replaceChildren();
     boxes.forEach((box) => {
-      fitFontToBox(box);
+      box.font_size = clampFontSize(box.font_size ?? box.base_font_size ?? defaultFontSize);
+      box.base_font_size = box.font_size;
+      ensureBoxSupportsFont(box);
       const boxElement = document.createElement('div');
       boxElement.className = `tag-box${box.id === selectedId ? ' selected' : ''}${boxStyleClass(box.style)}`;
       boxElement.dataset.boxId = box.id;
@@ -646,12 +723,13 @@ export default function(component) {
       });
       textElement.addEventListener('focus', () => selectBox(box.id));
       textElement.addEventListener('input', () => {
-        // Keep typing entirely inside the browser. Do not rebuild the layer,
-        // measure text, or notify Streamlit on every character.
+        // Keep typing entirely in the browser while the textbox is focused.
+        // Automatic Streamlit synchronization waits until editing is idle.
         box.text = textElement.innerText;
-        queueLocalSave(160);
-        syncToStreamlit('Text synchronized.', 900);
-        setStatus('Typing saved locally. Changes sync after a short pause.');
+        dirty = true;
+        queueLocalSave(50);
+        setStatus('Editing… changes are saved automatically when you pause.');
+        scheduleAutoSync(1200);
       });
       textElement.addEventListener('paste', (event) => {
         event.preventDefault();
@@ -661,9 +739,7 @@ export default function(component) {
       textElement.addEventListener('blur', () => {
         box.text = normalizeText(textElement.innerText);
         textElement.innerText = box.text;
-        saveLocal();
-        syncToStreamlit('Text saved.', 500);
-        setStatus('Text saved.');
+        markDirty('Text updated — saving automatically…', 500);
       });
       textElement.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -743,7 +819,8 @@ export default function(component) {
       let w = start.w_pct;
       let h = start.h_pct;
       const minW = Math.max(2.5, (34 / operation.stageWidth) * 100);
-      const minH = Math.max(1.2, (16 / operation.stageHeight) * 100);
+      const minHeightPx = Math.max(18, clampFontSize(box.font_size ?? defaultFontSize) * 1.35 + 4);
+      const minH = Math.max(1.2, (minHeightPx / operation.stageHeight) * 100);
 
       if (dir.includes('e')) w = clamp(start.w_pct + dxPct, minW, 100 - start.x_pct);
       if (dir.includes('s')) h = clamp(start.h_pct + dyPct, minH, 100 - start.y_pct);
@@ -759,7 +836,7 @@ export default function(component) {
       box.y_pct = y;
       box.w_pct = w;
       box.h_pct = h;
-      fitFontToBox(box);
+      ensureBoxSupportsFont(box);
     }
 
     const element = layer.querySelector(`[data-box-id="${box.id}"]`);
@@ -777,7 +854,7 @@ export default function(component) {
     if (!operation) return;
     const finishedType = operation.type;
     operation = null;
-    commit(finishedType === 'resize' ? 'Textbox resized and saved.' : 'Textbox repositioned and saved.');
+    markDirty(finishedType === 'resize' ? 'Textbox resized — saving automatically…' : 'Textbox repositioned — saving automatically…', 500);
   }
 
   function deleteSelected() {
@@ -785,7 +862,7 @@ export default function(component) {
     boxes = boxes.filter((box) => box.id !== selectedId);
     selectedId = null;
     renderBoxes();
-    commit('Textbox deleted.');
+    markDirty('Textbox deleted — saving automatically…', 450);
   }
 
   function duplicateSelected() {
@@ -798,7 +875,7 @@ export default function(component) {
     boxes.push(duplicate);
     selectedId = duplicate.id;
     renderBoxes();
-    commit('Textbox duplicated and saved.');
+    markDirty('Textbox duplicated — saving automatically…', 650);
   }
 
   function clearPage() {
@@ -806,10 +883,10 @@ export default function(component) {
     boxes = [];
     selectedId = null;
     renderBoxes();
-    commit('All textboxes on this page were removed.');
+    markDirty('Page cleared — saving automatically…', 450);
   }
 
-  function flushFocusedText({ immediate = false } = {}) {
+  function flushFocusedText() {
     const focused = layer.querySelector('.tag-text:focus');
     if (!focused) return false;
     const boxElement = focused.closest('.tag-box');
@@ -817,13 +894,10 @@ export default function(component) {
     if (!box) return false;
     box.text = normalizeText(focused.innerText);
     focused.innerText = box.text;
-    if (immediate) {
-      commitImmediately('Text saved before leaving the page.');
-    } else {
-      saveLocal();
-      syncToStreamlit('Text saved.', 800);
-      setStatus('Text saved locally.');
-    }
+    dirty = true;
+    saveLocal();
+    setStatus('Text updated — saving automatically…');
+    scheduleAutoSync(500);
     return true;
   }
 
@@ -868,7 +942,7 @@ export default function(component) {
   window.addEventListener('pointermove', updateOperation);
   window.addEventListener('pointerup', finishOperation);
   window.addEventListener('pointercancel', finishOperation);
-  const handlePageHide = () => flushFocusedText({ immediate: true });
+  const handlePageHide = () => flushFocusedText();
   window.addEventListener('pagehide', handlePageHide);
   window.addEventListener('keydown', handleKeydown);
   fontSizeInput.addEventListener('input', () => setSelectedFontSize(fontSizeInput.value));
@@ -887,14 +961,17 @@ export default function(component) {
     renderBoxes();
   };
   image.src = data?.image_data ?? '';
-  setStatus(`Page ${pageNumber}. Double-right-click the PDF to add a textbox.`);
   renderBoxes();
 
-  // If the browser-local copy is newer, immediately restore it to Streamlit.
   if (localEditor && localUpdated > pythonUpdated) {
-    window.setTimeout(() => setStateValue('editor', snapshot()), 0);
+    dirty = true;
+    setStatus('Recovered local changes — saving automatically…');
+    scheduleAutoSync(650);
   } else {
-    saveLocal();
+    dirty = false;
+    setStatus(pythonUpdated > 0
+      ? 'All changes saved automatically.'
+      : `Page ${pageNumber}. Changes save automatically.`);
   }
 
   return () => {
@@ -905,7 +982,7 @@ export default function(component) {
     window.removeEventListener('pointerup', finishOperation);
     window.removeEventListener('pointercancel', finishOperation);
     if (localSaveTimer) window.clearTimeout(localSaveTimer);
-    if (streamlitSyncTimer) window.clearTimeout(streamlitSyncTimer);
+    if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
     window.removeEventListener('pagehide', handlePageHide);
     window.removeEventListener('keydown', handleKeydown);
     if (contextHint) contextHint.remove();
@@ -923,7 +1000,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v25",
+        name="iars_pdf_textbox_editor_v27",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
@@ -954,6 +1031,7 @@ def pdf_textbox_editor(
         "pages": {},
         "selected_id": None,
         "active_page": int(page_number),
+        "default_font_size": 11,
         "updated_at": 0,
     }
     current_editor = _read_editor_state(st.session_state.get(key), initial_editor)

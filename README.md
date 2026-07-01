@@ -1,18 +1,19 @@
-# IARS v4.4.8
+# IARS v4.4.10
 
-Complete Internal Audit Report System deployment package containing all previously approved login, dashboard, sidebar, Generate Extraction, and Audit Report updates.
+Complete Internal Audit Report System deployment package containing the approved login, dashboard, sidebar, Generate Extraction, header-cleanup, and PDF Tagging updates.
 
-## v4.4.8 refinements
+## v4.4.10 refinements
 
 - Removed duplicate secondary titles from Generate Extraction, PDF Tagging, and Shared PDF Archive.
 - Retained one primary header title with a brief page description.
-- Added a per-textbox **Font size** control in PDF Tagging.
-- Font-size range: **6–48 pt**.
-- Each textbox can retain its own font size for tagged-PDF generation.
-- Improved existing-textbox editing after adding or selecting another textbox.
-- Keystrokes are saved browser-side without rebuilding the textbox layer on every character.
-- Streamlit synchronization occurs after idle/blur instead of on every keystroke.
-- Reduced lag while deleting and retyping inside a previously completed textbox.
+- Added a per-textbox **Font size** control in PDF Tagging, from **6–48 pt**.
+- The selected font size remains after deselecting or reselecting a textbox.
+- New textboxes inherit the latest selected font size.
+- Removed the manual Save Changes button.
+- Textbox edits are saved automatically after a short pause or control change.
+- Editing remains browser-local while typing, deleting, resizing, or moving to reduce reruns and lag.
+- Added automatic-save status feedback: Editing, Saving, and All changes saved automatically.
+- Tagged-PDF generation uses the saved textbox font size.
 
 ## Retained approved updates
 

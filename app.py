@@ -166,7 +166,7 @@ def draw_preview_box(img, x_percent, y_percent, box_width_px=220, box_height_px=
 
 
 def stamp_pdf_with_tags(pdf_bytes: bytes, tag_rows):
-    """Insert single-line PDF tags with tight padding and automatic font fitting."""
+    """Insert single-line PDF tags using each textbox's exact selected font size."""
     import fitz
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -209,10 +209,9 @@ def stamp_pdf_with_tags(pdf_bytes: bytes, tag_rows):
         available_width = max(1.0, rect.width - (horizontal_padding * 2))
         available_height = max(1.0, rect.height - (vertical_padding * 2))
 
-        font_size = min(requested_font_size, max(4.5, available_height * 0.78))
-        text_width = fitz.get_text_length(label_text, fontname="helv", fontsize=font_size)
-        if text_width > available_width and text_width > 0:
-            font_size = max(4.5, font_size * (available_width / text_width))
+        # Respect the exact font size chosen in the PDF Tagging editor.
+        # The editor expands the textbox height and offers Fit text for width.
+        font_size = max(6.0, min(48.0, requested_font_size))
 
         # Vertically center the one-line tag inside the rectangle.
         baseline = rect.y0 + ((rect.height - font_size) / 2) + (font_size * 0.82)
@@ -1110,7 +1109,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.8", page_title=page_key)
+render_app_header(auth_user, version="4.4.10", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
@@ -1207,7 +1206,7 @@ if page_key == "PDF Tagging":
     st.caption(
         "Double-right-click the PDF to add a textbox. Click inside to type, "
         "drag the move tab to reposition, and drag the blue handles to resize. "
-        "Tags are preserved when switching PDF pages."
+        "Use Font size for the exact text size. Changes save automatically after you pause or move to another control."
     )
 
     tag_pdf = st.file_uploader(
@@ -1232,8 +1231,8 @@ if page_key == "PDF Tagging":
         if page_count:
             reset_key = f"pdf_editor_reset_{file_id}"
             reset_version = int(st.session_state.get(reset_key, 0))
-            component_key = f"iars_pdf_editor_{file_id}_v25_reset_{reset_version}"
-            storage_key = f"iars_pdf_editor_{file_id}_v25_reset_{reset_version}"
+            component_key = f"iars_pdf_editor_{file_id}_v26_reset_{reset_version}"
+            storage_key = f"iars_pdf_editor_{file_id}_v26_reset_{reset_version}"
 
             controls_left, controls_right = st.columns([1, 2])
             with controls_left:
@@ -1248,7 +1247,8 @@ if page_key == "PDF Tagging":
             with controls_right:
                 st.info(
                     "The first right-click marks the location. Right-click the same spot again "
-                    "to create a textbox. Use Fit text for the tightest box around the label."
+                    "to create a textbox. Font size remains exact; use Fit text when you want the box to match the label. "
+                    "Edits save automatically without a manual save button."
                 )
 
             preview_img, page_width, page_height = render_pdf_page(
