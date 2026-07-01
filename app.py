@@ -482,6 +482,55 @@ def cached_archive_metadata(pdf_bytes: bytes, filename: str):
     return extract_archive_metadata(pdf_bytes, filename)
 
 
+def _normalized_audit_reference(value: str) -> str:
+    """Normalize IAD reference numbers for reliable duplicate matching."""
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+
+def uploaded_archive_duplicate_references(pdf_files, archive_records) -> list[str]:
+    """Return unique IAD references from uploaded PDFs already found in the archive.
+
+    A report is treated as already archived when either its extracted IAD reference
+    matches an archive record or its original PDF hash matches an archived file.
+    """
+    records_by_reference: dict[str, list[dict]] = {}
+    records_by_hash: dict[str, dict] = {}
+    for record in archive_records or []:
+        reference = str(record.get("audit_reference", "") or "").strip()
+        normalized = _normalized_audit_reference(reference)
+        if normalized:
+            records_by_reference.setdefault(normalized, []).append(record)
+        digest = str(record.get("sha256", "") or "").strip().lower()
+        if digest:
+            records_by_hash[digest] = record
+
+    duplicates: list[str] = []
+    seen: set[str] = set()
+    for pdf_file in pdf_files or []:
+        pdf_bytes = pdf_file.getvalue()
+        defaults = cached_archive_metadata(pdf_bytes, pdf_file.name)
+        extracted_reference = str(defaults.get("audit_reference", "") or "").strip()
+        normalized = _normalized_audit_reference(extracted_reference)
+        digest = hashlib.sha256(pdf_bytes).hexdigest().lower()
+
+        matched_record = records_by_hash.get(digest)
+        if matched_record is None and normalized:
+            matches = records_by_reference.get(normalized, [])
+            matched_record = matches[0] if matches else None
+
+        if matched_record is not None:
+            display_reference = (
+                str(matched_record.get("audit_reference", "") or "").strip()
+                or extracted_reference
+            )
+            identity = _normalized_audit_reference(display_reference) or display_reference.casefold()
+            if display_reference and identity not in seen:
+                seen.add(identity)
+                duplicates.append(display_reference)
+
+    return duplicates
+
+
 @st.cache_resource(show_spinner=False)
 def cached_archive_client(url: str, service_role_key: str, bucket: str, table: str):
     return create_archive_client(
@@ -1061,7 +1110,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.5", page_title=page_key)
+render_app_header(auth_user, version="4.4.6", page_title=page_key)
 
 
 def _navigate_to(label: str) -> None:
@@ -1652,15 +1701,6 @@ if page_key == "Generate Extraction":
         st.markdown('<div class="iars-app-ready-marker"></div>', unsafe_allow_html=True)
         st.stop()
     render_stepper(["Upload PDFs", "Choose Action", "Process Reports", "Review & Export"], active_index=0)
-    render_metric_cards(
-        [
-            {"label": "Master Data", "value": "Loaded", "note": "Reference workbook ready", "icon": "🗃️", "accent": "#148A4B"},
-            {"label": "Employees", "value": f"{len(master_df):,}", "note": "Available for matching", "icon": "👥", "accent": "#175CD3"},
-            {"label": "Auditors", "value": f"{len(auditor_options):,}", "note": "Active dropdown values", "icon": "🧑‍💼", "accent": "#6938EF"},
-            {"label": "PDF Archive", "value": "Connected" if archive_ready else "Not configured", "note": "Auto-compression enabled", "icon": "🗂️", "accent": "#C88A08" if archive_ready else "#D92D20"},
-        ]
-    )
-
     render_section_header("Upload Audit Reports", "Drag and drop one or multiple searchable PDF reports.")
     pdf_files = st.file_uploader(
         "Upload one or multiple audit report PDFs",
@@ -1671,6 +1711,29 @@ if page_key == "Generate Extraction":
 
     if pdf_files:
         st.success(f"{len(pdf_files)} PDF report(s) uploaded successfully.")
+
+        duplicate_references: list[str] = []
+        if archive_ready and archive_client is not None:
+            try:
+                archive_records_for_check = list_archive_records(archive_client, archive_config, limit=1000)
+                duplicate_references = uploaded_archive_duplicate_references(
+                    pdf_files, archive_records_for_check
+                )
+            except Exception:
+                # Duplicate checking is advisory and must not block extraction when
+                # the archive service is temporarily unavailable.
+                duplicate_references = []
+
+        if duplicate_references:
+            reference_list = "\n".join(f"- **{reference}**" for reference in duplicate_references)
+            reference_term = "IAD Reference No." if len(duplicate_references) == 1 else "IAD Reference Nos."
+            reference_verb = "is" if len(duplicate_references) == 1 else "are"
+            st.error(
+                "**Duplicate report(s) detected in the PDF Archive.**\n\n"
+                f"The following {reference_term} {reference_verb} already in the archive:\n"
+                f"{reference_list}\n\n"
+                "Please review these reports before continuing."
+            )
 
         upload_action_options = ["Generate extraction only"]
         if archive_ready:
