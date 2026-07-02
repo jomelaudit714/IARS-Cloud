@@ -1,6 +1,6 @@
-# Deploy IARS v4.4.13
+# Deploy IARS v4.4.14
 
-1. Run `SUPABASE_PROFILE_SETUP.sql` once in the Supabase SQL Editor.
+1. Run the included latest `SUPABASE_PROFILE_SETUP.sql` in the Supabase SQL Editor. It is safe to run over the earlier profile setup; do not drop the existing profile table or bucket.
 2. Extract the ZIP locally.
 3. Upload the extracted contents directly to the GitHub repository root, replacing the previous files.
 4. Do not upload the ZIP as an unextracted file or place the project in an extra nested folder.

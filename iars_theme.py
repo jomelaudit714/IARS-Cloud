@@ -129,7 +129,7 @@ section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] .stButton>but
 .edl-topbar-title p {{margin:.16rem 0 0;color:#D7E2F1;font-size:.75rem;}}
 .edl-topbar-spacer {{flex:1;}}
 .edl-topbar-date {{position:relative;z-index:1;color:#D8E3F2;font-size:.72rem;white-space:nowrap;font-weight:560;}}
-.edl-user-chip {{position:relative;z-index:1;display:flex;align-items:center;gap:.72rem;background:rgba(255,255,255,.10);border:1px solid rgba(228,174,47,.65);border-radius:12px;padding:.42rem .72rem;min-width:196px;min-height:60px;box-shadow:inset 0 1px 0 rgba(255,255,255,.09);text-decoration:none!important;cursor:pointer;transition:.14s ease;}}
+.edl-user-chip {{position:relative;z-index:1;display:flex;align-items:center;gap:.72rem;background:rgba(255,255,255,.10);border:1px solid rgba(228,174,47,.65);border-radius:12px;padding:.42rem .72rem;min-width:196px;min-height:60px;box-shadow:inset 0 1px 0 rgba(255,255,255,.09);text-decoration:none!important;cursor:pointer;transition:.14s ease;pointer-events:none;}}
 .edl-user-chip:hover {{background:rgba(255,255,255,.16);border-color:rgba(246,212,107,.90);transform:translateY(-1px);text-decoration:none!important;}}
 .edl-user-avatar {{width:46px;height:46px;flex:0 0 46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#F6D46B,#C88A08);color:#061A36;font-size:.88rem;font-weight:850;box-shadow:0 4px 11px rgba(0,0,0,.20);overflow:hidden;}}
 .edl-user-avatar img {{display:block;width:100%;height:100%;object-fit:cover;border-radius:50%;}}
@@ -864,21 +864,48 @@ a.iars-verify-action:focus-visible {{
 .st-key-extract_pdf_upload [data-testid="stWidgetLabel"] p {{font-size:.82rem!important;font-weight:720!important;color:var(--edl-navy)!important;}}
 
 
-/* v4.4.13 clickable profile menu */
-.st-key-iars_profile_menu {{
-  position:fixed!important;right:22px!important;top:78px!important;z-index:100000!important;
-  width:min(390px,calc(100vw - 30px))!important;max-height:calc(100vh - 94px)!important;overflow-y:auto!important;
-  background:#FFF!important;border:1px solid #DCE3EC!important;border-radius:14px!important;
-  padding:1rem 1rem 1.05rem!important;box-shadow:0 20px 48px rgba(16,24,40,.24)!important;
+/* v4.4.14 session-safe profile trigger and polished profile menu */
+.st-key-profile_menu_trigger {{
+  position:fixed!important;right:38px!important;top:16px!important;z-index:100020!important;
+  width:196px!important;height:60px!important;margin:0!important;padding:0!important;
 }}
-.st-key-iars_profile_menu h2 {{margin:0!important;color:#061A36!important;font-size:1.35rem!important;}}
-.st-key-iars_profile_menu [data-testid="stExpander"] {{border:1px solid #E1E6EE!important;border-radius:9px!important;background:#FBFCFE!important;margin:.45rem 0!important;}}
-.st-key-iars_profile_menu [data-testid="stExpander"] summary p {{font-weight:760!important;color:#061A36!important;}}
+.st-key-profile_menu_trigger .stButton,.st-key-profile_menu_trigger .stButton>button {{width:100%!important;height:100%!important;margin:0!important;}}
+.st-key-profile_menu_trigger .stButton>button {{
+  min-height:60px!important;border:0!important;border-radius:12px!important;background:transparent!important;
+  box-shadow:none!important;color:transparent!important;font-size:0!important;padding:0!important;cursor:pointer!important;
+}}
+.st-key-profile_menu_trigger .stButton>button:hover {{background:rgba(255,255,255,.055)!important;box-shadow:0 0 0 2px rgba(246,212,107,.18)!important;transform:none!important;}}
+.st-key-iars_profile_menu {{
+  position:fixed!important;right:22px!important;top:82px!important;z-index:100000!important;
+  width:min(410px,calc(100vw - 30px))!important;max-height:calc(100vh - 98px)!important;overflow-y:auto!important;
+  background:#FFF!important;border:1px solid #CAD5E3!important;border-radius:15px!important;
+  padding:1rem 1rem 1.05rem!important;box-shadow:0 22px 52px rgba(16,24,40,.26)!important;
+}}
+.st-key-iars_profile_menu h2 {{margin:0!important;color:#061A36!important;font-size:1.38rem!important;}}
+.st-key-iars_profile_menu [data-testid="stExpander"] {{border:1px solid #D7E0EB!important;border-radius:10px!important;background:#FAFCFF!important;margin:.5rem 0!important;overflow:hidden!important;}}
+.st-key-iars_profile_menu [data-testid="stExpander"] summary {{min-height:46px!important;padding:.1rem .72rem!important;background:#F7F9FC!important;}}
+.st-key-iars_profile_menu [data-testid="stExpander"] summary p {{font-weight:780!important;color:#061A36!important;font-size:.88rem!important;}}
+.st-key-iars_profile_menu [data-testid="stExpanderDetails"] {{padding:.78rem .82rem .85rem!important;background:#FFF!important;border-top:1px solid #E6EBF2!important;}}
+.st-key-iars_profile_menu div[data-testid="stForm"] {{border:1px solid #DFE6EF!important;border-radius:10px!important;background:#FBFCFE!important;padding:.78rem!important;box-shadow:none!important;}}
+.st-key-iars_profile_menu .stTextInput [data-baseweb="input"] {{
+  min-height:44px!important;background:#FFF!important;border:1px solid #AFC1D6!important;border-radius:8px!important;box-shadow:0 1px 2px rgba(16,24,40,.03)!important;
+}}
+.st-key-iars_profile_menu .stTextInput [data-baseweb="input"]:focus-within {{border-color:#2E73C8!important;box-shadow:0 0 0 3px rgba(46,115,200,.12)!important;}}
+.st-key-iars_profile_menu .stTextInput input {{min-height:41px!important;background:transparent!important;color:#061A36!important;}}
+.st-key-iars_profile_menu .stTextInput [aria-disabled="true"] {{background:#F2F4F7!important;color:#667085!important;}}
 .st-key-iars_profile_menu .stButton>button {{min-height:40px!important;}}
-.st-key-profile_menu_close .stButton>button {{min-width:38px!important;width:38px!important;height:38px!important;padding:0!important;border-radius:50%!important;}}
-.st-key-iars_profile_menu [data-testid="stFileUploaderDropzone"] {{min-height:78px!important;padding:.7rem!important;}}
+.st-key-profile_menu_close {{display:flex!important;justify-content:flex-end!important;align-items:center!important;}}
+.st-key-profile_menu_close .stButton>button {{
+  min-width:34px!important;width:34px!important;height:34px!important;min-height:34px!important;padding:0!important;
+  border-radius:50%!important;border:1px solid #D5DEE9!important;background:#F4F7FA!important;color:#344054!important;
+  font-size:1.18rem!important;font-weight:700!important;line-height:1!important;box-shadow:none!important;
+}}
+.st-key-profile_menu_close .stButton>button:hover {{background:#E8EEF5!important;border-color:#B7C5D6!important;color:#061A36!important;transform:none!important;}}
+.st-key-iars_profile_menu [data-testid="stFileUploaderDropzone"] {{min-height:82px!important;padding:.75rem!important;background:#FBFCFE!important;border-color:#AFC1D6!important;}}
+.st-key-iars_profile_menu [data-testid="stAlert"] {{font-size:.78rem!important;}}
 @media(max-width:900px) {{
-  .st-key-iars_profile_menu {{right:10px!important;top:62px!important;width:calc(100vw - 20px)!important;max-height:calc(100vh - 72px)!important;}}
+  .st-key-profile_menu_trigger {{right:16px!important;top:12px!important;width:176px!important;height:56px!important;}}
+  .st-key-iars_profile_menu {{right:10px!important;top:72px!important;width:calc(100vw - 20px)!important;max-height:calc(100vh - 82px)!important;}}
 }}
 
 </style>
@@ -931,8 +958,8 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
         f'<div class="edl-topbar-title"><h1>{html.escape(page_title)}</h1><p>{html.escape(subtitle)}</p></div>'
         '<div class="edl-topbar-spacer"></div>'
         f'<div class="edl-topbar-date">{html.escape(date_text)} · v{html.escape(version)}</div>'
-        f'<a class="edl-user-chip" href="?profile_menu=1" target="_self" aria-label="Open Edit Profile" title="Edit Profile">{avatar_html}'
-        f'<div><strong>{name}</strong><span>{role}</span></div><div class="edl-user-chevron">⌄</div></a></div>'
+        f'<div class="edl-user-chip" aria-label="Edit Profile" title="Edit Profile">{avatar_html}'
+        f'<div><strong>{name}</strong><span>{role}</span></div><div class="edl-user-chevron">⌄</div></div></div>'
     )
 
 
