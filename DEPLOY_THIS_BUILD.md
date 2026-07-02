@@ -1,13 +1,11 @@
-# Deploy IARS v4.4.12
+# Deploy IARS v4.4.13
 
-1. Extract the ZIP on your computer.
-2. Upload the extracted contents directly into the GitHub repository root.
-3. Replace the existing files, especially `app.py`, `iars_pdf_editor.py`, `iars_theme.py`, and `iars_auth.py`.
-4. Commit to the branch used by Streamlit Community Cloud.
-5. In Streamlit, select **Manage app → Reboot app**.
-6. Refresh with **Ctrl + F5**.
+1. Run `SUPABASE_PROFILE_SETUP.sql` once in the Supabase SQL Editor.
+2. Extract the ZIP locally.
+3. Upload the extracted contents directly to the GitHub repository root, replacing the previous files.
+4. Do not upload the ZIP as an unextracted file or place the project in an extra nested folder.
+5. Commit to the branch used by Streamlit.
+6. Open Streamlit **Manage app → Reboot app**.
+7. Refresh the browser with **Ctrl + F5**.
 
-Do not upload the ZIP as an unextracted file and do not place the contents inside an extra nested folder.
-
-
-This build includes the 1.8-second autosave idle delay and exact clicked-character caret placement in PDF Tagging.
+The top-right profile card now contains username, password, profile-picture, and sign-out controls. Existing Streamlit Secrets remain the administrator fallback credentials if no editable override has been saved yet.

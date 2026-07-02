@@ -43,3 +43,7 @@ The preview-only authentication bypass and private `.streamlit/secrets.toml` are
 - Returning to an existing textbox with one left click places the caret at the clicked character.
 - Browser default caret-at-end behavior is suppressed.
 - Long-press drag and blue-handle resizing remain supported.
+## v4.4.13 Profile Menu
+
+The top-right user card is now clickable and opens Edit Profile. Users can change their username and password, upload or remove a JPG/PNG profile picture, and sign out from the same menu. The avatar is enlarged to 46×46 px. Run `SUPABASE_PROFILE_SETUP.sql` once before using these profile controls.
+

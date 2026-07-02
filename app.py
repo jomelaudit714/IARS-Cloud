@@ -29,6 +29,7 @@ from iars_auth import (
     render_auth_gate,
     render_account_sidebar,
     render_account_admin_page,
+    render_profile_menu,
     is_admin_user,
 )
 
@@ -1105,11 +1106,11 @@ with st.sidebar:
         "Archive, libraries and Master Data are ready." if system_ok else "Open Dashboard or Settings for details.",
         ok=system_ok,
     )
-    render_account_sidebar(auth_client, auth_user, auth_config)
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.12", page_title=page_key)
+render_app_header(auth_user, version="4.4.13", page_title=page_key)
+render_profile_menu(auth_client, auth_user, auth_config)
 
 
 def _navigate_to(label: str) -> None:

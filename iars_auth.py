@@ -8,6 +8,7 @@ import hmac
 import re
 import secrets
 from typing import Any
+from io import BytesIO
 
 import streamlit as st
 
@@ -16,6 +17,7 @@ from iars_theme import render_brand_stripe, render_login_hero, render_section_he
 
 DEFAULT_USERS_TABLE = "iars_users"
 DEFAULT_LOG_TABLE = "iars_auth_log"
+DEFAULT_PROFILE_TABLE = "iars_profiles"
 
 SESSION_USER_ID = "iars_session_user_id"
 SESSION_USERNAME = "iars_session_username"
@@ -37,6 +39,7 @@ class AuthConfig:
     service_role_key: str
     users_table: str = DEFAULT_USERS_TABLE
     log_table: str = DEFAULT_LOG_TABLE
+    profile_table: str = DEFAULT_PROFILE_TABLE
     admin_username: str = ""
     admin_password: str = ""
     admin_name: str = "IARS Administrator"
@@ -85,6 +88,9 @@ def read_auth_config(secrets_container: Any) -> AuthConfig:
         ),
         log_table=(
             _secret_value(admin_section, "log_table") or DEFAULT_LOG_TABLE
+        ),
+        profile_table=(
+            _secret_value(admin_section, "profile_table") or DEFAULT_PROFILE_TABLE
         ),
         admin_username=_secret_value(admin_section, "username"),
         admin_password=_secret_value(admin_section, "password"),
@@ -255,6 +261,227 @@ def _update_user(client: Any, config: AuthConfig, user_id: str, values: dict[str
     client.table(config.users_table).update(values).eq("id", user_id).execute()
 
 
+def _fetch_profile(client: Any, config: AuthConfig, user_id: str) -> dict[str, Any]:
+    """Return optional editable-profile overrides without blocking login if setup is pending."""
+    try:
+        response = (
+            client.table(config.profile_table)
+            .select("*")
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+        )
+        rows = _response_rows(response)
+        return rows[0] if rows else {}
+    except Exception:
+        return {}
+
+
+def _upsert_profile(client: Any, config: AuthConfig, user_id: str, values: dict[str, Any]) -> None:
+    payload = {"user_id": str(user_id), **values, "updated_at": _iso(_utc_now())}
+    try:
+        client.table(config.profile_table).upsert(payload, on_conflict="user_id").execute()
+    except Exception as exc:
+        raise ValueError(
+            "Profile storage is not ready. Run SUPABASE_PROFILE_SETUP.sql in Supabase, then retry."
+        ) from exc
+
+
+def _effective_admin_profile(client: Any, config: AuthConfig) -> dict[str, Any]:
+    profile = _fetch_profile(client, config, "admin")
+    username = str(profile.get("username_override") or config.admin_username).strip().casefold()
+    return {
+        **profile,
+        "username": username,
+        "full_name": config.admin_name,
+        "role": "admin",
+        "status": "Active",
+        "id": "admin",
+    }
+
+
+def _merge_profile(user: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(user)
+    picture = str(profile.get("profile_picture_data") or "").strip()
+    if picture:
+        merged["profile_picture_data"] = picture
+    return merged
+
+
+def _verify_current_password(client: Any, config: AuthConfig, user: dict[str, Any], password: str) -> bool:
+    if is_admin_user(user):
+        profile = _effective_admin_profile(client, config)
+        salt = str(profile.get("admin_password_salt") or "")
+        digest = str(profile.get("admin_password_hash") or "")
+        if salt and digest:
+            return _password_matches(password, salt, digest)
+        return hmac.compare_digest(str(password or ""), config.admin_password)
+
+    fresh = _fetch_user_by_id(client, config, str(user.get("id", "")))
+    if not fresh:
+        return False
+    return _password_matches(
+        password,
+        str(fresh.get("password_salt", "")),
+        str(fresh.get("password_hash", "")),
+    )
+
+
+def _username_is_available(client: Any, config: AuthConfig, username: str, user: dict[str, Any]) -> bool:
+    existing = _fetch_user(client, config, username)
+    if existing and str(existing.get("id")) != str(user.get("id")):
+        return False
+    admin_username = _effective_admin_profile(client, config).get("username", "")
+    if not is_admin_user(user) and username == admin_username:
+        return False
+    return True
+
+
+def _profile_picture_data(uploaded_file: Any) -> str:
+    if uploaded_file is None:
+        raise ValueError("Select a JPG or PNG image first.")
+    if int(getattr(uploaded_file, "size", 0) or 0) > 5 * 1024 * 1024:
+        raise ValueError("Profile picture must not exceed 5 MB.")
+    mime = str(getattr(uploaded_file, "type", "") or "").lower()
+    if mime not in {"image/jpeg", "image/jpg", "image/png"}:
+        raise ValueError("Upload a JPG or PNG image.")
+    try:
+        from PIL import Image, ImageOps
+
+        image = Image.open(BytesIO(uploaded_file.getvalue()))
+        image = ImageOps.exif_transpose(image).convert("RGB")
+        side = min(image.size)
+        left = (image.width - side) // 2
+        top = (image.height - side) // 2
+        image = image.crop((left, top, left + side, top + side)).resize((320, 320), Image.Resampling.LANCZOS)
+        output = BytesIO()
+        image.save(output, format="JPEG", quality=88, optimize=True)
+        encoded = base64.b64encode(output.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{encoded}"
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("The selected image could not be processed.") from exc
+
+
+def _close_profile_menu() -> None:
+    try:
+        del st.query_params["profile_menu"]
+    except Exception:
+        st.query_params["profile_menu"] = "0"
+
+
+def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -> None:
+    """Render the floating edit-profile panel opened from the top-right user card."""
+    if str(st.query_params.get("profile_menu", "0") or "0") != "1":
+        return
+
+    current_username = user_username(user)
+    role_label = "Administrator" if is_admin_user(user) else "Auditor"
+    with st.container(key="iars_profile_menu"):
+        title_col, close_col = st.columns([8, 1], vertical_alignment="center")
+        with title_col:
+            st.markdown("## Edit Profile")
+            st.caption(f"@{current_username} · {role_label}")
+        with close_col:
+            if st.button("✕", key="profile_menu_close", help="Close profile menu"):
+                _close_profile_menu()
+                st.rerun()
+
+        with st.expander("Change Username", expanded=False):
+            with st.form("profile_change_username_form"):
+                st.text_input("Current Username", value=current_username, disabled=True)
+                new_username_input = st.text_input("New Username", placeholder="Enter a new username")
+                current_password = st.text_input("Current Password", type="password")
+                submitted = st.form_submit_button("Update Username", type="primary", use_container_width=True)
+            if submitted:
+                try:
+                    new_username = normalize_username(new_username_input)
+                    if new_username == current_username:
+                        raise ValueError("Enter a different username.")
+                    if not _verify_current_password(client, config, user, current_password):
+                        raise ValueError("Current password is incorrect.")
+                    if not _username_is_available(client, config, new_username, user):
+                        raise ValueError("That username is already in use.")
+                    if is_admin_user(user):
+                        _upsert_profile(client, config, "admin", {"username_override": new_username})
+                    else:
+                        _update_user(client, config, str(user.get("id", "")), {"username": new_username})
+                    st.session_state[SESSION_USERNAME] = new_username
+                    _log_event(client, config, event_type="username_changed", username=new_username, user_id=None if is_admin_user(user) else str(user.get("id", "")), success=True)
+                    st.success("Username updated successfully.")
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Unable to update username: {exc}")
+
+        with st.expander("Change Password", expanded=False):
+            with st.form("profile_change_password_form"):
+                current_password = st.text_input("Current Password", type="password", key="profile_current_password")
+                new_password = st.text_input("New Password", type="password", key="profile_new_password")
+                confirm_password = st.text_input("Confirm New Password", type="password", key="profile_confirm_password")
+                submitted = st.form_submit_button("Update Password", type="primary", use_container_width=True)
+            if submitted:
+                try:
+                    if not _verify_current_password(client, config, user, current_password):
+                        raise ValueError("Current password is incorrect.")
+                    validated = validate_password(new_password, confirm_password)
+                    if _verify_current_password(client, config, user, validated):
+                        raise ValueError("New password must be different from the current password.")
+                    salt, digest = _new_password_parts(validated)
+                    if is_admin_user(user):
+                        _upsert_profile(client, config, "admin", {"admin_password_salt": salt, "admin_password_hash": digest})
+                    else:
+                        _update_user(client, config, str(user.get("id", "")), {"password_salt": salt, "password_hash": digest, "failed_login_attempts": 0, "locked_until": None})
+                    _log_event(client, config, event_type="password_changed", username=current_username, user_id=None if is_admin_user(user) else str(user.get("id", "")), success=True)
+                    st.success("Password updated successfully.")
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Unable to update password: {exc}")
+
+        with st.expander("Change Profile Picture", expanded=False):
+            st.caption("JPG or PNG · Maximum 5 MB")
+            uploaded_picture = st.file_uploader(
+                "Upload profile picture",
+                type=["jpg", "jpeg", "png"],
+                key="profile_picture_upload",
+            )
+            if uploaded_picture is not None:
+                st.image(uploaded_picture, width=160, caption="Profile picture preview")
+            save_col, remove_col = st.columns(2)
+            with save_col:
+                if st.button("Save Picture", key="profile_picture_save", type="primary", use_container_width=True):
+                    try:
+                        data_uri = _profile_picture_data(uploaded_picture)
+                        _upsert_profile(client, config, str(user.get("id", "")), {"profile_picture_data": data_uri})
+                        _log_event(client, config, event_type="profile_picture_changed", username=current_username, user_id=None if is_admin_user(user) else str(user.get("id", "")), success=True)
+                        st.success("Profile picture updated successfully.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    except Exception as exc:
+                        st.error(f"Unable to save profile picture: {exc}")
+            with remove_col:
+                if st.button("Remove Picture", key="profile_picture_remove", use_container_width=True):
+                    try:
+                        _upsert_profile(client, config, str(user.get("id", "")), {"profile_picture_data": None})
+                        st.success("Profile picture removed.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    except Exception as exc:
+                        st.error(f"Unable to remove profile picture: {exc}")
+
+        st.divider()
+        if st.button("Sign Out", key="profile_menu_sign_out", type="primary", use_container_width=True):
+            _log_event(client, config, event_type="sign_out", username=current_username, user_id=None if is_admin_user(user) else str(user.get("id", "")), success=True)
+            clear_auth_session()
+            _close_profile_menu()
+            st.rerun()
+
+
 def _log_event(
     client: Any,
     config: AuthConfig,
@@ -334,23 +561,18 @@ def restore_auth_session(client: Any, config: AuthConfig) -> dict[str, Any] | No
     st.session_state[SESSION_LAST_ACTIVITY] = _iso(_utc_now())
 
     if role == "admin":
-        if username != config.admin_username.casefold():
+        admin_user = _effective_admin_profile(client, config)
+        if username != str(admin_user.get("username", "")).casefold():
             clear_auth_session()
             return None
-        return {
-            "id": "admin",
-            "username": config.admin_username.casefold(),
-            "full_name": config.admin_name,
-            "role": "admin",
-            "status": "Active",
-        }
+        return admin_user
 
     user = _fetch_user_by_id(client, config, user_id)
     if not user or str(user.get("status", "")) != "Active":
         clear_auth_session()
         return None
     user["role"] = "user"
-    return user
+    return _merge_profile(user, _fetch_profile(client, config, str(user.get("id", ""))))
 
 
 def _render_setup_notice() -> None:
@@ -380,17 +602,14 @@ def _process_sign_in_credentials(
     password: str,
 ) -> None:
     username = normalize_username(username_input)
-    if username == config.admin_username.casefold():
-        if not hmac.compare_digest(password, config.admin_password):
+    admin_user = _effective_admin_profile(client, config)
+    if username == str(admin_user.get("username", "")).casefold():
+        salt = str(admin_user.get("admin_password_salt") or "")
+        digest = str(admin_user.get("admin_password_hash") or "")
+        password_ok = _password_matches(password, salt, digest) if salt and digest else hmac.compare_digest(password, config.admin_password)
+        if not password_ok:
             _log_event(client, config, event_type="admin_sign_in", username=username, success=False)
             raise ValueError("Incorrect username or password.")
-        admin_user = {
-            "id": "admin",
-            "username": username,
-            "full_name": config.admin_name,
-            "role": "admin",
-            "status": "Active",
-        }
         _set_session(admin_user)
         _log_event(client, config, event_type="admin_sign_in", username=username, success=True)
         st.success("Administrator signed in successfully.")
@@ -1105,17 +1324,5 @@ def render_account_admin_page(client: Any, config: AuthConfig) -> None:
 def render_account_sidebar(
     client: Any, user: dict[str, Any], config: AuthConfig
 ) -> None:
-    """Render a compact signed-in user card and sign-out action."""
-    render_sidebar_user(user)
-    username = user_username(user)
-    if st.button("Sign Out", key="iars_sign_out", use_container_width=True):
-        _log_event(
-            client,
-            config,
-            event_type="sign_out",
-            username=username,
-            user_id=None if is_admin_user(user) else str(user.get("id", "")),
-            success=True,
-        )
-        clear_auth_session()
-        st.rerun()
+    """Backward-compatible no-op; account actions now live in the top-right profile menu."""
+    return None
