@@ -873,8 +873,13 @@ a.iars-verify-action:focus-visible {{
 .st-key-profile_menu_trigger .stButton>button {{
   min-height:60px!important;border:0!important;border-radius:12px!important;background:transparent!important;
   box-shadow:none!important;color:transparent!important;font-size:0!important;padding:0!important;cursor:pointer!important;
+  opacity:0!important;text-indent:-9999px!important;overflow:hidden!important;
 }}
-.st-key-profile_menu_trigger .stButton>button:hover {{background:rgba(255,255,255,.055)!important;box-shadow:0 0 0 2px rgba(246,212,107,.18)!important;transform:none!important;}}
+.st-key-profile_menu_trigger .stButton>button [data-testid="stMarkdownContainer"],
+.st-key-profile_menu_trigger .stButton>button p,
+.st-key-profile_menu_trigger .stButton>button span,
+.st-key-profile_menu_trigger .stButton>button svg {{display:none!important;width:0!important;height:0!important;}}
+.st-key-profile_menu_trigger .stButton>button:hover {{background:transparent!important;box-shadow:none!important;transform:none!important;}}
 .st-key-iars_profile_menu {{
   position:fixed!important;right:22px!important;top:82px!important;z-index:100000!important;
   width:min(410px,calc(100vw - 30px))!important;max-height:calc(100vh - 98px)!important;overflow-y:auto!important;

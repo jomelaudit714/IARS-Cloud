@@ -1,4 +1,4 @@
--- IARS editable profile and profile-picture storage (v4.4.14)
+-- IARS editable profile and profile-picture storage (v4.4.15)
 -- Safe to run more than once in the Supabase SQL Editor.
 
 create table if not exists public.iars_profiles (
@@ -25,8 +25,12 @@ create unique index if not exists iars_profiles_username_override_unique_idx
 
 alter table public.iars_profiles enable row level security;
 
--- The Streamlit app uses the server-side service-role key, so public policies
--- are intentionally not added.
+-- The Streamlit app uses the server-side service-role key. These explicit
+-- grants fix permission-denied errors even when the table already existed.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.iars_profiles to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
 insert into storage.buckets (
   id,
   name,
@@ -47,5 +51,10 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
--- Refresh PostgREST's schema cache after adding/updating columns.
+-- Explicit Storage grants for the server-side service-role client.
+grant usage on schema storage to service_role;
+grant select, insert, update, delete on table storage.buckets to service_role;
+grant select, insert, update, delete on table storage.objects to service_role;
+
+-- Refresh PostgREST's schema cache after adding/updating columns and grants.
 notify pgrst, 'reload schema';

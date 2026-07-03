@@ -531,9 +531,9 @@ def _close_profile_menu() -> None:
 def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -> None:
     """Render a session-safe floating edit-profile panel from the top-right user card."""
     trigger_clicked = st.button(
-        "Open profile menu",
+        "​",
         key="profile_menu_trigger",
-        help="Open Edit Profile",
+        help=None,
     )
     if trigger_clicked:
         st.session_state[PROFILE_MENU_OPEN] = not bool(st.session_state.get(PROFILE_MENU_OPEN, False))
@@ -616,14 +616,21 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                 diagnostics = _profile_storage_diagnostics(client, config)
                 if diagnostics["table_ready"] and diagnostics["bucket_ready"]:
                     st.success("Profile table and picture storage are ready.")
+                elif diagnostics["table_ready"]:
+                    st.info(
+                        "The profile table is ready. If Storage is unavailable, the system will "
+                        "automatically save the optimized picture in the secure profile record."
+                    )
+                    if diagnostics["bucket_error"]:
+                        st.caption(f"Storage diagnostic: {diagnostics['bucket_error']}")
                 else:
-                    if not diagnostics["table_ready"]:
-                        st.error(f"Profile table check failed: {diagnostics['table_error']}")
-                    if not diagnostics["bucket_ready"]:
-                        st.error(f"Profile picture bucket check failed: {diagnostics['bucket_error']}")
+                    st.error(f"Profile table check failed: {diagnostics['table_error']}")
                     st.caption("Run the updated SUPABASE_PROFILE_SETUP.sql, then refresh this page.")
 
-                st.caption("JPG or PNG · Maximum 5 MB")
+                st.caption(
+                    "JPG or PNG · Maximum 5 MB · Automatically centered, cropped to a square, "
+                    "and resized to 320 × 320 pixels"
+                )
                 uploaded_picture = st.file_uploader(
                     "Upload profile picture",
                     type=["jpg", "jpeg", "png"],
@@ -635,18 +642,64 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                 with save_col:
                     if st.button("Save Picture", key="profile_picture_save", type="primary", use_container_width=True):
                         try:
-                            if not diagnostics["table_ready"] or not diagnostics["bucket_ready"]:
-                                raise ValueError("Profile storage checks must pass before uploading.")
+                            if not diagnostics["table_ready"]:
+                                raise ValueError(
+                                    "The profile table is not accessible. Run the updated "
+                                    "SUPABASE_PROFILE_SETUP.sql, then refresh the app."
+                                )
+
                             jpeg_bytes = _profile_picture_jpeg(uploaded_picture)
-                            picture_path = _upload_profile_picture(client, config, user_id, jpeg_bytes)
-                            _upsert_profile(
+                            picture_data = (
+                                "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
+                            )
+                            picture_path = ""
+                            storage_error = ""
+
+                            if diagnostics["bucket_ready"]:
+                                try:
+                                    picture_path = _upload_profile_picture(
+                                        client, config, user_id, jpeg_bytes
+                                    )
+                                except Exception as exc:
+                                    storage_error = _profile_error_text(exc)
+
+                            if picture_path:
+                                _upsert_profile(
+                                    client,
+                                    config,
+                                    user_id,
+                                    {
+                                        "profile_picture_path": picture_path,
+                                        "profile_picture_data": None,
+                                    },
+                                )
+                                success_message = "Profile picture uploaded and updated successfully."
+                            else:
+                                _upsert_profile(
+                                    client,
+                                    config,
+                                    user_id,
+                                    {
+                                        "profile_picture_path": None,
+                                        "profile_picture_data": picture_data,
+                                    },
+                                )
+                                success_message = (
+                                    "Profile picture updated successfully using the secure "
+                                    "database fallback."
+                                )
+                                if storage_error:
+                                    success_message += f" Storage note: {storage_error}"
+
+                            _log_event(
                                 client,
                                 config,
-                                user_id,
-                                {"profile_picture_path": picture_path, "profile_picture_data": None},
+                                event_type="profile_picture_changed",
+                                username=current_username,
+                                user_id=None if is_admin_user(user) else user_id,
+                                success=True,
                             )
-                            _log_event(client, config, event_type="profile_picture_changed", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
-                            st.success("Profile picture updated successfully.")
+                            st.success(success_message)
                             st.rerun()
                         except ValueError as exc:
                             st.error(str(exc))
