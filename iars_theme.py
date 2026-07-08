@@ -864,27 +864,31 @@ a.iars-verify-action:focus-visible {{
 .st-key-extract_pdf_upload [data-testid="stWidgetLabel"] p {{font-size:.82rem!important;font-weight:720!important;color:var(--edl-navy)!important;}}
 
 
-/* v4.4.16 session-safe profile trigger and polished profile menu */
+/* v4.4.17 smooth profile popover: open/close does not rerun the app */
 .st-key-profile_menu_trigger {{
   position:fixed!important;right:12px!important;top:14px!important;z-index:100020!important;
   width:252px!important;height:66px!important;margin:0!important;padding:0!important;
 }}
-.st-key-profile_menu_trigger .stButton,.st-key-profile_menu_trigger .stButton>button {{width:100%!important;height:100%!important;margin:0!important;}}
-.st-key-profile_menu_trigger .stButton>button {{
-  min-height:66px!important;border:0!important;border-radius:12px!important;background:transparent!important;
-  box-shadow:none!important;color:transparent!important;font-size:0!important;padding:0!important;cursor:pointer!important;
-  opacity:0!important;text-indent:-9999px!important;overflow:hidden!important;
+.st-key-profile_menu_trigger [data-testid="stPopover"] {{width:100%!important;height:100%!important;margin:0!important;padding:0!important;}}
+.st-key-profile_menu_trigger [data-testid="stPopover"] > button,
+.st-key-profile_menu_trigger button[kind="secondary"],
+.st-key-profile_menu_trigger button {{
+  width:100%!important;height:100%!important;min-height:66px!important;margin:0!important;padding:0!important;
+  border:0!important;border-radius:12px!important;background:transparent!important;box-shadow:none!important;
+  color:transparent!important;font-size:0!important;line-height:0!important;cursor:pointer!important;opacity:0!important;
+  text-indent:-9999px!important;overflow:hidden!important;transform:none!important;
 }}
-.st-key-profile_menu_trigger .stButton>button [data-testid="stMarkdownContainer"],
-.st-key-profile_menu_trigger .stButton>button p,
-.st-key-profile_menu_trigger .stButton>button span,
-.st-key-profile_menu_trigger .stButton>button svg {{display:none!important;width:0!important;height:0!important;}}
-.st-key-profile_menu_trigger .stButton>button:hover {{background:transparent!important;box-shadow:none!important;transform:none!important;border-color:transparent!important;}}
+.st-key-profile_menu_trigger button [data-testid="stMarkdownContainer"],
+.st-key-profile_menu_trigger button p,
+.st-key-profile_menu_trigger button span,
+.st-key-profile_menu_trigger button svg {{display:none!important;width:0!important;height:0!important;}}
+.st-key-profile_menu_trigger button:hover,
+.st-key-profile_menu_trigger button:focus,
+.st-key-profile_menu_trigger button:active {{background:transparent!important;box-shadow:none!important;transform:none!important;border-color:transparent!important;outline:0!important;}}
 .st-key-iars_profile_menu {{
-  position:fixed!important;right:22px!important;top:82px!important;z-index:100000!important;
   width:min(410px,calc(100vw - 30px))!important;max-height:calc(100vh - 98px)!important;overflow-y:auto!important;
   background:#FFF!important;border:1px solid #CAD5E3!important;border-radius:15px!important;
-  padding:1rem 1rem 1.05rem!important;box-shadow:0 22px 52px rgba(16,24,40,.26)!important;
+  padding:1rem 1rem 1.05rem!important;box-shadow:0 22px 52px rgba(16,24,40,.22)!important;
 }}
 .st-key-iars_profile_menu h2 {{margin:0!important;color:#061A36!important;font-size:1.38rem!important;}}
 .st-key-iars_profile_menu [data-testid="stExpander"] {{border:1px solid #D7E0EB!important;border-radius:10px!important;background:#FAFCFF!important;margin:.5rem 0!important;overflow:hidden!important;}}
@@ -899,20 +903,15 @@ a.iars-verify-action:focus-visible {{
 .st-key-iars_profile_menu .stTextInput input {{min-height:41px!important;background:transparent!important;color:#061A36!important;}}
 .st-key-iars_profile_menu .stTextInput [aria-disabled="true"] {{background:#F2F4F7!important;color:#667085!important;}}
 .st-key-iars_profile_menu .stButton>button {{min-height:40px!important;}}
-.st-key-profile_menu_close {{display:flex!important;justify-content:flex-end!important;align-items:center!important;}}
-.st-key-profile_menu_close .stButton>button {{
-  min-width:34px!important;width:34px!important;height:34px!important;min-height:34px!important;padding:0!important;
-  border-radius:50%!important;border:1px solid #D5DEE9!important;background:#F4F7FA!important;color:#344054!important;
-  font-size:1.18rem!important;font-weight:700!important;line-height:1!important;box-shadow:none!important;
-}}
-.st-key-profile_menu_close .stButton>button:hover {{background:#E8EEF5!important;border-color:#B7C5D6!important;color:#061A36!important;transform:none!important;}}
 .st-key-iars_profile_menu [data-testid="stFileUploaderDropzone"] {{min-height:70px!important;padding:.65rem!important;background:#FBFCFE!important;border-color:#AFC1D6!important;border-radius:10px!important;}}
 .st-key-iars_profile_menu [data-testid="stFileUploaderDropzone"] button {{min-height:34px!important;padding:.35rem .7rem!important;}}
 .st-key-iars_profile_menu [data-testid="stAlert"] {{font-size:.78rem!important;}}
 @media(max-width:900px) {{
   .st-key-profile_menu_trigger {{right:8px!important;top:10px!important;width:190px!important;height:60px!important;}}
-  .st-key-iars_profile_menu {{right:10px!important;top:72px!important;width:calc(100vw - 20px)!important;max-height:calc(100vh - 82px)!important;}}
+  .st-key-profile_menu_trigger button {{min-height:60px!important;}}
+  .st-key-iars_profile_menu {{width:calc(100vw - 20px)!important;max-height:calc(100vh - 82px)!important;}}
 }}
+
 
 </style>
 """

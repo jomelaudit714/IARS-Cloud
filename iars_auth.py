@@ -527,216 +527,229 @@ def _profile_picture_data(uploaded_file: Any) -> str:
 PROFILE_MENU_OPEN = "iars_profile_menu_open"
 
 
-def _close_profile_menu() -> None:
-    st.session_state[PROFILE_MENU_OPEN] = False
+def _profile_diagnostics_cached(client: Any, config: AuthConfig) -> dict[str, Any]:
+    """Cache profile diagnostics per browser session to avoid menu-open lag."""
+    cache_key = "iars_profile_storage_diagnostics"
+    cached = st.session_state.get(cache_key)
+    if isinstance(cached, dict):
+        return cached
+    diagnostics = _profile_storage_diagnostics(client, config)
+    st.session_state[cache_key] = diagnostics
+    return diagnostics
+
+
+def _refresh_profile_diagnostics(client: Any, config: AuthConfig) -> dict[str, Any]:
+    diagnostics = _profile_storage_diagnostics(client, config)
+    st.session_state["iars_profile_storage_diagnostics"] = diagnostics
+    return diagnostics
+
+
+def _profile_save_picture(
+    client: Any,
+    config: AuthConfig,
+    *,
+    user: dict[str, Any],
+    user_id: str,
+    current_username: str,
+    uploaded_picture: Any,
+) -> None:
+    if uploaded_picture is None:
+        raise ValueError("Please choose a JPG or PNG picture first.")
+
+    diagnostics = _refresh_profile_diagnostics(client, config)
+    if not diagnostics.get("table_ready"):
+        raise ValueError(
+            "The profile table is not accessible. Run the updated "
+            "SUPABASE_PROFILE_SETUP.sql, then refresh the app."
+        )
+
+    jpeg_bytes = _profile_picture_jpeg(uploaded_picture)
+    picture_data = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
+    picture_path = ""
+    storage_error = ""
+
+    if diagnostics.get("bucket_ready"):
+        try:
+            picture_path = _upload_profile_picture(client, config, user_id, jpeg_bytes)
+        except Exception as exc:
+            storage_error = _profile_error_text(exc)
+
+    if picture_path:
+        _upsert_profile(
+            client,
+            config,
+            user_id,
+            {"profile_picture_path": picture_path, "profile_picture_data": None},
+        )
+    else:
+        _upsert_profile(
+            client,
+            config,
+            user_id,
+            {"profile_picture_path": None, "profile_picture_data": picture_data},
+        )
+        if storage_error:
+            st.caption(f"Storage fallback used: {storage_error}")
+
+    _log_event(
+        client,
+        config,
+        event_type="profile_picture_changed",
+        username=current_username,
+        user_id=None if is_admin_user(user) else user_id,
+        success=True,
+    )
+    st.success("Profile picture updated successfully.")
 
 
 def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -> None:
-    """Render a session-safe floating edit-profile panel from the top-right user card."""
-    trigger_clicked = st.button(
-        "​",
-        key="profile_menu_trigger",
-        help=None,
-    )
-    if trigger_clicked:
-        st.session_state[PROFILE_MENU_OPEN] = not bool(st.session_state.get(PROFILE_MENU_OPEN, False))
+    """Render the top-right profile menu with a front-end popover.
 
-    if not bool(st.session_state.get(PROFILE_MENU_OPEN, False)):
-        return
-
+    The user-card open/close action uses Streamlit's popover with on_change="ignore",
+    so opening and closing the menu no longer triggers a full app rerun.  Database
+    and Storage checks are performed only when the user saves/removes data.
+    """
     current_username = user_username(user)
     role_label = "Administrator" if is_admin_user(user) else "Auditor"
     user_id = "admin" if is_admin_user(user) else str(user.get("id", ""))
-    current_profile = _fetch_profile(client, config, user_id)
 
-    with st.container(key="iars_profile_menu"):
-        title_col, close_col = st.columns([8, 1], vertical_alignment="center")
-        with title_col:
+    with st.popover(
+        "​",
+        key="profile_menu_trigger",
+        help=None,
+        use_container_width=True,
+        width="content",
+        on_change="ignore",
+    ):
+        with st.container(key="iars_profile_menu"):
             st.markdown("## Edit Profile")
             st.caption(f"@{current_username} · {role_label}")
-        with close_col:
-            if st.button("×", key="profile_menu_close"):
-                _close_profile_menu()
-                st.rerun()
+            st.caption("Close this panel by clicking the top-right user card again or anywhere outside the menu.")
 
-        with st.expander("Change Username", expanded=False):
-            with st.container(key="profile_username_panel"):
-                with st.form("profile_change_username_form"):
-                    st.text_input("Current Username", value=current_username, disabled=True)
-                    new_username_input = st.text_input("New Username", placeholder="Enter a new username")
-                    current_password = st.text_input("Current Password", type="password")
-                    submitted = st.form_submit_button("Update Username", type="primary", use_container_width=True)
-                if submitted:
-                    try:
-                        new_username = normalize_username(new_username_input)
-                        if new_username == current_username:
-                            raise ValueError("Enter a different username.")
-                        if not _verify_current_password(client, config, user, current_password):
-                            raise ValueError("Current password is incorrect.")
-                        if not _username_is_available(client, config, new_username, user):
-                            raise ValueError("That username is already in use.")
-                        if is_admin_user(user):
-                            _upsert_profile(client, config, "admin", {"username_override": new_username})
-                        else:
-                            _update_user(client, config, user_id, {"username": new_username})
-                        st.session_state[SESSION_USERNAME] = new_username
-                        if _has_persistent_auth_token():
-                            refreshed_user = {**user, "username": new_username}
-                            _store_persistent_auth_token(config, refreshed_user, True)
-                        _log_event(client, config, event_type="username_changed", username=new_username, user_id=None if is_admin_user(user) else user_id, success=True)
-                        st.success("Username updated successfully.")
-                        st.rerun()
-                    except ValueError as exc:
-                        st.error(str(exc))
-                    except Exception as exc:
-                        st.error(f"Unable to update username: {_profile_error_text(exc)}")
-
-        with st.expander("Change Password", expanded=False):
-            with st.container(key="profile_password_panel"):
-                with st.form("profile_change_password_form"):
-                    current_password = st.text_input("Current Password", type="password", key="profile_current_password")
-                    new_password = st.text_input("New Password", type="password", key="profile_new_password")
-                    confirm_password = st.text_input("Confirm New Password", type="password", key="profile_confirm_password")
-                    submitted = st.form_submit_button("Update Password", type="primary", use_container_width=True)
-                if submitted:
-                    try:
-                        if not _verify_current_password(client, config, user, current_password):
-                            raise ValueError("Current password is incorrect.")
-                        validated = validate_password(new_password, confirm_password)
-                        if _verify_current_password(client, config, user, validated):
-                            raise ValueError("New password must be different from the current password.")
-                        salt, digest = _new_password_parts(validated)
-                        if is_admin_user(user):
-                            _upsert_profile(client, config, "admin", {"admin_password_salt": salt, "admin_password_hash": digest})
-                        else:
-                            _update_user(client, config, user_id, {"password_salt": salt, "password_hash": digest, "failed_login_attempts": 0, "locked_until": None})
-                        _log_event(client, config, event_type="password_changed", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
-                        st.success("Password updated successfully.")
-                    except ValueError as exc:
-                        st.error(str(exc))
-                    except Exception as exc:
-                        st.error(f"Unable to update password: {_profile_error_text(exc)}")
-
-        with st.expander("Change Profile Picture", expanded=False):
-            with st.container(key="profile_picture_panel"):
-                diagnostics = _profile_storage_diagnostics(client, config)
-                if diagnostics["table_ready"] and diagnostics["bucket_ready"]:
-                    st.success("Profile table and picture storage are ready.")
-                elif diagnostics["table_ready"]:
-                    st.info(
-                        "The profile table is ready. If Storage is unavailable, the system will "
-                        "automatically save the optimized picture in the secure profile record."
-                    )
-                    if diagnostics["bucket_error"]:
-                        st.caption(f"Storage diagnostic: {diagnostics['bucket_error']}")
-                else:
-                    st.error(f"Profile table check failed: {diagnostics['table_error']}")
-                    st.caption("Run the updated SUPABASE_PROFILE_SETUP.sql, then refresh this page.")
-
-                st.caption(
-                    "JPG or PNG · Maximum 5 MB · The image is automatically centered, "
-                    "square-cropped, compressed, and fitted to the profile card."
-                )
-                uploaded_picture = st.file_uploader(
-                    "Choose JPG or PNG profile picture",
-                    type=["jpg", "jpeg", "png"],
-                    key="profile_picture_upload",
-                    label_visibility="collapsed",
-                )
-                if uploaded_picture is not None:
-                    try:
-                        preview_bytes = _profile_picture_jpeg(uploaded_picture)
-                        st.image(preview_bytes, width=180, caption="Ready to save")
-                    except ValueError as exc:
-                        st.error(str(exc))
-                save_col, remove_col = st.columns(2)
-                with save_col:
-                    if st.button("Save Picture", key="profile_picture_save", type="primary", use_container_width=True):
+            with st.expander("Change Username", expanded=False):
+                with st.container(key="profile_username_panel"):
+                    with st.form("profile_change_username_form"):
+                        st.text_input("Current Username", value=current_username, disabled=True)
+                        new_username_input = st.text_input("New Username", placeholder="Enter a new username")
+                        current_password = st.text_input("Current Password", type="password")
+                        submitted = st.form_submit_button("Update Username", type="primary", use_container_width=True)
+                    if submitted:
                         try:
-                            if uploaded_picture is None:
-                                raise ValueError("Please choose a JPG or PNG picture first.")
-                            if not diagnostics["table_ready"]:
-                                raise ValueError(
-                                    "The profile table is not accessible. Run the updated "
-                                    "SUPABASE_PROFILE_SETUP.sql, then refresh the app."
-                                )
-
-                            jpeg_bytes = _profile_picture_jpeg(uploaded_picture)
-                            picture_data = (
-                                "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
-                            )
-                            picture_path = ""
-                            storage_error = ""
-
-                            if diagnostics["bucket_ready"]:
-                                try:
-                                    picture_path = _upload_profile_picture(
-                                        client, config, user_id, jpeg_bytes
-                                    )
-                                except Exception as exc:
-                                    storage_error = _profile_error_text(exc)
-
-                            if picture_path:
-                                _upsert_profile(
-                                    client,
-                                    config,
-                                    user_id,
-                                    {
-                                        "profile_picture_path": picture_path,
-                                        "profile_picture_data": None,
-                                    },
-                                )
-                                success_message = "Profile picture updated successfully."
+                            new_username = normalize_username(new_username_input)
+                            if new_username == current_username:
+                                raise ValueError("Enter a different username.")
+                            if not _verify_current_password(client, config, user, current_password):
+                                raise ValueError("Current password is incorrect.")
+                            if not _username_is_available(client, config, new_username, user):
+                                raise ValueError("That username is already in use.")
+                            if is_admin_user(user):
+                                _upsert_profile(client, config, "admin", {"username_override": new_username})
                             else:
-                                _upsert_profile(
+                                _update_user(client, config, user_id, {"username": new_username})
+                            st.session_state[SESSION_USERNAME] = new_username
+                            if _has_persistent_auth_token():
+                                refreshed_user = {**user, "username": new_username}
+                                _store_persistent_auth_token(config, refreshed_user, True)
+                            _log_event(client, config, event_type="username_changed", username=new_username, user_id=None if is_admin_user(user) else user_id, success=True)
+                            st.success("Username updated successfully.")
+                            st.rerun()
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        except Exception as exc:
+                            st.error(f"Unable to update username: {_profile_error_text(exc)}")
+
+            with st.expander("Change Password", expanded=False):
+                with st.container(key="profile_password_panel"):
+                    with st.form("profile_change_password_form"):
+                        current_password = st.text_input("Current Password", type="password", key="profile_current_password")
+                        new_password = st.text_input("New Password", type="password", key="profile_new_password")
+                        confirm_password = st.text_input("Confirm New Password", type="password", key="profile_confirm_password")
+                        submitted = st.form_submit_button("Update Password", type="primary", use_container_width=True)
+                    if submitted:
+                        try:
+                            if not _verify_current_password(client, config, user, current_password):
+                                raise ValueError("Current password is incorrect.")
+                            validated = validate_password(new_password, confirm_password)
+                            if _verify_current_password(client, config, user, validated):
+                                raise ValueError("New password must be different from the current password.")
+                            salt, digest = _new_password_parts(validated)
+                            if is_admin_user(user):
+                                _upsert_profile(client, config, "admin", {"admin_password_salt": salt, "admin_password_hash": digest})
+                            else:
+                                _update_user(client, config, user_id, {"password_salt": salt, "password_hash": digest, "failed_login_attempts": 0, "locked_until": None})
+                            _log_event(client, config, event_type="password_changed", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
+                            st.success("Password updated successfully.")
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        except Exception as exc:
+                            st.error(f"Unable to update password: {_profile_error_text(exc)}")
+
+            with st.expander("Change Profile Picture", expanded=False):
+                with st.container(key="profile_picture_panel"):
+                    diagnostics = st.session_state.get("iars_profile_storage_diagnostics")
+                    if isinstance(diagnostics, dict):
+                        if diagnostics.get("table_ready") and diagnostics.get("bucket_ready"):
+                            st.success("Profile table and picture storage are ready.")
+                        elif diagnostics.get("table_ready"):
+                            st.info(
+                                "The profile table is ready. If Storage is unavailable, the system will "
+                                "save the optimized picture in the secure profile record."
+                            )
+                        else:
+                            st.warning("Profile storage setup still needs review.")
+                    else:
+                        st.info("Storage setup is checked only when you save or remove a profile picture to keep the menu smooth.")
+
+                    st.caption(
+                        "JPG or PNG · Maximum 5 MB · The image is automatically centered, "
+                        "square-cropped, compressed, and fitted to the profile card."
+                    )
+                    uploaded_picture = st.file_uploader(
+                        "Choose JPG or PNG profile picture",
+                        type=["jpg", "jpeg", "png"],
+                        key="profile_picture_upload",
+                        label_visibility="collapsed",
+                    )
+                    if uploaded_picture is not None:
+                        try:
+                            preview_bytes = _profile_picture_jpeg(uploaded_picture)
+                            st.image(preview_bytes, width=180, caption="Ready to save")
+                        except ValueError as exc:
+                            st.error(str(exc))
+                    save_col, remove_col = st.columns(2)
+                    with save_col:
+                        if st.button("Save Picture", key="profile_picture_save", type="primary", use_container_width=True):
+                            try:
+                                _profile_save_picture(
                                     client,
                                     config,
-                                    user_id,
-                                    {
-                                        "profile_picture_path": None,
-                                        "profile_picture_data": picture_data,
-                                    },
+                                    user=user,
+                                    user_id=user_id,
+                                    current_username=current_username,
+                                    uploaded_picture=uploaded_picture,
                                 )
-                                success_message = "Profile picture updated successfully."
-                                if storage_error:
-                                    st.caption(f"Storage fallback used: {storage_error}")
+                                st.rerun()
+                            except ValueError as exc:
+                                st.error(str(exc))
+                            except Exception as exc:
+                                st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
+                    with remove_col:
+                        if st.button("Remove Picture", key="profile_picture_remove", use_container_width=True):
+                            try:
+                                _refresh_profile_diagnostics(client, config)
+                                _remove_profile_picture(client, config, user_id)
+                                st.success("Profile picture removed.")
+                                st.rerun()
+                            except ValueError as exc:
+                                st.error(str(exc))
+                            except Exception as exc:
+                                st.error(f"Unable to remove profile picture: {_profile_error_text(exc)}")
 
-                            _log_event(
-                                client,
-                                config,
-                                event_type="profile_picture_changed",
-                                username=current_username,
-                                user_id=None if is_admin_user(user) else user_id,
-                                success=True,
-                            )
-                            st.success(success_message)
-                            st.rerun()
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        except Exception as exc:
-                            st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
-                with remove_col:
-                    if st.button("Remove Picture", key="profile_picture_remove", use_container_width=True):
-                        try:
-                            _remove_profile_picture(
-                                client,
-                                config,
-                                user_id,
-                                str(current_profile.get("profile_picture_path") or ""),
-                            )
-                            st.success("Profile picture removed.")
-                            st.rerun()
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        except Exception as exc:
-                            st.error(f"Unable to remove profile picture: {_profile_error_text(exc)}")
-
-        st.divider()
-        if st.button("Sign Out", key="profile_menu_sign_out", type="primary", use_container_width=True):
-            _log_event(client, config, event_type="sign_out", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
-            clear_auth_session()
-            _close_profile_menu()
-            st.rerun()
+            st.divider()
+            if st.button("Sign Out", key="profile_menu_sign_out", type="primary", use_container_width=True):
+                _log_event(client, config, event_type="sign_out", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
+                clear_auth_session()
+                st.rerun()
 
 
 def _log_event(
