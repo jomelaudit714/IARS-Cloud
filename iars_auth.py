@@ -13,7 +13,7 @@ from io import BytesIO
 
 import streamlit as st
 
-from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards
+from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards, render_transition_guard
 
 
 DEFAULT_USERS_TABLE = "iars_users"
@@ -25,8 +25,12 @@ SESSION_USER_ID = "iars_session_user_id"
 SESSION_USERNAME = "iars_session_username"
 SESSION_ROLE = "iars_session_role"
 SESSION_LAST_ACTIVITY = "iars_session_last_activity"
+SESSION_USER_CACHE = "iars_session_user_cache"
+SESSION_CACHE_LOADED_AT = "iars_session_cache_loaded_at"
 PERSISTENT_AUTH_PARAM = "iars_session"
+SIGN_OUT_PARAM = "iars_sign_out"
 PERSISTENT_AUTH_REMEMBER_DAYS = 7
+AUTH_CACHE_SECONDS = 300
 ADMIN_LAST_CODE = "iars_admin_last_code"
 
 PASSWORD_ITERATIONS = 310_000
@@ -647,6 +651,9 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                             else:
                                 _update_user(client, config, user_id, {"username": new_username})
                             st.session_state[SESSION_USERNAME] = new_username
+                            cached_user = dict(user)
+                            cached_user["username"] = new_username
+                            _cache_session_user(cached_user)
                             if _has_persistent_auth_token():
                                 refreshed_user = {**user, "username": new_username}
                                 _store_persistent_auth_token(config, refreshed_user, True)
@@ -728,6 +735,8 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                                     current_username=current_username,
                                     uploaded_picture=uploaded_picture,
                                 )
+                                st.session_state.pop(SESSION_USER_CACHE, None)
+                                st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
                                 st.rerun()
                             except ValueError as exc:
                                 st.error(str(exc))
@@ -739,6 +748,8 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                                 _refresh_profile_diagnostics(client, config)
                                 _remove_profile_picture(client, config, user_id)
                                 st.success("Profile picture removed.")
+                                st.session_state.pop(SESSION_USER_CACHE, None)
+                                st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
                                 st.rerun()
                             except ValueError as exc:
                                 st.error(str(exc))
@@ -746,10 +757,11 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                                 st.error(f"Unable to remove profile picture: {_profile_error_text(exc)}")
 
             st.divider()
-            if st.button("Sign Out", key="profile_menu_sign_out", type="primary", use_container_width=True):
-                _log_event(client, config, event_type="sign_out", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
-                clear_auth_session()
-                st.rerun()
+            st.markdown(
+                '<a class="iars-profile-signout-action" href="?iars_sign_out=1" target="_self" '
+                'aria-label="Sign Out">Sign Out</a>',
+                unsafe_allow_html=True,
+            )
 
 
 def _log_event(
@@ -849,6 +861,8 @@ def _clear_persistent_auth_token() -> None:
             del st.query_params[PERSISTENT_AUTH_PARAM]
         if "auth_view" in st.query_params:
             del st.query_params["auth_view"]
+        if SIGN_OUT_PARAM in st.query_params:
+            del st.query_params[SIGN_OUT_PARAM]
     except Exception:
         pass
 
@@ -860,20 +874,45 @@ def _has_persistent_auth_token() -> bool:
         return False
 
 
-def _set_session_state(user: dict[str, Any], *, show_mask: bool = True) -> None:
+def _cache_session_user(user: dict[str, Any]) -> None:
+    """Keep the hydrated user/profile in Streamlit session state.
+
+    This prevents every dashboard/sidebar click from calling Supabase again just
+    to re-read the same user and profile picture.  Profile-changing actions
+    update this cache before rerun.
+    """
+    st.session_state[SESSION_USER_CACHE] = dict(user or {})
+    st.session_state[SESSION_CACHE_LOADED_AT] = _iso(_utc_now())
+
+
+def _get_cached_session_user(user_id: str, username: str, role: str) -> dict[str, Any] | None:
+    cached = st.session_state.get(SESSION_USER_CACHE)
+    loaded_at = _parse_datetime(st.session_state.get(SESSION_CACHE_LOADED_AT))
+    if not isinstance(cached, dict) or loaded_at is None:
+        return None
+    if _utc_now() - loaded_at > timedelta(seconds=AUTH_CACHE_SECONDS):
+        return None
+    if str(cached.get("id", "")) != str(user_id):
+        return None
+    if str(cached.get("username", "")).casefold() != str(username).casefold():
+        return None
+    if str(cached.get("role", "user")) != str(role):
+        return None
+    return dict(cached)
+
+
+def _set_session_state(user: dict[str, Any], *, show_mask: bool = False) -> None:
     st.session_state[SESSION_USER_ID] = str(user.get("id", ""))
     st.session_state[SESSION_USERNAME] = str(user.get("username", ""))
     st.session_state[SESSION_ROLE] = str(user.get("role", "user"))
     st.session_state[SESSION_LAST_ACTIVITY] = _iso(_utc_now())
+    _cache_session_user(user)
     if show_mask:
-        # Show a short full-screen mask during the first authenticated rerun.
-        # This prevents stale login widgets from remaining visible while the
-        # dashboard DOM is being reconciled by Streamlit.
         st.session_state["iars_show_login_exit_mask"] = True
 
 
 def _set_session(user: dict[str, Any], config: AuthConfig | None = None, remember: bool = False) -> None:
-    _set_session_state(user)
+    _set_session_state(user, show_mask=False)
     if config is not None:
         _store_persistent_auth_token(config, user, remember)
 
@@ -884,6 +923,8 @@ def clear_auth_session() -> None:
         SESSION_USERNAME,
         SESSION_ROLE,
         SESSION_LAST_ACTIVITY,
+        SESSION_USER_CACHE,
+        SESSION_CACHE_LOADED_AT,
         ADMIN_LAST_CODE,
         PROFILE_MENU_OPEN,
         "iars_show_login_exit_mask",
@@ -965,12 +1006,16 @@ def restore_auth_session(client: Any, config: AuthConfig) -> dict[str, Any] | No
         return None
 
     st.session_state[SESSION_LAST_ACTIVITY] = _iso(_utc_now())
+    cached_user = _get_cached_session_user(user_id, username, role)
+    if cached_user is not None:
+        return cached_user
 
     if role == "admin":
         admin_user = _effective_admin_profile(client, config)
         if username != str(admin_user.get("username", "")).casefold():
             clear_auth_session()
             return None
+        _cache_session_user(admin_user)
         return admin_user
 
     user = _fetch_user_by_id(client, config, user_id)
@@ -978,7 +1023,9 @@ def restore_auth_session(client: Any, config: AuthConfig) -> dict[str, Any] | No
         clear_auth_session()
         return None
     user["role"] = "user"
-    return _merge_profile(user, _fetch_profile(client, config, str(user.get("id", ""))), client, config)
+    merged = _merge_profile(user, _fetch_profile(client, config, str(user.get("id", ""))), client, config)
+    _cache_session_user(merged)
+    return merged
 
 
 def _render_setup_notice() -> None:
@@ -1019,7 +1066,6 @@ def _process_sign_in_credentials(
             raise ValueError("Incorrect username or password.")
         _set_session(admin_user, config, remember)
         _log_event(client, config, event_type="admin_sign_in", username=username, success=True)
-        st.success("Administrator signed in successfully.")
         st.rerun()
 
     user = _fetch_user(client, config, username)
@@ -1082,7 +1128,6 @@ def _process_sign_in_credentials(
         user_id=str(user.get("id")),
         success=True,
     )
-    st.success("Signed in successfully.")
     st.rerun()
 
 
@@ -1404,6 +1449,7 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
 
 def render_auth_gate(config: AuthConfig):
     """Require username/password authentication before rendering IARS."""
+    render_transition_guard()
 
     def _render_native_shell(render_right) -> None:
         st.markdown('<div class="iars-login-marker"></div>', unsafe_allow_html=True)
@@ -1431,7 +1477,20 @@ def render_auth_gate(config: AuthConfig):
 
     try:
         client = create_auth_client(config)
-        user = restore_auth_session(client, config)
+        sign_out_requested = str(st.query_params.get(SIGN_OUT_PARAM, "") or "").strip() == "1"
+        if sign_out_requested:
+            _log_event(
+                client,
+                config,
+                event_type="sign_out",
+                username=str(st.session_state.get(SESSION_USERNAME, "") or ""),
+                user_id=None if str(st.session_state.get(SESSION_ROLE, "")) == "admin" else str(st.session_state.get(SESSION_USER_ID, "") or ""),
+                success=True,
+            )
+            clear_auth_session()
+            user = None
+        else:
+            user = restore_auth_session(client, config)
     except Exception as exc:
         def _error_panel() -> None:
             render_section_header(

@@ -53,6 +53,118 @@ def _render_html(fragment: str) -> None:
     st.markdown(fragment.strip(), unsafe_allow_html=True)
 
 
+
+def render_transition_guard() -> None:
+    """Install a tiny browser-side veil for route/auth transitions.
+
+    Streamlit reruns are normal, but this prevents the old dashboard or a blank
+    white frame from being visible while the next page is being reconciled.
+    """
+    try:
+        import streamlit.components.v1 as components
+
+        components.html(
+            """
+<script>
+(function () {
+  try {
+    const doc = window.parent && window.parent.document ? window.parent.document : document;
+    const OVERLAY_ID = "iars-transition-veil";
+    let overlay = doc.getElementById(OVERLAY_ID);
+    if (!overlay) {
+      overlay = doc.createElement("div");
+      overlay.id = OVERLAY_ID;
+      overlay.innerHTML = '<div class="iars-transition-card"><div class="iars-transition-spinner"></div><strong>Loading</strong><span>Please wait…</span></div>';
+      doc.body.appendChild(overlay);
+    }
+
+    if (!doc.getElementById("iars-transition-veil-style")) {
+      const style = doc.createElement("style");
+      style.id = "iars-transition-veil-style";
+      style.textContent = `
+        #iars-transition-veil {
+          position: fixed; inset: 0; z-index: 2147483200;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(245,247,251,.97); color: #061A36;
+          opacity: 0; visibility: hidden; pointer-events: none;
+          transition: opacity .12s ease, visibility .12s ease;
+          font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+        }
+        #iars-transition-veil.iars-show {
+          opacity: 1; visibility: visible; pointer-events: auto;
+        }
+        #iars-transition-veil .iars-transition-card {
+          display: flex; flex-direction: column; align-items: center; gap: 8px;
+          padding: 18px 22px; border-radius: 16px; background: #fff;
+          border: 1px solid #DDE5EF; box-shadow: 0 18px 46px rgba(16,24,40,.14);
+        }
+        #iars-transition-veil .iars-transition-card strong { font-size: 15px; font-weight: 800; }
+        #iars-transition-veil .iars-transition-card span { font-size: 12px; color: #667085; }
+        #iars-transition-veil .iars-transition-spinner {
+          width: 30px; height: 30px; border-radius: 50%;
+          border: 3px solid #DCE3EC; border-top-color: #061A36;
+          animation: iarsTransitionSpin .7s linear infinite;
+        }
+        @keyframes iarsTransitionSpin { to { transform: rotate(360deg); } }
+      `;
+      doc.head.appendChild(style);
+    }
+
+    function buttonText(el) {
+      return ((el.innerText || el.textContent || el.getAttribute("aria-label") || "") + "").trim();
+    }
+
+    function shouldVeil(target) {
+      const el = target && target.closest ? target.closest("button,a") : null;
+      if (!el) return false;
+      const text = buttonText(el);
+      if (!text) return false;
+
+      if (/^(Sign In|Sign Out|Log Out|Logout)$/i.test(text)) return true;
+      if (/Back to Sign In|Forgot password|Verify Your Account|Sign Up/i.test(text)) return true;
+
+      const inSidebar = !!el.closest('section[data-testid="stSidebar"]');
+      if (inSidebar && /(Dashboard|Generate Extraction|PDF Tagging|Shared PDF Archive|Audit Workpapers|Policies|Memoranda|User Management|Master Data|Settings)/i.test(text)) {
+        return true;
+      }
+
+      if (/(Generate Extraction|Archive PDFs|PDF Tagging|Audit Workpapers|Policies & Memos|User Management)/i.test(text)) {
+        return true;
+      }
+
+      return false;
+    }
+
+    function showVeil() {
+      overlay.classList.add("iars-show");
+      window.clearTimeout(window.__iarsTransitionVeilTimer);
+      window.__iarsTransitionVeilTimer = window.setTimeout(function () {
+        overlay.classList.remove("iars-show");
+      }, 8000);
+    }
+
+    if (!doc.__iarsTransitionGuardInstalled) {
+      doc.addEventListener("click", function (event) {
+        if (shouldVeil(event.target)) showVeil();
+      }, true);
+      doc.__iarsTransitionGuardInstalled = true;
+    }
+
+    // When this component is mounted on the newly-rendered page, fade the veil.
+    window.setTimeout(function () {
+      overlay.classList.remove("iars-show");
+    }, 180);
+  } catch (err) {}
+})();
+</script>
+            """,
+            height=0,
+            width=0,
+        )
+    except Exception:
+        pass
+
+
 def apply_iars_theme() -> None:
     """Apply the EDL enterprise Internal Audit design system."""
     css = f"""
@@ -891,6 +1003,18 @@ a.iars-verify-action:focus-visible {{
   padding:1rem 1rem 1.05rem!important;box-shadow:0 22px 52px rgba(16,24,40,.22)!important;
 }}
 .st-key-iars_profile_menu h2 {{margin:0!important;color:#061A36!important;font-size:1.38rem!important;}}
+
+.iars-profile-signout-action {{
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  width:100%!important;min-height:44px!important;border-radius:10px!important;
+  background:linear-gradient(135deg,#061A36,#0A2C59)!important;color:#FFF!important;
+  text-decoration:none!important;font-weight:800!important;font-size:.92rem!important;
+  border:1px solid rgba(255,255,255,.12)!important;box-shadow:0 8px 18px rgba(6,26,54,.16)!important;
+}}
+.iars-profile-signout-action:hover {{
+  filter:brightness(1.04)!important;color:#FFF!important;text-decoration:none!important;
+}}
+
 .st-key-iars_profile_menu [data-testid="stExpander"] {{border:1px solid #D7E0EB!important;border-radius:10px!important;background:#FAFCFF!important;margin:.5rem 0!important;overflow:hidden!important;}}
 .st-key-iars_profile_menu [data-testid="stExpander"] summary {{min-height:46px!important;padding:.1rem .72rem!important;background:#F7F9FC!important;}}
 .st-key-iars_profile_menu [data-testid="stExpander"] summary p {{font-weight:780!important;color:#061A36!important;font-size:.88rem!important;}}

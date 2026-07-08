@@ -5,6 +5,7 @@ from datetime import date
 import base64
 import hashlib
 import re
+import time
 
 import pandas as pd
 import streamlit as st
@@ -23,6 +24,7 @@ from iars_theme import (
     render_stepper,
     render_activity_list,
     render_system_overview,
+    render_transition_guard,
 )
 from iars_auth import (
     read_auth_config,
@@ -89,6 +91,7 @@ st.set_page_config(
 )
 
 apply_iars_theme()
+render_transition_guard()
 
 auth_config = read_auth_config(st.secrets)
 auth_client, auth_user = render_auth_gate(auth_config)
@@ -987,6 +990,29 @@ def render_document_library_page(
                     st.error(str(exc))
 
 
+
+def _session_ttl_cache(key: str, ttl_seconds: int, loader):
+    """Small session cache for remote Supabase list calls.
+
+    It keeps normal page changes responsive while still refreshing shared data
+    automatically after a short period.
+    """
+    now = time.time()
+    cached = st.session_state.get(key)
+    if isinstance(cached, dict):
+        ts = float(cached.get("ts", 0) or 0)
+        if now - ts < ttl_seconds and "value" in cached:
+            return cached.get("value")
+    value = loader()
+    st.session_state[key] = {"ts": now, "value": value}
+    return value
+
+
+def _invalidate_session_cache(*keys: str) -> None:
+    for key in keys:
+        st.session_state.pop(key, None)
+
+
 archive_config = read_archive_config(st.secrets)
 archive_client = archive_client_or_none(archive_config)
 archive_ready = archive_is_configured(archive_config) and archive_client is not None
@@ -1017,7 +1043,11 @@ additional_auditor_rows = []
 additional_auditor_error = ""
 if archive_ready and archive_client is not None:
     try:
-        additional_auditor_rows = list_additional_auditors(archive_client, active_only=False)
+        additional_auditor_rows = _session_ttl_cache(
+            "iars_additional_auditors_cache_v4_4_18",
+            90,
+            lambda: list_additional_auditors(archive_client, active_only=False),
+        )
     except Exception as exc:
         additional_auditor_error = str(exc)
 
@@ -1070,7 +1100,6 @@ with st.sidebar:
         type="primary" if dashboard_selected else "secondary",
     ):
         st.session_state["main_navigation"] = dashboard_label
-        st.rerun()
 
     audit_expanded = selected_page in audit_report_nav
     with st.expander("📂 Audit Report", expanded=audit_expanded):
@@ -1084,7 +1113,6 @@ with st.sidebar:
                 type="primary" if is_selected else "secondary",
             ):
                 st.session_state["main_navigation"] = nav_label
-                st.rerun()
 
     remaining_nav = [label for label in standalone_nav if label != dashboard_label]
     for nav_index, nav_label in enumerate(remaining_nav):
@@ -1097,7 +1125,6 @@ with st.sidebar:
             type="primary" if is_selected else "secondary",
         ):
             st.session_state["main_navigation"] = nav_label
-            st.rerun()
 
     st.divider()
     system_ok = archive_ready and document_library_ready and MASTER_DATA_PATH.exists()
@@ -1109,7 +1136,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.17", page_title=page_key)
+render_app_header(auth_user, version="4.4.18", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -1125,7 +1152,11 @@ if page_key == "Dashboard":
     home_archive_error = ""
     if archive_ready and archive_client is not None:
         try:
-            home_archive_records = list_archive_records(archive_client, archive_config, limit=1000)
+            home_archive_records = _session_ttl_cache(
+                "iars_home_archive_records_cache_v4_4_18",
+                75,
+                lambda: list_archive_records(archive_client, archive_config, limit=200),
+            )
         except Exception as exc:
             home_archive_error = str(exc)
 
@@ -1134,11 +1165,19 @@ if page_key == "Dashboard":
     home_library_error = ""
     if document_library_ready and document_client is not None:
         try:
-            home_template_records = list_documents(
-                document_client, document_config, collection=COLLECTION_TEMPLATES, limit=1000
+            home_template_records = _session_ttl_cache(
+                "iars_home_template_records_cache_v4_4_18",
+                75,
+                lambda: list_documents(
+                    document_client, document_config, collection=COLLECTION_TEMPLATES, limit=200
+                ),
             )
-            home_policy_records = list_documents(
-                document_client, document_config, collection=COLLECTION_POLICIES, limit=1000
+            home_policy_records = _session_ttl_cache(
+                "iars_home_policy_records_cache_v4_4_18",
+                75,
+                lambda: list_documents(
+                    document_client, document_config, collection=COLLECTION_POLICIES, limit=200
+                ),
             )
         except Exception as exc:
             home_library_error = str(exc)
@@ -1460,6 +1499,7 @@ if page_key == "Shared PDF Archive":
                                 status=new_auditor_status,
                                 created_by="IARS Archive Admin",
                             )
+                            _invalidate_session_cache("iars_additional_auditors_cache_v4_4_18")
                             st.success("New auditor added successfully and is now available in the dropdown.")
                             st.rerun()
                         except Exception as exc:
