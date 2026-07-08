@@ -387,6 +387,29 @@ def _profile_picture_data_uri(jpeg_bytes: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
 
 
+def _profile_picture_editor_image(image: Any, *, max_side: int = 380) -> Any:
+    """Return a UI-friendly copy for the cropper so the editor stays compact."""
+    try:
+        from PIL import Image
+
+        if not isinstance(image, Image.Image):
+            return image
+        working = image.copy()
+        working.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+        return working
+    except Exception:
+        return image
+
+
+def _center_square_coords(image: Any) -> tuple[int, int, int, int]:
+    width = int(getattr(image, "width", 0) or 0)
+    height = int(getattr(image, "height", 0) or 0)
+    side = max(1, min(width, height))
+    left = max(0, (width - side) // 2)
+    top = max(0, (height - side) // 2)
+    return (left, left + side, top, top + side)
+
+
 def _profile_picture_path(user_id: str) -> str:
     safe_id = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(user_id or "user")).strip("_") or "user"
     return f"profiles/{safe_id}/avatar.jpg"
@@ -527,30 +550,77 @@ def _profile_picture_data(uploaded_file: Any) -> str:
     return _profile_picture_data_uri(_profile_picture_jpeg(uploaded_file))
 
 
-def _render_profile_picture_circle_preview(data_uri: str) -> None:
+def _render_profile_picture_editor_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .iars-photo-editor-shell {
+            border:1px solid rgba(243,194,71,.55);
+            border-radius:20px;
+            padding:14px;
+            background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);
+            box-shadow:0 14px 34px rgba(7,32,72,.10);
+            margin:.35rem 0 .75rem 0;
+        }
+        .iars-photo-editor-title {font-weight:900;color:#082C63;margin:0 0 2px 0;font-size:1.02rem;}
+        .iars-photo-editor-sub {color:#506174;margin:0 0 10px 0;font-size:.91rem;line-height:1.35;}
+        .iars-card-avatar-preview {
+            display:flex;align-items:center;gap:12px;border-radius:18px;border:1.5px solid #F3C247;
+            background:linear-gradient(135deg,#07386C 0%,#0F4E8D 58%,#0A3569 100%);
+            padding:12px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 8px 18px rgba(8,39,81,.16);
+            position:relative;overflow:hidden;min-height:78px;
+        }
+        .iars-card-avatar-preview:after {content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,#12A150 0 22%,#EF3340 22% 100%);}
+        .iars-card-avatar-circle {
+            width:68px;height:68px;border-radius:50%;overflow:hidden;border:3px solid #F3C247;background:#EAF1FF;
+            box-shadow:0 6px 16px rgba(0,0,0,.24);flex:0 0 68px;position:relative;
+        }
+        .iars-card-avatar-circle img {display:block;width:100%;height:100%;object-fit:cover;}
+        .iars-card-avatar-circle:before {content:"";position:absolute;inset:-6px;border:2px dashed rgba(255,255,255,.55);border-radius:50%;pointer-events:none;}
+        .iars-card-avatar-text {min-width:0;}
+        .iars-card-avatar-name {font-weight:900;color:#FFF;margin:0;font-size:1rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .iars-card-avatar-role {font-weight:900;color:#F3C247;margin:4px 0 0 0;font-size:.78rem;}
+        .iars-avatar-guide {
+            display:flex;align-items:center;gap:10px;margin:10px 0 6px 0;padding:9px 10px;border-radius:14px;
+            background:#EEF5FF;border:1px solid rgba(10,65,128,.11);color:#314963;font-size:.88rem;line-height:1.35;
+        }
+        .iars-avatar-guide-badge {width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0A4B8D;color:white;font-weight:900;flex:0 0 34px;}
+        .iars-cropper-label {font-weight:850;color:#0A2A5E;margin:.15rem 0 .35rem 0;}
+        div[data-testid="stFileUploader"] section {border-radius:16px;border-color:rgba(10,65,128,.22);background:#F8FBFF;}
+        iframe[title="streamlit_cropper.st_cropper"] {border-radius:16px;border:1px solid rgba(10,65,128,.14);background:#FFFFFF;box-shadow:0 8px 18px rgba(8,39,81,.07);}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_profile_picture_card_preview(data_uri: str, display_name: str, role_label: str) -> None:
     if not data_uri:
         return
-    safe_uri = data_uri.replace("'", "%27")
+    safe_uri = data_uri.replace("'", "%27").replace('"', "%22")
+    safe_name = str(display_name or "User").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    safe_role = str(role_label or "User").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     st.markdown(
         f"""
-        <style>
-        .iars-avatar-preview-wrap {{display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid rgba(23,43,77,.12);border-radius:16px;background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);margin:.25rem 0 .6rem 0;}}
-        .iars-avatar-preview-circle {{width:92px;height:92px;border-radius:50%;overflow:hidden;border:4px solid #F3C247;box-shadow:0 8px 24px rgba(0,0,0,.12);flex:0 0 92px;background:#EAF1FF;}}
-        .iars-avatar-preview-circle img {{display:block;width:100%;height:100%;object-fit:cover;}}
-        .iars-avatar-preview-copy {{min-width:0;}}
-        .iars-avatar-preview-title {{font-weight:800;color:#0A2A5E;margin:0 0 2px 0;}}
-        .iars-avatar-preview-note {{margin:0;color:#516177;font-size:.93rem;line-height:1.35;}}
-        </style>
-        <div class="iars-avatar-preview-wrap">
-            <div class="iars-avatar-preview-circle"><img src="{safe_uri}" alt="Avatar preview"></div>
-            <div class="iars-avatar-preview-copy">
-                <p class="iars-avatar-preview-title">Live circle preview</p>
-                <p class="iars-avatar-preview-note">Ito ang actual na lalabas sa bilog na profile picture sa top-right user card.</p>
+        <div class="iars-photo-editor-shell">
+            <p class="iars-photo-editor-title">Final avatar preview</p>
+            <p class="iars-photo-editor-sub">Ito ang itsura bago i-save. Kapag okay na ang position sa bilog, click <b>Save Picture</b>.</p>
+            <div class="iars-card-avatar-preview">
+                <div class="iars-card-avatar-circle"><img src="{safe_uri}" alt="Avatar preview"></div>
+                <div class="iars-card-avatar-text">
+                    <p class="iars-card-avatar-name">{safe_name}</p>
+                    <p class="iars-card-avatar-role">{safe_role}</p>
+                </div>
             </div>
+            <div class="iars-avatar-guide"><div class="iars-avatar-guide-badge">↕</div><div>Adjust the crop box/image position on the left. The circular frame above shows the exact output for the top-right user card.</div></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_profile_picture_circle_preview(data_uri: str) -> None:
+    _render_profile_picture_card_preview(data_uri, "Profile Preview", "Live circular crop")
 
 
 
@@ -746,26 +816,36 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                     prepared_preview_bytes = None
                     if uploaded_picture is not None:
                         try:
+                            _render_profile_picture_editor_styles()
                             source_image = _profile_picture_image(uploaded_picture)
-                            crop_col, preview_col = st.columns([1.25, 0.95])
+                            editor_image = _profile_picture_editor_image(source_image)
+                            crop_col, preview_col = st.columns([1.05, 1.0], vertical_alignment="top")
                             with crop_col:
+                                st.markdown('<p class="iars-cropper-label">1. Position photo</p>', unsafe_allow_html=True)
                                 if st_cropper is not None:
-                                    st.caption("Drag the image and resize the crop area. The preview at the right shows the exact circular output.")
+                                    st.caption("Move or resize the square crop guide. Keep the face inside the guide.")
                                     cropped_image = st_cropper(
-                                        source_image,
+                                        editor_image,
                                         aspect_ratio=(1, 1),
+                                        default_coords=_center_square_coords(editor_image),
                                         box_color="#F3C247",
                                         realtime_update=True,
                                         return_type="image",
-                                        key="profile_picture_cropper",
+                                        key="profile_picture_cropper_v4421",
+                                        should_resize_image=False,
+                                        stroke_width=3,
                                     )
                                 else:
                                     st.info("Interactive drag positioning is not available in this environment. The system will use the best centered crop.")
-                                    cropped_image = source_image
+                                    cropped_image = editor_image
                                 prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
                             with preview_col:
-                                _render_profile_picture_circle_preview(_profile_picture_data_uri(prepared_preview_bytes))
-                                st.image(prepared_preview_bytes, width=170, caption="Square file preview")
+                                st.markdown('<p class="iars-cropper-label">2. Check circle result</p>', unsafe_allow_html=True)
+                                _render_profile_picture_card_preview(
+                                    _profile_picture_data_uri(prepared_preview_bytes),
+                                    str(user.get("full_name") or current_username or "User"),
+                                    role_label,
+                                )
                         except ValueError as exc:
                             st.error(str(exc))
                     save_col, remove_col = st.columns(2)
