@@ -13,6 +13,11 @@ from io import BytesIO
 
 import streamlit as st
 
+try:
+    from streamlit_cropper import st_cropper
+except Exception:
+    st_cropper = None
+
 from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards, render_transition_guard
 
 
@@ -337,7 +342,7 @@ def _profile_storage_diagnostics(client: Any, config: AuthConfig) -> dict[str, A
     return result
 
 
-def _profile_picture_jpeg(uploaded_file: Any) -> bytes:
+def _profile_picture_image(uploaded_file: Any) -> Any:
     if uploaded_file is None:
         raise ValueError("Select a JPG or PNG image first.")
     if int(getattr(uploaded_file, "size", 0) or 0) > 5 * 1024 * 1024:
@@ -349,20 +354,37 @@ def _profile_picture_jpeg(uploaded_file: Any) -> bytes:
         from PIL import Image, ImageOps
 
         image = Image.open(BytesIO(uploaded_file.getvalue()))
-        image = ImageOps.exif_transpose(image).convert("RGB")
-        side = min(image.size)
-        left = (image.width - side) // 2
-        top = (image.height - side) // 2
-        image = image.crop((left, top, left + side, top + side)).resize(
+        return ImageOps.exif_transpose(image).convert("RGB")
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("The selected image could not be processed.") from exc
+
+
+def _profile_picture_jpeg(uploaded_file: Any = None, *, image: Any | None = None) -> bytes:
+    try:
+        from PIL import Image
+
+        working = image.copy() if image is not None else _profile_picture_image(uploaded_file)
+        if not isinstance(working, Image.Image):
+            raise ValueError("The selected image could not be processed.")
+        side = min(working.size)
+        left = max(0, (working.width - side) // 2)
+        top = max(0, (working.height - side) // 2)
+        working = working.crop((left, top, left + side, top + side)).resize(
             (320, 320), Image.Resampling.LANCZOS
         )
         output = BytesIO()
-        image.save(output, format="JPEG", quality=88, optimize=True)
+        working.save(output, format="JPEG", quality=88, optimize=True)
         return output.getvalue()
     except ValueError:
         raise
     except Exception as exc:
         raise ValueError("The selected image could not be processed.") from exc
+
+
+def _profile_picture_data_uri(jpeg_bytes: bytes) -> str:
+    return "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
 
 
 def _profile_picture_path(user_id: str) -> str:
@@ -502,30 +524,34 @@ def _username_is_available(client: Any, config: AuthConfig, username: str, user:
 
 
 def _profile_picture_data(uploaded_file: Any) -> str:
-    if uploaded_file is None:
-        raise ValueError("Select a JPG or PNG image first.")
-    if int(getattr(uploaded_file, "size", 0) or 0) > 5 * 1024 * 1024:
-        raise ValueError("Profile picture must not exceed 5 MB.")
-    mime = str(getattr(uploaded_file, "type", "") or "").lower()
-    if mime not in {"image/jpeg", "image/jpg", "image/png"}:
-        raise ValueError("Upload a JPG or PNG image.")
-    try:
-        from PIL import Image, ImageOps
+    return _profile_picture_data_uri(_profile_picture_jpeg(uploaded_file))
 
-        image = Image.open(BytesIO(uploaded_file.getvalue()))
-        image = ImageOps.exif_transpose(image).convert("RGB")
-        side = min(image.size)
-        left = (image.width - side) // 2
-        top = (image.height - side) // 2
-        image = image.crop((left, top, left + side, top + side)).resize((320, 320), Image.Resampling.LANCZOS)
-        output = BytesIO()
-        image.save(output, format="JPEG", quality=88, optimize=True)
-        encoded = base64.b64encode(output.getvalue()).decode("ascii")
-        return f"data:image/jpeg;base64,{encoded}"
-    except ValueError:
-        raise
-    except Exception as exc:
-        raise ValueError("The selected image could not be processed.") from exc
+
+def _render_profile_picture_circle_preview(data_uri: str) -> None:
+    if not data_uri:
+        return
+    safe_uri = data_uri.replace("'", "%27")
+    st.markdown(
+        f"""
+        <style>
+        .iars-avatar-preview-wrap {{display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid rgba(23,43,77,.12);border-radius:16px;background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);margin:.25rem 0 .6rem 0;}}
+        .iars-avatar-preview-circle {{width:92px;height:92px;border-radius:50%;overflow:hidden;border:4px solid #F3C247;box-shadow:0 8px 24px rgba(0,0,0,.12);flex:0 0 92px;background:#EAF1FF;}}
+        .iars-avatar-preview-circle img {{display:block;width:100%;height:100%;object-fit:cover;}}
+        .iars-avatar-preview-copy {{min-width:0;}}
+        .iars-avatar-preview-title {{font-weight:800;color:#0A2A5E;margin:0 0 2px 0;}}
+        .iars-avatar-preview-note {{margin:0;color:#516177;font-size:.93rem;line-height:1.35;}}
+        </style>
+        <div class="iars-avatar-preview-wrap">
+            <div class="iars-avatar-preview-circle"><img src="{safe_uri}" alt="Avatar preview"></div>
+            <div class="iars-avatar-preview-copy">
+                <p class="iars-avatar-preview-title">Live circle preview</p>
+                <p class="iars-avatar-preview-note">Ito ang actual na lalabas sa bilog na profile picture sa top-right user card.</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 
 PROFILE_MENU_OPEN = "iars_profile_menu_open"
@@ -556,6 +582,7 @@ def _profile_save_picture(
     user_id: str,
     current_username: str,
     uploaded_picture: Any,
+    prepared_jpeg_bytes: bytes | None = None,
 ) -> None:
     if uploaded_picture is None:
         raise ValueError("Please choose a JPG or PNG picture first.")
@@ -567,8 +594,8 @@ def _profile_save_picture(
             "SUPABASE_PROFILE_SETUP.sql, then refresh the app."
         )
 
-    jpeg_bytes = _profile_picture_jpeg(uploaded_picture)
-    picture_data = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
+    jpeg_bytes = prepared_jpeg_bytes or _profile_picture_jpeg(uploaded_picture)
+    picture_data = _profile_picture_data_uri(jpeg_bytes)
     picture_path = ""
     storage_error = ""
 
@@ -708,8 +735,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                         st.info("Storage setup is checked only when you save or remove a profile picture to keep the menu smooth.")
 
                     st.caption(
-                        "JPG or PNG · Maximum 5 MB · The image is automatically centered, "
-                        "square-cropped, compressed, and fitted to the profile card."
+                        "JPG or PNG · Maximum 5 MB · Drag and reposition the photo, then review the circular preview before saving."
                     )
                     uploaded_picture = st.file_uploader(
                         "Choose JPG or PNG profile picture",
@@ -717,10 +743,29 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                         key="profile_picture_upload",
                         label_visibility="collapsed",
                     )
+                    prepared_preview_bytes = None
                     if uploaded_picture is not None:
                         try:
-                            preview_bytes = _profile_picture_jpeg(uploaded_picture)
-                            st.image(preview_bytes, width=180, caption="Ready to save")
+                            source_image = _profile_picture_image(uploaded_picture)
+                            crop_col, preview_col = st.columns([1.25, 0.95])
+                            with crop_col:
+                                if st_cropper is not None:
+                                    st.caption("Drag the image and resize the crop area. The preview at the right shows the exact circular output.")
+                                    cropped_image = st_cropper(
+                                        source_image,
+                                        aspect_ratio=(1, 1),
+                                        box_color="#F3C247",
+                                        realtime_update=True,
+                                        return_type="image",
+                                        key="profile_picture_cropper",
+                                    )
+                                else:
+                                    st.info("Interactive drag positioning is not available in this environment. The system will use the best centered crop.")
+                                    cropped_image = source_image
+                                prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
+                            with preview_col:
+                                _render_profile_picture_circle_preview(_profile_picture_data_uri(prepared_preview_bytes))
+                                st.image(prepared_preview_bytes, width=170, caption="Square file preview")
                         except ValueError as exc:
                             st.error(str(exc))
                     save_col, remove_col = st.columns(2)
@@ -734,6 +779,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                                     user_id=user_id,
                                     current_username=current_username,
                                     uploaded_picture=uploaded_picture,
+                                    prepared_jpeg_bytes=prepared_preview_bytes,
                                 )
                                 st.session_state.pop(SESSION_USER_CACHE, None)
                                 st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
