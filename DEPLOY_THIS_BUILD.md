@@ -14,3 +14,6 @@ JPG, JPEG, and PNG profile pictures are automatically centered, square-cropped, 
 ## V4.4.16 Notes
 - Use this build to fix profile menu click smoothness, remove the close button tooltip, improve profile picture upload, and keep the dashboard after browser refresh.
 - No new SQL is required if SUPABASE_PROFILE_SETUP.sql was already applied.
+
+## V4.4.19 Deployment Note
+After GitHub deployment, perform a browser hard refresh once (`Ctrl + F5`) so the previous V4.4.18 loading-overlay JavaScript listener is fully cleared from the browser tab. This build also includes a suppressor for the old listener, but a hard refresh is still recommended after deployment.

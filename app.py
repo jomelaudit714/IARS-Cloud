@@ -24,7 +24,7 @@ from iars_theme import (
     render_stepper,
     render_activity_list,
     render_system_overview,
-    render_transition_guard,
+    # render_transition_guard intentionally not imported in V4.4.19 - sidebar navigation should not show a loading veil.
 )
 from iars_auth import (
     read_auth_config,
@@ -91,7 +91,8 @@ st.set_page_config(
 )
 
 apply_iars_theme()
-render_transition_guard()
+# V4.4.19: do not install the navigation loading veil. Streamlit will still rerun on clicks,
+# but users will no longer see the "Loading / Please wait" card on every module switch.
 
 auth_config = read_auth_config(st.secrets)
 auth_client, auth_user = render_auth_gate(auth_config)
@@ -728,8 +729,13 @@ def render_document_library_page(
         )
         return
 
+    records_cache_key = f"iars_doc_library_records_{collection}_cache_v4_4_19"
     try:
-        records = list_documents(client, config, collection=collection, limit=2000)
+        records = _session_ttl_cache(
+            records_cache_key,
+            180,
+            lambda: list_documents(client, config, collection=collection, limit=2000),
+        )
     except Exception as exc:
         st.error(f"Unable to load the document library: {exc}")
         return
@@ -839,6 +845,7 @@ def render_document_library_page(
                         effective_date=effective_date,
                         uploaded_by=uploader_name,
                     )
+                    _invalidate_session_cache(f"iars_doc_library_records_{collection}_cache_v4_4_19")
                     st.success(f"{record.get('original_filename', uploaded_document.name)} was added to the shared library.")
                     st.rerun()
                 except DuplicateDocumentError as exc:
@@ -982,6 +989,7 @@ def render_document_library_page(
             ):
                 try:
                     delete_document(client, config, selected_record)
+                    _invalidate_session_cache(f"iars_doc_library_records_{collection}_cache_v4_4_19")
                     st.session_state.pop(state_key, None)
                     st.session_state.pop(f"library_download_id_{collection}", None)
                     st.success("Document deleted successfully.")
@@ -1044,7 +1052,7 @@ additional_auditor_error = ""
 if archive_ready and archive_client is not None:
     try:
         additional_auditor_rows = _session_ttl_cache(
-            "iars_additional_auditors_cache_v4_4_18",
+            "iars_additional_auditors_cache_v4_4_19",
             90,
             lambda: list_additional_auditors(archive_client, active_only=False),
         )
@@ -1136,7 +1144,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.18", page_title=page_key)
+render_app_header(auth_user, version="4.4.19", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -1153,7 +1161,7 @@ if page_key == "Dashboard":
     if archive_ready and archive_client is not None:
         try:
             home_archive_records = _session_ttl_cache(
-                "iars_home_archive_records_cache_v4_4_18",
+                "iars_home_archive_records_cache_v4_4_19",
                 75,
                 lambda: list_archive_records(archive_client, archive_config, limit=200),
             )
@@ -1166,14 +1174,14 @@ if page_key == "Dashboard":
     if document_library_ready and document_client is not None:
         try:
             home_template_records = _session_ttl_cache(
-                "iars_home_template_records_cache_v4_4_18",
+                "iars_home_template_records_cache_v4_4_19",
                 75,
                 lambda: list_documents(
                     document_client, document_config, collection=COLLECTION_TEMPLATES, limit=200
                 ),
             )
             home_policy_records = _session_ttl_cache(
-                "iars_home_policy_records_cache_v4_4_18",
+                "iars_home_policy_records_cache_v4_4_19",
                 75,
                 lambda: list_documents(
                     document_client, document_config, collection=COLLECTION_POLICIES, limit=200
@@ -1499,7 +1507,7 @@ if page_key == "Shared PDF Archive":
                                 status=new_auditor_status,
                                 created_by="IARS Archive Admin",
                             )
-                            _invalidate_session_cache("iars_additional_auditors_cache_v4_4_18")
+                            _invalidate_session_cache("iars_additional_auditors_cache_v4_4_19")
                             st.success("New auditor added successfully and is now available in the dropdown.")
                             st.rerun()
                         except Exception as exc:
@@ -1565,6 +1573,7 @@ if page_key == "Shared PDF Archive":
                                     uploaded_by=direct_uploaded_by,
                                 )
                             )
+                        _invalidate_session_cache("iars_archive_records_cache_v4_4_19")
                         st.dataframe(pd.DataFrame(results), width="stretch", hide_index=True)
 
             st.divider()
@@ -1574,10 +1583,15 @@ if page_key == "Shared PDF Archive":
             with refresh_col:
                 if st.button("Refresh List"):
                     st.session_state.pop("archive_preview_bytes", None)
+                    _invalidate_session_cache("iars_archive_records_cache_v4_4_19")
                     st.rerun()
 
             try:
-                records = list_archive_records(archive_client, archive_config)
+                records = _session_ttl_cache(
+                    "iars_archive_records_cache_v4_4_19",
+                    180,
+                    lambda: list_archive_records(archive_client, archive_config),
+                )
             except Exception as exc:
                 st.error(f"Unable to load archive records: {exc}")
                 records = []
@@ -1707,6 +1721,7 @@ if page_key == "Shared PDF Archive":
                         ):
                             try:
                                 delete_archived_pdf(archive_client, archive_config, selected_record)
+                                _invalidate_session_cache("iars_archive_records_cache_v4_4_19", "iars_archive_duplicate_check_cache_v4_4_19")
                                 st.session_state.pop("archive_preview_bytes", None)
                                 st.session_state.pop("archive_preview_record_id", None)
                                 st.success("Archived PDF deleted successfully.")
@@ -1742,7 +1757,11 @@ if page_key == "Generate Extraction":
         duplicate_references: list[str] = []
         if archive_ready and archive_client is not None:
             try:
-                archive_records_for_check = list_archive_records(archive_client, archive_config, limit=1000)
+                archive_records_for_check = _session_ttl_cache(
+                    "iars_archive_duplicate_check_cache_v4_4_19",
+                    180,
+                    lambda: list_archive_records(archive_client, archive_config, limit=1000),
+                )
                 duplicate_references = uploaded_archive_duplicate_references(
                     pdf_files, archive_records_for_check
                 )

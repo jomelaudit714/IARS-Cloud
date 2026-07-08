@@ -93,6 +93,10 @@ def render_transition_guard() -> None:
         #iars-transition-veil.iars-show {
           opacity: 1; visibility: visible; pointer-events: auto;
         }
+        body.iars-nav-click-no-veil #iars-transition-veil.iars-show {
+          opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+          transition: none !important;
+        }
         #iars-transition-veil .iars-transition-card {
           display: flex; flex-direction: column; align-items: center; gap: 8px;
           padding: 18px 22px; border-radius: 16px; background: #fff;
@@ -114,23 +118,46 @@ def render_transition_guard() -> None:
       return ((el.innerText || el.textContent || el.getAttribute("aria-label") || "") + "").trim();
     }
 
+    function isModuleNavigation(target) {
+      const el = target && target.closest ? target.closest("button,a") : null;
+      if (!el) return false;
+      const text = buttonText(el);
+      if (!text) return false;
+      const inSidebar = !!el.closest('section[data-testid="stSidebar"]');
+      if (inSidebar && /(Dashboard|Generate Extraction|PDF Tagging|Shared PDF Archive|Audit Workpapers|Policies|Memoranda|User Management|Master Data|Settings|Audit Report)/i.test(text)) {
+        return true;
+      }
+      if (/(Archive PDFs|PDF Tagging|Audit Workpapers|Policies & Memos|User Management)/i.test(text)) {
+        return true;
+      }
+      return false;
+    }
+
+    if (!doc.__iarsNoNavVeilSuppressorV4419) {
+      doc.addEventListener("pointerdown", function (event) {
+        if (!isModuleNavigation(event.target)) return;
+        doc.body.classList.add("iars-nav-click-no-veil");
+        const staleOverlay = doc.getElementById(OVERLAY_ID);
+        if (staleOverlay) staleOverlay.classList.remove("iars-show");
+        window.clearTimeout(window.__iarsNoNavVeilTimer);
+        window.__iarsNoNavVeilTimer = window.setTimeout(function () {
+          doc.body.classList.remove("iars-nav-click-no-veil");
+        }, 2500);
+      }, true);
+      doc.__iarsNoNavVeilSuppressorV4419 = true;
+    }
+
     function shouldVeil(target) {
       const el = target && target.closest ? target.closest("button,a") : null;
       if (!el) return false;
       const text = buttonText(el);
       if (!text) return false;
 
+      // V4.4.19: never show the loading veil for normal module/sidebar navigation.
+      // Streamlit still performs its standard rerun, but the user should not see
+      // the old custom "Loading / Please wait" card on every page switch.
       if (/^(Sign In|Sign Out|Log Out|Logout)$/i.test(text)) return true;
       if (/Back to Sign In|Forgot password|Verify Your Account|Sign Up/i.test(text)) return true;
-
-      const inSidebar = !!el.closest('section[data-testid="stSidebar"]');
-      if (inSidebar && /(Dashboard|Generate Extraction|PDF Tagging|Shared PDF Archive|Audit Workpapers|Policies|Memoranda|User Management|Master Data|Settings)/i.test(text)) {
-        return true;
-      }
-
-      if (/(Generate Extraction|Archive PDFs|PDF Tagging|Audit Workpapers|Policies & Memos|User Management)/i.test(text)) {
-        return true;
-      }
 
       return false;
     }
