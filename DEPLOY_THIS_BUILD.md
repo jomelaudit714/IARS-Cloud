@@ -1,4 +1,4 @@
-# Deploy IARS v4.4.15
+# Deploy IARS v4.4.16
 
 1. Run the included latest `SUPABASE_PROFILE_SETUP.sql` in Supabase SQL Editor. It is safe to run over the earlier profile setup; do not drop the existing profile table or bucket.
 2. Extract the ZIP locally.
@@ -9,3 +9,8 @@
 7. Refresh the browser with **Ctrl + F5**.
 
 JPG, JPEG, and PNG profile pictures are automatically centered, square-cropped, resized to 320 × 320 pixels, and fitted inside the circular avatar. The app uses Supabase Storage first and automatically falls back to the secure profile record when Storage is unavailable.
+
+
+## V4.4.16 Notes
+- Use this build to fix profile menu click smoothness, remove the close button tooltip, improve profile picture upload, and keep the dashboard after browser refresh.
+- No new SQL is required if SUPABASE_PROFILE_SETUP.sql was already applied.

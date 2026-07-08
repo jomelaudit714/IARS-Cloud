@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import base64
 import hashlib
 import hmac
+import json
 import re
 import secrets
 from typing import Any
@@ -24,6 +25,8 @@ SESSION_USER_ID = "iars_session_user_id"
 SESSION_USERNAME = "iars_session_username"
 SESSION_ROLE = "iars_session_role"
 SESSION_LAST_ACTIVITY = "iars_session_last_activity"
+PERSISTENT_AUTH_PARAM = "iars_session"
+PERSISTENT_AUTH_REMEMBER_DAYS = 7
 ADMIN_LAST_CODE = "iars_admin_last_code"
 
 PASSWORD_ITERATIONS = 310_000
@@ -552,7 +555,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
             st.markdown("## Edit Profile")
             st.caption(f"@{current_username} · {role_label}")
         with close_col:
-            if st.button("×", key="profile_menu_close", help="Close Edit Profile"):
+            if st.button("×", key="profile_menu_close"):
                 _close_profile_menu()
                 st.rerun()
 
@@ -577,6 +580,9 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                         else:
                             _update_user(client, config, user_id, {"username": new_username})
                         st.session_state[SESSION_USERNAME] = new_username
+                        if _has_persistent_auth_token():
+                            refreshed_user = {**user, "username": new_username}
+                            _store_persistent_auth_token(config, refreshed_user, True)
                         _log_event(client, config, event_type="username_changed", username=new_username, user_id=None if is_admin_user(user) else user_id, success=True)
                         st.success("Username updated successfully.")
                         st.rerun()
@@ -628,20 +634,27 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                     st.caption("Run the updated SUPABASE_PROFILE_SETUP.sql, then refresh this page.")
 
                 st.caption(
-                    "JPG or PNG · Maximum 5 MB · Automatically centered, cropped to a square, "
-                    "and resized to 320 × 320 pixels"
+                    "JPG or PNG · Maximum 5 MB · The image is automatically centered, "
+                    "square-cropped, compressed, and fitted to the profile card."
                 )
                 uploaded_picture = st.file_uploader(
-                    "Upload profile picture",
+                    "Choose JPG or PNG profile picture",
                     type=["jpg", "jpeg", "png"],
                     key="profile_picture_upload",
+                    label_visibility="collapsed",
                 )
                 if uploaded_picture is not None:
-                    st.image(uploaded_picture, width=180, caption="Profile picture preview")
+                    try:
+                        preview_bytes = _profile_picture_jpeg(uploaded_picture)
+                        st.image(preview_bytes, width=180, caption="Ready to save")
+                    except ValueError as exc:
+                        st.error(str(exc))
                 save_col, remove_col = st.columns(2)
                 with save_col:
                     if st.button("Save Picture", key="profile_picture_save", type="primary", use_container_width=True):
                         try:
+                            if uploaded_picture is None:
+                                raise ValueError("Please choose a JPG or PNG picture first.")
                             if not diagnostics["table_ready"]:
                                 raise ValueError(
                                     "The profile table is not accessible. Run the updated "
@@ -673,7 +686,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                                         "profile_picture_data": None,
                                     },
                                 )
-                                success_message = "Profile picture uploaded and updated successfully."
+                                success_message = "Profile picture updated successfully."
                             else:
                                 _upsert_profile(
                                     client,
@@ -684,12 +697,9 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                                         "profile_picture_data": picture_data,
                                     },
                                 )
-                                success_message = (
-                                    "Profile picture updated successfully using the secure "
-                                    "database fallback."
-                                )
+                                success_message = "Profile picture updated successfully."
                                 if storage_error:
-                                    success_message += f" Storage note: {storage_error}"
+                                    st.caption(f"Storage fallback used: {storage_error}")
 
                             _log_event(
                                 client,
@@ -754,15 +764,105 @@ def _log_event(
         pass
 
 
-def _set_session(user: dict[str, Any]) -> None:
+def _session_secret(config: AuthConfig) -> bytes:
+    seed = config.code_secret or config.admin_password or config.service_role_key or config.url
+    return hashlib.sha256(str(seed or "iars-local-session").encode("utf-8")).digest()
+
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(text: str) -> bytes:
+    padded = text + "=" * (-len(text) % 4)
+    return base64.urlsafe_b64decode(padded.encode("ascii"))
+
+
+def _create_persistent_auth_token(config: AuthConfig, user: dict[str, Any], remember: bool) -> str:
+    now = _utc_now()
+    lifetime = timedelta(days=PERSISTENT_AUTH_REMEMBER_DAYS) if remember else timedelta(minutes=config.session_timeout_minutes)
+    payload = {
+        "uid": str(user.get("id", "")),
+        "username": str(user.get("username", "")),
+        "role": str(user.get("role", "user")),
+        "iat": int(now.timestamp()),
+        "exp": int((now + lifetime).timestamp()),
+        "remember": bool(remember),
+    }
+    payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    payload_part = _b64url_encode(payload_bytes)
+    sig = hmac.new(_session_secret(config), payload_part.encode("ascii"), hashlib.sha256).digest()
+    return f"{payload_part}.{_b64url_encode(sig)}"
+
+
+def _read_persistent_auth_token(config: AuthConfig) -> dict[str, Any] | None:
+    try:
+        raw = str(st.query_params.get(PERSISTENT_AUTH_PARAM, "") or "").strip()
+    except Exception:
+        raw = ""
+    if not raw or "." not in raw:
+        return None
+    payload_part, sig_part = raw.split(".", 1)
+    expected = hmac.new(_session_secret(config), payload_part.encode("ascii"), hashlib.sha256).digest()
+    try:
+        actual = _b64url_decode(sig_part)
+    except Exception:
+        return None
+    if not hmac.compare_digest(actual, expected):
+        return None
+    try:
+        payload = json.loads(_b64url_decode(payload_part).decode("utf-8"))
+    except Exception:
+        return None
+    exp = int(payload.get("exp") or 0)
+    if exp <= int(_utc_now().timestamp()):
+        _clear_persistent_auth_token()
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _store_persistent_auth_token(config: AuthConfig, user: dict[str, Any], remember: bool) -> None:
+    try:
+        st.query_params[PERSISTENT_AUTH_PARAM] = _create_persistent_auth_token(config, user, remember)
+        if "auth_view" in st.query_params:
+            del st.query_params["auth_view"]
+    except Exception:
+        pass
+
+
+def _clear_persistent_auth_token() -> None:
+    try:
+        if PERSISTENT_AUTH_PARAM in st.query_params:
+            del st.query_params[PERSISTENT_AUTH_PARAM]
+        if "auth_view" in st.query_params:
+            del st.query_params["auth_view"]
+    except Exception:
+        pass
+
+
+def _has_persistent_auth_token() -> bool:
+    try:
+        return bool(str(st.query_params.get(PERSISTENT_AUTH_PARAM, "") or "").strip())
+    except Exception:
+        return False
+
+
+def _set_session_state(user: dict[str, Any], *, show_mask: bool = True) -> None:
     st.session_state[SESSION_USER_ID] = str(user.get("id", ""))
     st.session_state[SESSION_USERNAME] = str(user.get("username", ""))
     st.session_state[SESSION_ROLE] = str(user.get("role", "user"))
     st.session_state[SESSION_LAST_ACTIVITY] = _iso(_utc_now())
-    # Show a short full-screen mask during the first authenticated rerun.
-    # This prevents stale login widgets from remaining visible while the
-    # dashboard DOM is being reconciled by Streamlit.
-    st.session_state["iars_show_login_exit_mask"] = True
+    if show_mask:
+        # Show a short full-screen mask during the first authenticated rerun.
+        # This prevents stale login widgets from remaining visible while the
+        # dashboard DOM is being reconciled by Streamlit.
+        st.session_state["iars_show_login_exit_mask"] = True
+
+
+def _set_session(user: dict[str, Any], config: AuthConfig | None = None, remember: bool = False) -> None:
+    _set_session_state(user)
+    if config is not None:
+        _store_persistent_auth_token(config, user, remember)
 
 
 def clear_auth_session() -> None:
@@ -772,8 +872,11 @@ def clear_auth_session() -> None:
         SESSION_ROLE,
         SESSION_LAST_ACTIVITY,
         ADMIN_LAST_CODE,
+        PROFILE_MENU_OPEN,
+        "iars_show_login_exit_mask",
     ):
         st.session_state.pop(key, None)
+    _clear_persistent_auth_token()
 
 
 def is_admin_user(user: Any) -> bool:
@@ -792,7 +895,45 @@ def user_username(user: Any) -> str:
     return str(user.get("username") or "").strip()
 
 
+def _restore_from_persistent_auth_token(client: Any, config: AuthConfig) -> dict[str, Any] | None:
+    payload = _read_persistent_auth_token(config)
+    if not payload:
+        return None
+
+    user_id = str(payload.get("uid") or "")
+    username = str(payload.get("username") or "")
+    role = str(payload.get("role") or "")
+    if not user_id or not username or not role:
+        _clear_persistent_auth_token()
+        return None
+
+    if role == "admin" and user_id == "admin":
+        admin_user = _effective_admin_profile(client, config)
+        if username != str(admin_user.get("username", "")).casefold():
+            _clear_persistent_auth_token()
+            return None
+        _set_session_state(admin_user, show_mask=False)
+        return admin_user
+
+    user = _fetch_user_by_id(client, config, user_id)
+    if not user or str(user.get("status", "")) != "Active":
+        _clear_persistent_auth_token()
+        return None
+    if username != str(user.get("username", "")).casefold():
+        _clear_persistent_auth_token()
+        return None
+    user["role"] = "user"
+    merged = _merge_profile(user, _fetch_profile(client, config, str(user.get("id", ""))), client, config)
+    _set_session_state(merged, show_mask=False)
+    return merged
+
+
 def restore_auth_session(client: Any, config: AuthConfig) -> dict[str, Any] | None:
+    if not st.session_state.get(SESSION_USER_ID):
+        token_user = _restore_from_persistent_auth_token(client, config)
+        if token_user is not None:
+            return token_user
+
     user_id = str(st.session_state.get(SESSION_USER_ID, "") or "")
     username = str(st.session_state.get(SESSION_USERNAME, "") or "")
     role = str(st.session_state.get(SESSION_ROLE, "") or "")
@@ -802,6 +943,11 @@ def restore_auth_session(client: Any, config: AuthConfig) -> dict[str, Any] | No
         return None
 
     if _utc_now() - last_activity > timedelta(minutes=config.session_timeout_minutes):
+        for key in (SESSION_USER_ID, SESSION_USERNAME, SESSION_ROLE, SESSION_LAST_ACTIVITY):
+            st.session_state.pop(key, None)
+        token_user = _restore_from_persistent_auth_token(client, config)
+        if token_user is not None:
+            return token_user
         clear_auth_session()
         return None
 
@@ -847,6 +993,7 @@ def _process_sign_in_credentials(
     config: AuthConfig,
     username_input: str,
     password: str,
+    remember: bool = False,
 ) -> None:
     username = normalize_username(username_input)
     admin_user = _effective_admin_profile(client, config)
@@ -857,7 +1004,7 @@ def _process_sign_in_credentials(
         if not password_ok:
             _log_event(client, config, event_type="admin_sign_in", username=username, success=False)
             raise ValueError("Incorrect username or password.")
-        _set_session(admin_user)
+        _set_session(admin_user, config, remember)
         _log_event(client, config, event_type="admin_sign_in", username=username, success=True)
         st.success("Administrator signed in successfully.")
         st.rerun()
@@ -913,7 +1060,7 @@ def _process_sign_in_credentials(
             "last_login_at": _iso(_utc_now()),
         },
     )
-    _set_session(user)
+    _set_session(user, config, remember)
     _log_event(
         client,
         config,
@@ -989,7 +1136,7 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
 
     _ = remember
     try:
-        _process_sign_in_credentials(client, config, username_input, password)
+        _process_sign_in_credentials(client, config, username_input, password, remember=remember)
     except Exception as exc:
         st.error(str(exc) or "Unable to sign in.")
 

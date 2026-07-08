@@ -864,14 +864,14 @@ a.iars-verify-action:focus-visible {{
 .st-key-extract_pdf_upload [data-testid="stWidgetLabel"] p {{font-size:.82rem!important;font-weight:720!important;color:var(--edl-navy)!important;}}
 
 
-/* v4.4.14 session-safe profile trigger and polished profile menu */
+/* v4.4.16 session-safe profile trigger and polished profile menu */
 .st-key-profile_menu_trigger {{
-  position:fixed!important;right:38px!important;top:16px!important;z-index:100020!important;
-  width:196px!important;height:60px!important;margin:0!important;padding:0!important;
+  position:fixed!important;right:12px!important;top:14px!important;z-index:100020!important;
+  width:252px!important;height:66px!important;margin:0!important;padding:0!important;
 }}
 .st-key-profile_menu_trigger .stButton,.st-key-profile_menu_trigger .stButton>button {{width:100%!important;height:100%!important;margin:0!important;}}
 .st-key-profile_menu_trigger .stButton>button {{
-  min-height:60px!important;border:0!important;border-radius:12px!important;background:transparent!important;
+  min-height:66px!important;border:0!important;border-radius:12px!important;background:transparent!important;
   box-shadow:none!important;color:transparent!important;font-size:0!important;padding:0!important;cursor:pointer!important;
   opacity:0!important;text-indent:-9999px!important;overflow:hidden!important;
 }}
@@ -879,7 +879,7 @@ a.iars-verify-action:focus-visible {{
 .st-key-profile_menu_trigger .stButton>button p,
 .st-key-profile_menu_trigger .stButton>button span,
 .st-key-profile_menu_trigger .stButton>button svg {{display:none!important;width:0!important;height:0!important;}}
-.st-key-profile_menu_trigger .stButton>button:hover {{background:transparent!important;box-shadow:none!important;transform:none!important;}}
+.st-key-profile_menu_trigger .stButton>button:hover {{background:transparent!important;box-shadow:none!important;transform:none!important;border-color:transparent!important;}}
 .st-key-iars_profile_menu {{
   position:fixed!important;right:22px!important;top:82px!important;z-index:100000!important;
   width:min(410px,calc(100vw - 30px))!important;max-height:calc(100vh - 98px)!important;overflow-y:auto!important;
@@ -906,10 +906,11 @@ a.iars-verify-action:focus-visible {{
   font-size:1.18rem!important;font-weight:700!important;line-height:1!important;box-shadow:none!important;
 }}
 .st-key-profile_menu_close .stButton>button:hover {{background:#E8EEF5!important;border-color:#B7C5D6!important;color:#061A36!important;transform:none!important;}}
-.st-key-iars_profile_menu [data-testid="stFileUploaderDropzone"] {{min-height:82px!important;padding:.75rem!important;background:#FBFCFE!important;border-color:#AFC1D6!important;}}
+.st-key-iars_profile_menu [data-testid="stFileUploaderDropzone"] {{min-height:70px!important;padding:.65rem!important;background:#FBFCFE!important;border-color:#AFC1D6!important;border-radius:10px!important;}}
+.st-key-iars_profile_menu [data-testid="stFileUploaderDropzone"] button {{min-height:34px!important;padding:.35rem .7rem!important;}}
 .st-key-iars_profile_menu [data-testid="stAlert"] {{font-size:.78rem!important;}}
 @media(max-width:900px) {{
-  .st-key-profile_menu_trigger {{right:16px!important;top:12px!important;width:176px!important;height:56px!important;}}
+  .st-key-profile_menu_trigger {{right:8px!important;top:10px!important;width:190px!important;height:60px!important;}}
   .st-key-iars_profile_menu {{right:10px!important;top:72px!important;width:calc(100vw - 20px)!important;max-height:calc(100vh - 82px)!important;}}
 }}
 
