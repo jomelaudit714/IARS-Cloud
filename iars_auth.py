@@ -455,6 +455,18 @@ def _profile_picture_zoomed_image(source_image: Any, zoom: float = 1.0) -> Any:
         raise ValueError("The selected image could not be processed.") from exc
 
 
+def _avatar_circle_box_algorithm(img: Any) -> dict[str, int]:
+    try:
+        width, height = img.size
+    except Exception:
+        return {"left": 0, "top": 0, "width": 320, "height": 320}
+    side = max(120, int(min(width, height) * 0.72))
+    side = min(side, width, height)
+    left = max(0, int((width - side) / 2))
+    top = max(0, int((height - side) / 2))
+    return {"left": left, "top": top, "width": int(side), "height": int(side)}
+
+
 def _profile_picture_path(user_id: str) -> str:
     safe_id = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(user_id or "user")).strip("_") or "user"
     return f"profiles/{safe_id}/avatar.jpg"
@@ -599,9 +611,9 @@ def _render_profile_picture_editor_styles() -> None:
     st.markdown(
         """
         <style>
-        .iars-photo-editor-shell {border:1px solid rgba(243,194,71,.58);border-radius:20px;padding:14px;background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);box-shadow:0 14px 34px rgba(7,32,72,.10);margin:.25rem 0 .55rem 0;}
-        .iars-photo-editor-title {font-weight:900;color:#082C63;margin:0 0 2px 0;font-size:1.02rem;}
-        .iars-photo-editor-sub {color:#506174;margin:0 0 10px 0;font-size:.91rem;line-height:1.35;}
+        .iars-photo-editor-shell {border:1px solid rgba(243,194,71,.58);border-radius:20px;padding:12px;background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);box-shadow:0 14px 34px rgba(7,32,72,.10);margin:.2rem 0 .45rem 0;}
+        .iars-photo-editor-title {font-weight:900;color:#082C63;margin:0 0 2px 0;font-size:1rem;}
+        .iars-photo-editor-sub {color:#506174;margin:0 0 8px 0;font-size:.88rem;line-height:1.3;}
         .iars-card-avatar-preview {display:flex;align-items:center;gap:12px;border-radius:20px;border:1.6px solid #F3C247;background:linear-gradient(135deg,#07386C 0%,#0F4E8D 58%,#0A3569 100%);padding:12px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 8px 18px rgba(8,39,81,.16);position:relative;overflow:hidden;min-height:86px;}
         .iars-card-avatar-preview:after {content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,#12A150 0 22%,#EF3340 22% 100%);}
         .iars-card-avatar-circle-wrap {position:relative;width:76px;height:76px;flex:0 0 76px;}
@@ -610,22 +622,27 @@ def _render_profile_picture_editor_styles() -> None:
         .iars-card-avatar-camera {position:absolute;right:-5px;bottom:-4px;width:28px;height:28px;border-radius:50%;background:#1E78D7;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:900;box-shadow:0 5px 12px rgba(0,0,0,.23);}
         .iars-card-avatar-name {font-weight:900;color:#FFF;margin:0;font-size:1.02rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .iars-card-avatar-role {font-weight:900;color:#F3C247;margin:4px 0 0 0;font-size:.8rem;}
-        .st-key-avatar_camera_trigger {position:fixed!important;right:28px!important;top:49px!important;z-index:100060!important;width:28px!important;height:28px!important;}
-        .st-key-avatar_camera_trigger [data-testid="stPopover"], .st-key-avatar_camera_trigger [data-testid="stPopover"] > button, .st-key-avatar_camera_trigger button {width:28px!important;height:28px!important;min-height:28px!important;margin:0!important;padding:0!important;border-radius:50%!important;border:2px solid #FFFFFF!important;background:linear-gradient(180deg,#2A8CFF 0%,#1666D7 100%)!important;color:#FFFFFF!important;box-shadow:0 5px 12px rgba(0,0,0,.23)!important;font-size:1rem!important;line-height:1!important;}
+        .st-key-avatar_camera_trigger {position:fixed!important;right:191px!important;top:49px!important;z-index:100061!important;width:28px!important;height:28px!important;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"] {width:28px!important;height:28px!important;margin:0!important;padding:0!important;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"] > button, .st-key-avatar_camera_trigger button[kind="secondary"], .st-key-avatar_camera_trigger > div > button {width:28px!important;height:28px!important;min-height:28px!important;margin:0!important;padding:0!important;border-radius:50%!important;border:2px solid #FFFFFF!important;background:linear-gradient(180deg,#2A8CFF 0%,#1666D7 100%)!important;color:#FFFFFF!important;box-shadow:0 5px 12px rgba(0,0,0,.23)!important;font-size:0!important;line-height:0!important;overflow:hidden!important;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"] > button::before, .st-key-avatar_camera_trigger button[kind="secondary"]::before, .st-key-avatar_camera_trigger > div > button::before {content:"📷";font-size:1rem;line-height:1;color:#FFFFFF;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"] > button [data-testid="stMarkdownContainer"], .st-key-avatar_camera_trigger button[kind="secondary"] [data-testid="stMarkdownContainer"], .st-key-avatar_camera_trigger > div > button [data-testid="stMarkdownContainer"] {display:none!important;}
         .st-key-avatar_camera_trigger button:hover, .st-key-avatar_camera_trigger button:focus, .st-key-avatar_camera_trigger button:active {filter:brightness(1.03)!important;transform:none!important;outline:none!important;}
-        .st-key-avatar_camera_trigger button [data-testid="stMarkdownContainer"] p {font-size:1rem!important;line-height:1!important;color:#FFFFFF!important;margin:0!important;}
-        [data-testid="stDialog"] [data-testid="stFileUploaderDropzone"], [role="dialog"] [data-testid="stFileUploaderDropzone"] {min-height:78px!important;padding:.5rem!important;border-radius:12px!important;background:#F8FBFF!important;border-color:#B9CAE0!important;}
-        [data-testid="stDialog"] [data-testid="stFileUploaderDropzoneInstructions"] p, [role="dialog"] [data-testid="stFileUploaderDropzoneInstructions"] p {font-size:.86rem!important;}
-        [data-testid="stDialog"] .stButton>button, [role="dialog"] .stButton>button {min-height:42px!important;border-radius:10px!important;}
-        [data-testid="stDialog"] .stSlider [data-baseweb="slider"], [role="dialog"] .stSlider [data-baseweb="slider"] {margin-top:.3rem!important;margin-bottom:.2rem!important;}
+        .st-key-avatar_camera_menu [data-testid="stPopoverContent"] {min-width:180px!important;}
+        .st-key-avatar_camera_menu .stButton>button {min-height:38px!important;border-radius:10px!important;}
+        [data-testid="stDialog"] {max-width:min(36vw,460px)!important;}
+        [data-testid="stDialog"] [data-testid="stFileUploaderDropzone"], [role="dialog"] [data-testid="stFileUploaderDropzone"] {min-height:60px!important;padding:.4rem!important;border-radius:12px!important;background:#F8FBFF!important;border-color:#B9CAE0!important;}
+        [data-testid="stDialog"] [data-testid="stFileUploaderDropzoneInstructions"] p, [role="dialog"] [data-testid="stFileUploaderDropzoneInstructions"] p {font-size:.84rem!important;}
+        [data-testid="stDialog"] .stButton>button, [role="dialog"] .stButton>button {min-height:40px!important;border-radius:10px!important;}
+        [data-testid="stDialog"] .stSlider [data-baseweb="slider"], [role="dialog"] .stSlider [data-baseweb="slider"] {margin-top:.2rem!important;margin-bottom:.1rem!important;}
+        [data-testid="stDialog"] .cropper-container, [role="dialog"] .cropper-container {max-height:300px!important;width:100%!important;}
         [data-testid="stDialog"] .cropper-crop-box, [role="dialog"] .cropper-crop-box, [data-testid="stDialog"] .cropper-view-box, [role="dialog"] .cropper-view-box {border-radius:50%!important;}
-        [data-testid="stDialog"] .cropper-view-box, [role="dialog"] .cropper-view-box {outline:0!important;box-shadow:0 0 0 9999em rgba(6,26,54,.50)!important;border:2px solid #FFFFFF!important;}
+        [data-testid="stDialog"] .cropper-view-box, [role="dialog"] .cropper-view-box {outline:0!important;box-shadow:0 0 0 9999em rgba(6,26,54,.52)!important;border:2px solid #FFFFFF!important;}
         [data-testid="stDialog"] .cropper-face, [role="dialog"] .cropper-face {border-radius:50%!important;background-color:transparent!important;}
-        [data-testid="stDialog"] .cropper-dashed, [role="dialog"] .cropper-dashed, [data-testid="stDialog"] .cropper-line, [role="dialog"] .cropper-line {display:none!important;}
-        [data-testid="stDialog"] .cropper-point.point-se, [role="dialog"] .cropper-point.point-se, [data-testid="stDialog"] .cropper-point.point-sw, [role="dialog"] .cropper-point.point-sw, [data-testid="stDialog"] .cropper-point.point-ne, [role="dialog"] .cropper-point.point-ne, [data-testid="stDialog"] .cropper-point.point-nw, [role="dialog"] .cropper-point.point-nw {display:none!important;}
+        [data-testid="stDialog"] .cropper-dashed, [role="dialog"] .cropper-dashed, [data-testid="stDialog"] .cropper-line, [role="dialog"] .cropper-line, [data-testid="stDialog"] .cropper-point, [role="dialog"] .cropper-point, [data-testid="stDialog"] .cropper-center, [role="dialog"] .cropper-center {display:none!important;}
         [data-testid="stDialog"] .cropper-modal, [role="dialog"] .cropper-modal {background:rgba(6,26,54,.42)!important;}
-        [data-testid="stDialog"] .cropper-center, [role="dialog"] .cropper-center {display:none!important;}
-        @media(max-width:900px) { .st-key-avatar_camera_trigger {right:24px!important;top:43px!important;} }
+        [data-testid="stDialog"] .cropper-crop-box, [role="dialog"] .cropper-crop-box, [data-testid="stDialog"] .cropper-view-box, [role="dialog"] .cropper-view-box {pointer-events:none!important;}
+        @media(max-width:900px) { .st-key-avatar_camera_trigger {right:127px!important;top:45px!important;} [data-testid="stDialog"] {max-width:min(92vw,420px)!important;} }
         </style>
         """,
         unsafe_allow_html=True,
@@ -781,16 +798,13 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
 
     @st.dialog("See Avatar", width="small")
     def _see_avatar_dialog() -> None:
-        st.markdown('<div class="iars-avatar-dialog">', unsafe_allow_html=True)
         _render_avatar_full_view(current_picture)
         if st.button("Close", key="profile_avatar_dialog_close", use_container_width=True):
             _close_avatar_dialogs()
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
-    @st.dialog("Change Avatar", width="large")
+    @st.dialog("Change Avatar", width="small")
     def _change_avatar_dialog() -> None:
-        st.markdown('<div class="iars-avatar-dialog">', unsafe_allow_html=True)
         if AVATAR_UPLOAD_VERSION not in st.session_state:
             st.session_state[AVATAR_UPLOAD_VERSION] = 0
         uploader_key = f"profile_picture_upload_dialog_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}"
@@ -799,7 +813,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         if uploaded_picture is not None:
             try:
                 source_image = _profile_picture_image(uploaded_picture)
-                minus_col, zoom_col, plus_col = st.columns([0.16, 0.68, 0.16])
+                minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
                 zoom_key = "profile_picture_zoom_dialog"
                 if zoom_key not in st.session_state:
                     st.session_state[zoom_key] = 1.00
@@ -813,7 +827,17 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                         st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, zoom)) + 0.05, 2))
                 if st_cropper is not None:
                     crop_source = _profile_picture_zoomed_image(source_image, float(st.session_state.get(zoom_key, zoom)))
-                    cropped_image = st_cropper(crop_source, aspect_ratio=(1, 1), box_color="#FFFFFF", realtime_update=True, return_type="image", key="profile_picture_cropper_dialog", stroke_width=2)
+                    cropped_image = st_cropper(
+                        crop_source,
+                        aspect_ratio=(1, 1),
+                        box_color="#FFFFFF",
+                        realtime_update=True,
+                        return_type="image",
+                        key="profile_picture_cropper_dialog",
+                        stroke_width=2,
+                        box_algorithm=_avatar_circle_box_algorithm,
+                        should_resize_image=False,
+                    )
                     prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
                 else:
                     prepared_preview_bytes = _profile_picture_jpeg(uploaded_picture)
@@ -836,7 +860,6 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
             if st.button("Cancel", key="profile_picture_cancel_dialog", use_container_width=True):
                 _close_avatar_dialogs(clear_upload=True)
                 st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     if st.session_state.get(AVATAR_VIEW_DIALOG_OPEN):
         _see_avatar_dialog()
@@ -858,10 +881,21 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
     _render_profile_picture_editor_styles()
     _render_avatar_dialogs(client, user, config, current_username=current_username, role_label=role_label, user_id=user_id)
 
-    with st.container(key="avatar_camera_trigger"):
-        if st.button("📷", key="avatar_camera_open_change"):
-            st.session_state[AVATAR_EDIT_DIALOG_OPEN] = True
-            st.rerun()
+    with st.popover(
+        "📷",
+        key="avatar_camera_trigger",
+        help=None,
+        use_container_width=False,
+        width="content",
+        on_change="ignore",
+    ):
+        with st.container(key="avatar_camera_menu"):
+            if st.button("See Avatar", key="avatar_camera_open_view", use_container_width=True):
+                st.session_state[AVATAR_VIEW_DIALOG_OPEN] = True
+                st.rerun()
+            if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", use_container_width=True):
+                st.session_state[AVATAR_EDIT_DIALOG_OPEN] = True
+                st.rerun()
 
     with st.popover(
         "​",
@@ -936,16 +970,6 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                             st.error(str(exc))
                         except Exception as exc:
                             st.error(f"Unable to update password: {_profile_error_text(exc)}")
-
-            action_col1, action_col2 = st.columns(2)
-            with action_col1:
-                if st.button("See Avatar", key="profile_avatar_view_action", use_container_width=True):
-                    st.session_state[AVATAR_VIEW_DIALOG_OPEN] = True
-                    st.rerun()
-            with action_col2:
-                if st.button("Change Avatar", key="profile_avatar_change_action", type="primary", use_container_width=True):
-                    st.session_state[AVATAR_EDIT_DIALOG_OPEN] = True
-                    st.rerun()
 
             st.divider()
             st.markdown(
