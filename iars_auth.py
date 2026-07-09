@@ -599,7 +599,7 @@ def _render_profile_picture_editor_styles() -> None:
     st.markdown(
         """
         <style>
-        .iars-photo-editor-shell {border:1px solid rgba(243,194,71,.58);border-radius:20px;padding:14px;background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);box-shadow:0 14px 34px rgba(7,32,72,.10);margin:.35rem 0 .75rem 0;}
+        .iars-photo-editor-shell {border:1px solid rgba(243,194,71,.58);border-radius:20px;padding:14px;background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);box-shadow:0 14px 34px rgba(7,32,72,.10);margin:.25rem 0 .55rem 0;}
         .iars-photo-editor-title {font-weight:900;color:#082C63;margin:0 0 2px 0;font-size:1.02rem;}
         .iars-photo-editor-sub {color:#506174;margin:0 0 10px 0;font-size:.91rem;line-height:1.35;}
         .iars-card-avatar-preview {display:flex;align-items:center;gap:12px;border-radius:20px;border:1.6px solid #F3C247;background:linear-gradient(135deg,#07386C 0%,#0F4E8D 58%,#0A3569 100%);padding:12px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 8px 18px rgba(8,39,81,.16);position:relative;overflow:hidden;min-height:86px;}
@@ -607,21 +607,25 @@ def _render_profile_picture_editor_styles() -> None:
         .iars-card-avatar-circle-wrap {position:relative;width:76px;height:76px;flex:0 0 76px;}
         .iars-card-avatar-circle {width:76px;height:76px;border-radius:50%;overflow:hidden;border:3px solid #F3C247;background:#EAF1FF;box-shadow:0 6px 16px rgba(0,0,0,.24);position:relative;}
         .iars-card-avatar-circle img {display:block;width:100%;height:100%;object-fit:cover;}
-        .iars-card-avatar-circle:before {content:"";position:absolute;inset:-7px;border:2px dashed rgba(255,255,255,.62);border-radius:50%;pointer-events:none;}
         .iars-card-avatar-camera {position:absolute;right:-5px;bottom:-4px;width:28px;height:28px;border-radius:50%;background:#1E78D7;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:900;box-shadow:0 5px 12px rgba(0,0,0,.23);}
         .iars-card-avatar-name {font-weight:900;color:#FFF;margin:0;font-size:1.02rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .iars-card-avatar-role {font-weight:900;color:#F3C247;margin:4px 0 0 0;font-size:.8rem;}
-        .iars-position-panel {border:1px solid rgba(10,65,128,.12);border-radius:18px;background:#FFFFFF;padding:12px 13px;margin:.35rem 0 .75rem 0;box-shadow:0 8px 18px rgba(8,39,81,.06);}
-        .iars-position-title {font-weight:850;color:#0A2A5E;margin:0 0 5px 0;}
-        .iars-position-sub {font-size:.86rem;color:#5B6A7A;margin:0 0 8px 0;}
-        .iars-editor-actions {display:flex;gap:.55rem;align-items:center;flex-wrap:wrap;margin:.45rem 0 .2rem 0;}
-        .iars-compact-upload-tip {font-size:.86rem;color:#5B6A7A;margin:.2rem 0 .55rem 0;}
-        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploader"] {margin:0;}
-        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploaderDropzone"] {min-height:auto;padding:.15rem;border:none;background:transparent;}
-        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploaderDropzoneInstructions"], .st-key-profile_picture_upload_icon_area small {display:none;}
-        .st-key-profile_picture_upload_icon_area button[kind="secondary"] {width:48px;height:48px;border-radius:50%;padding:0;border:2px solid #FFFFFF;background:linear-gradient(180deg,#2A8CFF 0%,#1666D7 100%);box-shadow:0 8px 18px rgba(0,0,0,.18); color:transparent; min-width:48px;}
-        .st-key-profile_picture_upload_icon_area button[kind="secondary"]:before {content:"📷"; color:#fff; font-size:1.15rem; line-height:1;}
-        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploaderDropzone"] > div {padding:0;}
+        .st-key-avatar_camera_trigger {position:fixed!important;right:28px!important;top:49px!important;z-index:100060!important;width:28px!important;height:28px!important;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"], .st-key-avatar_camera_trigger [data-testid="stPopover"] > button, .st-key-avatar_camera_trigger button {width:28px!important;height:28px!important;min-height:28px!important;margin:0!important;padding:0!important;border-radius:50%!important;border:2px solid #FFFFFF!important;background:linear-gradient(180deg,#2A8CFF 0%,#1666D7 100%)!important;color:#FFFFFF!important;box-shadow:0 5px 12px rgba(0,0,0,.23)!important;font-size:1rem!important;line-height:1!important;}
+        .st-key-avatar_camera_trigger button:hover, .st-key-avatar_camera_trigger button:focus, .st-key-avatar_camera_trigger button:active {filter:brightness(1.03)!important;transform:none!important;outline:none!important;}
+        .st-key-avatar_camera_trigger button [data-testid="stMarkdownContainer"] p {font-size:1rem!important;line-height:1!important;color:#FFFFFF!important;margin:0!important;}
+        [data-testid="stDialog"] [data-testid="stFileUploaderDropzone"], [role="dialog"] [data-testid="stFileUploaderDropzone"] {min-height:78px!important;padding:.5rem!important;border-radius:12px!important;background:#F8FBFF!important;border-color:#B9CAE0!important;}
+        [data-testid="stDialog"] [data-testid="stFileUploaderDropzoneInstructions"] p, [role="dialog"] [data-testid="stFileUploaderDropzoneInstructions"] p {font-size:.86rem!important;}
+        [data-testid="stDialog"] .stButton>button, [role="dialog"] .stButton>button {min-height:42px!important;border-radius:10px!important;}
+        [data-testid="stDialog"] .stSlider [data-baseweb="slider"], [role="dialog"] .stSlider [data-baseweb="slider"] {margin-top:.3rem!important;margin-bottom:.2rem!important;}
+        [data-testid="stDialog"] .cropper-crop-box, [role="dialog"] .cropper-crop-box, [data-testid="stDialog"] .cropper-view-box, [role="dialog"] .cropper-view-box {border-radius:50%!important;}
+        [data-testid="stDialog"] .cropper-view-box, [role="dialog"] .cropper-view-box {outline:0!important;box-shadow:0 0 0 9999em rgba(6,26,54,.50)!important;border:2px solid #FFFFFF!important;}
+        [data-testid="stDialog"] .cropper-face, [role="dialog"] .cropper-face {border-radius:50%!important;background-color:transparent!important;}
+        [data-testid="stDialog"] .cropper-dashed, [role="dialog"] .cropper-dashed, [data-testid="stDialog"] .cropper-line, [role="dialog"] .cropper-line {display:none!important;}
+        [data-testid="stDialog"] .cropper-point.point-se, [role="dialog"] .cropper-point.point-se, [data-testid="stDialog"] .cropper-point.point-sw, [role="dialog"] .cropper-point.point-sw, [data-testid="stDialog"] .cropper-point.point-ne, [role="dialog"] .cropper-point.point-ne, [data-testid="stDialog"] .cropper-point.point-nw, [role="dialog"] .cropper-point.point-nw {display:none!important;}
+        [data-testid="stDialog"] .cropper-modal, [role="dialog"] .cropper-modal {background:rgba(6,26,54,.42)!important;}
+        [data-testid="stDialog"] .cropper-center, [role="dialog"] .cropper-center {display:none!important;}
+        @media(max-width:900px) { .st-key-avatar_camera_trigger {right:24px!important;top:43px!important;} }
         </style>
         """,
         unsafe_allow_html=True,
@@ -681,6 +685,11 @@ def _render_profile_picture_circle_preview(data_uri: str) -> None:
 PROFILE_MENU_OPEN = "iars_profile_menu_open"
 
 
+AVATAR_VIEW_DIALOG_OPEN = "iars_avatar_view_dialog_open"
+AVATAR_EDIT_DIALOG_OPEN = "iars_avatar_edit_dialog_open"
+AVATAR_UPLOAD_VERSION = "iars_avatar_upload_version"
+
+
 def _profile_diagnostics_cached(client: Any, config: AuthConfig) -> dict[str, Any]:
     """Cache profile diagnostics per browser session to avoid menu-open lag."""
     cache_key = "iars_profile_storage_diagnostics"
@@ -711,7 +720,9 @@ def _profile_save_picture(
     if uploaded_picture is None:
         raise ValueError("Please choose a JPG or PNG picture first.")
 
-    diagnostics = _refresh_profile_diagnostics(client, config)
+    diagnostics = _profile_diagnostics_cached(client, config)
+    if not diagnostics.get("table_ready"):
+        diagnostics = _refresh_profile_diagnostics(client, config)
     if not diagnostics.get("table_ready"):
         raise ValueError(
             "The profile table is not accessible. Run the updated "
@@ -757,6 +768,82 @@ def _profile_save_picture(
     st.success("Profile picture updated successfully.")
 
 
+def _close_avatar_dialogs(clear_upload: bool = False) -> None:
+    st.session_state[AVATAR_VIEW_DIALOG_OPEN] = False
+    st.session_state[AVATAR_EDIT_DIALOG_OPEN] = False
+    if clear_upload:
+        st.session_state[AVATAR_UPLOAD_VERSION] = int(st.session_state.get(AVATAR_UPLOAD_VERSION, 0)) + 1
+        st.session_state.pop("profile_picture_zoom_dialog", None)
+
+
+def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig, *, current_username: str, role_label: str, user_id: str) -> None:
+    current_picture = str(user.get("profile_picture_data") or "").strip()
+
+    @st.dialog("See Avatar", width="small")
+    def _see_avatar_dialog() -> None:
+        st.markdown('<div class="iars-avatar-dialog">', unsafe_allow_html=True)
+        _render_avatar_full_view(current_picture)
+        if st.button("Close", key="profile_avatar_dialog_close", use_container_width=True):
+            _close_avatar_dialogs()
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    @st.dialog("Change Avatar", width="large")
+    def _change_avatar_dialog() -> None:
+        st.markdown('<div class="iars-avatar-dialog">', unsafe_allow_html=True)
+        if AVATAR_UPLOAD_VERSION not in st.session_state:
+            st.session_state[AVATAR_UPLOAD_VERSION] = 0
+        uploader_key = f"profile_picture_upload_dialog_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}"
+        uploaded_picture = st.file_uploader("Upload photo", type=["jpg", "jpeg", "png"], key=uploader_key, label_visibility="collapsed")
+        prepared_preview_bytes = None
+        if uploaded_picture is not None:
+            try:
+                source_image = _profile_picture_image(uploaded_picture)
+                minus_col, zoom_col, plus_col = st.columns([0.16, 0.68, 0.16])
+                zoom_key = "profile_picture_zoom_dialog"
+                if zoom_key not in st.session_state:
+                    st.session_state[zoom_key] = 1.00
+                with minus_col:
+                    if st.button("−", key="profile_zoom_minus_dialog", use_container_width=True):
+                        st.session_state[zoom_key] = max(1.00, round(float(st.session_state.get(zoom_key, 1.00)) - 0.05, 2))
+                with zoom_col:
+                    zoom = st.slider("Zoom", min_value=1.00, max_value=2.50, value=float(st.session_state.get(zoom_key, 1.00)), step=0.05, key=zoom_key, label_visibility="collapsed")
+                with plus_col:
+                    if st.button("+", key="profile_zoom_plus_dialog", use_container_width=True):
+                        st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, zoom)) + 0.05, 2))
+                if st_cropper is not None:
+                    crop_source = _profile_picture_zoomed_image(source_image, float(st.session_state.get(zoom_key, zoom)))
+                    cropped_image = st_cropper(crop_source, aspect_ratio=(1, 1), box_color="#FFFFFF", realtime_update=True, return_type="image", key="profile_picture_cropper_dialog", stroke_width=2)
+                    prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
+                else:
+                    prepared_preview_bytes = _profile_picture_jpeg(uploaded_picture)
+            except ValueError as exc:
+                st.error(str(exc))
+        save_col, cancel_col = st.columns(2)
+        with save_col:
+            if st.button("Save", key="profile_picture_save_dialog", type="primary", use_container_width=True):
+                try:
+                    _profile_save_picture(client, config, user=user, user_id=user_id, current_username=current_username, uploaded_picture=uploaded_picture, prepared_jpeg_bytes=prepared_preview_bytes)
+                    st.session_state.pop(SESSION_USER_CACHE, None)
+                    st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
+                    _close_avatar_dialogs(clear_upload=True)
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
+        with cancel_col:
+            if st.button("Cancel", key="profile_picture_cancel_dialog", use_container_width=True):
+                _close_avatar_dialogs(clear_upload=True)
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.session_state.get(AVATAR_VIEW_DIALOG_OPEN):
+        _see_avatar_dialog()
+    if st.session_state.get(AVATAR_EDIT_DIALOG_OPEN):
+        _change_avatar_dialog()
+
+
 def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -> None:
     """Render the top-right profile menu with a front-end popover.
 
@@ -767,6 +854,14 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
     current_username = user_username(user)
     role_label = "Administrator" if is_admin_user(user) else "Auditor"
     user_id = "admin" if is_admin_user(user) else str(user.get("id", ""))
+
+    _render_profile_picture_editor_styles()
+    _render_avatar_dialogs(client, user, config, current_username=current_username, role_label=role_label, user_id=user_id)
+
+    with st.container(key="avatar_camera_trigger"):
+        if st.button("📷", key="avatar_camera_open_change"):
+            st.session_state[AVATAR_EDIT_DIALOG_OPEN] = True
+            st.rerun()
 
     with st.popover(
         "​",
@@ -842,119 +937,15 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                         except Exception as exc:
                             st.error(f"Unable to update password: {_profile_error_text(exc)}")
 
-            _render_profile_picture_editor_styles()
-            current_picture = str(user.get("profile_picture_data") or "").strip()
-            avatar_panel_key = "iars_profile_avatar_panel"
-            upload_version_key = "iars_profile_avatar_upload_version"
-            if upload_version_key not in st.session_state:
-                st.session_state[upload_version_key] = 0
-
             action_col1, action_col2 = st.columns(2)
             with action_col1:
                 if st.button("See Avatar", key="profile_avatar_view_action", use_container_width=True):
-                    st.session_state[avatar_panel_key] = "see"
+                    st.session_state[AVATAR_VIEW_DIALOG_OPEN] = True
+                    st.rerun()
             with action_col2:
                 if st.button("Change Avatar", key="profile_avatar_change_action", type="primary", use_container_width=True):
-                    st.session_state[avatar_panel_key] = "change"
-
-            avatar_panel = str(st.session_state.get(avatar_panel_key, "") or "")
-
-            if avatar_panel == "see":
-                _render_avatar_full_view(current_picture)
-                close_col, _ = st.columns([1,1])
-                with close_col:
-                    if st.button("Close", key="profile_avatar_view_close", use_container_width=True):
-                        st.session_state[avatar_panel_key] = ""
-                        st.rerun()
-
-            elif avatar_panel == "change":
-                st.markdown('<div class="iars-photo-editor-shell"><p class="iars-photo-editor-title">Change avatar</p></div>', unsafe_allow_html=True)
-                uploader_key = f"profile_picture_upload_v4425_{st.session_state.get(upload_version_key, 0)}"
-                with st.container(key="profile_picture_upload_icon_area"):
-                    uploaded_picture = st.file_uploader(
-                        "Upload photo",
-                        type=["jpg", "jpeg", "png"],
-                        key=uploader_key,
-                        label_visibility="collapsed",
-                    )
-
-                prepared_preview_bytes = None
-                if uploaded_picture is not None:
-                    try:
-                        source_image = _profile_picture_image(uploaded_picture)
-                        left_col, right_col = st.columns([1.15, 0.95])
-                        with left_col:
-                            minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
-                            zoom_key = "profile_picture_zoom_v4425"
-                            if zoom_key not in st.session_state:
-                                st.session_state[zoom_key] = 1.00
-                            with minus_col:
-                                if st.button("−", key="profile_zoom_minus_v4425", use_container_width=True):
-                                    st.session_state[zoom_key] = max(1.00, round(float(st.session_state.get(zoom_key, 1.00)) - 0.05, 2))
-                            with zoom_col:
-                                zoom = st.slider(
-                                    "Zoom",
-                                    min_value=1.00,
-                                    max_value=2.50,
-                                    value=float(st.session_state.get(zoom_key, 1.00)),
-                                    step=0.05,
-                                    key=zoom_key,
-                                    label_visibility="collapsed",
-                                )
-                            with plus_col:
-                                if st.button("+", key="profile_zoom_plus_v4425", use_container_width=True):
-                                    st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, zoom)) + 0.05, 2))
-                            if st_cropper is not None:
-                                crop_source = _profile_picture_zoomed_image(source_image, float(st.session_state.get(zoom_key, zoom)))
-                                cropped_image = st_cropper(
-                                    crop_source,
-                                    aspect_ratio=(1, 1),
-                                    box_color="#F3C247",
-                                    realtime_update=True,
-                                    return_type="image",
-                                    key="profile_picture_cropper_v4425",
-                                )
-                                prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
-                            else:
-                                prepared_preview_bytes = _profile_picture_jpeg(uploaded_picture)
-                        with right_col:
-                            if prepared_preview_bytes is not None:
-                                _render_profile_picture_card_preview(
-                                    _profile_picture_data_uri(prepared_preview_bytes),
-                                    str(user.get("full_name") or current_username or "User"),
-                                    role_label,
-                                )
-                    except ValueError as exc:
-                        st.error(str(exc))
-
-                save_col, cancel_col = st.columns(2)
-                with save_col:
-                    if st.button("Save", key="profile_picture_save", type="primary", use_container_width=True):
-                        try:
-                            _profile_save_picture(
-                                client,
-                                config,
-                                user=user,
-                                user_id=user_id,
-                                current_username=current_username,
-                                uploaded_picture=uploaded_picture,
-                                prepared_jpeg_bytes=prepared_preview_bytes,
-                            )
-                            st.session_state.pop(SESSION_USER_CACHE, None)
-                            st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
-                            st.session_state[avatar_panel_key] = ""
-                            st.session_state[upload_version_key] = int(st.session_state.get(upload_version_key, 0)) + 1
-                            st.rerun()
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        except Exception as exc:
-                            st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
-                with cancel_col:
-                    if st.button("Cancel", key="profile_picture_cancel", use_container_width=True):
-                        st.session_state[avatar_panel_key] = ""
-                        st.session_state[upload_version_key] = int(st.session_state.get(upload_version_key, 0)) + 1
-                        st.session_state.pop("profile_picture_zoom_v4425", None)
-                        st.rerun()
+                    st.session_state[AVATAR_EDIT_DIALOG_OPEN] = True
+                    st.rerun()
 
             st.divider()
             st.markdown(
