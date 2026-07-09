@@ -656,6 +656,23 @@ def _render_profile_picture_card_preview(data_uri: str, display_name: str, role_
     )
 
 
+def _render_avatar_full_view(data_uri: str) -> None:
+    if not data_uri:
+        st.info("No avatar")
+        return
+    safe_uri = data_uri.replace("'", "%27").replace('"', '%22')
+    st.markdown(
+        f"""
+        <div class="iars-photo-editor-shell" style="padding:16px;">
+            <div style="display:flex;justify-content:center;align-items:center;">
+                <img src="{safe_uri}" alt="Avatar" style="width:280px;height:280px;object-fit:cover;border-radius:18px;border:3px solid #F3C247;box-shadow:0 12px 30px rgba(0,0,0,.18);background:#fff;">
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _render_profile_picture_circle_preview(data_uri: str) -> None:
     _render_profile_picture_card_preview(data_uri, "Profile Preview", "Live circular crop")
 
@@ -826,124 +843,118 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                             st.error(f"Unable to update password: {_profile_error_text(exc)}")
 
             _render_profile_picture_editor_styles()
-            st.markdown("### Profile picture")
-            st.caption("Click the camera button on your user card to upload and edit your profile picture.")
-
-            diagnostics = st.session_state.get("iars_profile_storage_diagnostics")
-            if isinstance(diagnostics, dict):
-                if diagnostics.get("table_ready") and diagnostics.get("bucket_ready"):
-                    st.success("Profile table and picture storage are ready.")
-                elif diagnostics.get("table_ready"):
-                    st.info(
-                        "The profile table is ready. If Storage is unavailable, the system will "
-                        "save the optimized picture in the secure profile record."
-                    )
-                else:
-                    st.warning("Profile storage setup still needs review.")
-            else:
-                st.info("Storage setup is checked only when you save or remove a profile picture to keep the menu smooth.")
-
             current_picture = str(user.get("profile_picture_data") or "").strip()
-            if current_picture:
-                _render_profile_picture_card_preview(
-                    current_picture,
-                    str(user.get("full_name") or current_username or "User"),
-                    role_label,
-                )
+            avatar_panel_key = "iars_profile_avatar_panel"
+            upload_version_key = "iars_profile_avatar_upload_version"
+            if upload_version_key not in st.session_state:
+                st.session_state[upload_version_key] = 0
 
-            st.markdown('<p class="iars-compact-upload-tip">Click the blue camera icon to choose a JPG or PNG file, then use zoom and drag only.</p>', unsafe_allow_html=True)
-            with st.container(key="profile_picture_upload_icon_area"):
-                uploaded_picture = st.file_uploader(
-                    "Upload profile picture",
-                    type=["jpg", "jpeg", "png"],
-                    key="profile_picture_upload_v4424",
-                    label_visibility="collapsed",
-                )
+            action_col1, action_col2 = st.columns(2)
+            with action_col1:
+                if st.button("See Avatar", key="profile_avatar_view_action", use_container_width=True):
+                    st.session_state[avatar_panel_key] = "see"
+            with action_col2:
+                if st.button("Change Avatar", key="profile_avatar_change_action", type="primary", use_container_width=True):
+                    st.session_state[avatar_panel_key] = "change"
 
-            prepared_preview_bytes = None
-            if uploaded_picture is not None:
-                try:
-                    source_image = _profile_picture_image(uploaded_picture)
-                    left_col, right_col = st.columns([1.15, 0.95])
-                    with left_col:
-                        st.markdown('<div class="iars-position-panel"><p class="iars-position-title">Upload photo and edit</p><p class="iars-position-sub">Use zoom in / zoom out, then drag the crop area to choose what appears in the round profile picture.</p></div>', unsafe_allow_html=True)
-                        minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
-                        if "profile_picture_zoom_v4424" not in st.session_state:
-                            st.session_state["profile_picture_zoom_v4424"] = 1.00
-                        with minus_col:
-                            if st.button("−", key="profile_zoom_minus_v4424", use_container_width=True):
-                                st.session_state["profile_picture_zoom_v4424"] = max(1.00, round(float(st.session_state.get("profile_picture_zoom_v4424", 1.00)) - 0.05, 2))
-                        with zoom_col:
-                            zoom = st.slider(
-                                "Zoom",
-                                min_value=1.00,
-                                max_value=2.50,
-                                value=float(st.session_state.get("profile_picture_zoom_v4424", 1.00)),
-                                step=0.05,
-                                key="profile_picture_zoom_v4424",
-                                label_visibility="collapsed",
-                            )
-                        with plus_col:
-                            if st.button("+", key="profile_zoom_plus_v4424", use_container_width=True):
-                                st.session_state["profile_picture_zoom_v4424"] = min(2.50, round(float(st.session_state.get("profile_picture_zoom_v4424", 1.00)) + 0.05, 2))
-                        if st_cropper is not None:
-                            crop_source = _profile_picture_zoomed_image(source_image, float(st.session_state.get("profile_picture_zoom_v4424", zoom)))
-                            st.caption("Drag the crop area. The circular preview at the right updates instantly.")
-                            cropped_image = st_cropper(
-                                crop_source,
-                                aspect_ratio=(1, 1),
-                                box_color="#F3C247",
-                                realtime_update=True,
-                                return_type="image",
-                                key="profile_picture_cropper_v4424",
-                            )
-                            prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
-                        else:
-                            st.info("Interactive drag crop is unavailable in this environment, so the system is showing the centered preview only.")
-                            prepared_preview_bytes = _profile_picture_jpeg(uploaded_picture)
-                    with right_col:
-                        if prepared_preview_bytes is not None:
-                            _render_profile_picture_card_preview(
-                                _profile_picture_data_uri(prepared_preview_bytes),
-                                str(user.get("full_name") or current_username or "User"),
-                                role_label,
-                            )
-                except ValueError as exc:
-                    st.error(str(exc))
+            avatar_panel = str(st.session_state.get(avatar_panel_key, "") or "")
 
-            save_col, remove_col = st.columns(2)
-            with save_col:
-                if st.button("Save Picture", key="profile_picture_save", type="primary", use_container_width=True):
-                    try:
-                        _profile_save_picture(
-                            client,
-                            config,
-                            user=user,
-                            user_id=user_id,
-                            current_username=current_username,
-                            uploaded_picture=uploaded_picture,
-                            prepared_jpeg_bytes=prepared_preview_bytes,
-                        )
-                        st.session_state.pop(SESSION_USER_CACHE, None)
-                        st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
+            if avatar_panel == "see":
+                _render_avatar_full_view(current_picture)
+                close_col, _ = st.columns([1,1])
+                with close_col:
+                    if st.button("Close", key="profile_avatar_view_close", use_container_width=True):
+                        st.session_state[avatar_panel_key] = ""
                         st.rerun()
+
+            elif avatar_panel == "change":
+                st.markdown('<div class="iars-photo-editor-shell"><p class="iars-photo-editor-title">Change avatar</p></div>', unsafe_allow_html=True)
+                uploader_key = f"profile_picture_upload_v4425_{st.session_state.get(upload_version_key, 0)}"
+                with st.container(key="profile_picture_upload_icon_area"):
+                    uploaded_picture = st.file_uploader(
+                        "Upload photo",
+                        type=["jpg", "jpeg", "png"],
+                        key=uploader_key,
+                        label_visibility="collapsed",
+                    )
+
+                prepared_preview_bytes = None
+                if uploaded_picture is not None:
+                    try:
+                        source_image = _profile_picture_image(uploaded_picture)
+                        left_col, right_col = st.columns([1.15, 0.95])
+                        with left_col:
+                            minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
+                            zoom_key = "profile_picture_zoom_v4425"
+                            if zoom_key not in st.session_state:
+                                st.session_state[zoom_key] = 1.00
+                            with minus_col:
+                                if st.button("−", key="profile_zoom_minus_v4425", use_container_width=True):
+                                    st.session_state[zoom_key] = max(1.00, round(float(st.session_state.get(zoom_key, 1.00)) - 0.05, 2))
+                            with zoom_col:
+                                zoom = st.slider(
+                                    "Zoom",
+                                    min_value=1.00,
+                                    max_value=2.50,
+                                    value=float(st.session_state.get(zoom_key, 1.00)),
+                                    step=0.05,
+                                    key=zoom_key,
+                                    label_visibility="collapsed",
+                                )
+                            with plus_col:
+                                if st.button("+", key="profile_zoom_plus_v4425", use_container_width=True):
+                                    st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, zoom)) + 0.05, 2))
+                            if st_cropper is not None:
+                                crop_source = _profile_picture_zoomed_image(source_image, float(st.session_state.get(zoom_key, zoom)))
+                                cropped_image = st_cropper(
+                                    crop_source,
+                                    aspect_ratio=(1, 1),
+                                    box_color="#F3C247",
+                                    realtime_update=True,
+                                    return_type="image",
+                                    key="profile_picture_cropper_v4425",
+                                )
+                                prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
+                            else:
+                                prepared_preview_bytes = _profile_picture_jpeg(uploaded_picture)
+                        with right_col:
+                            if prepared_preview_bytes is not None:
+                                _render_profile_picture_card_preview(
+                                    _profile_picture_data_uri(prepared_preview_bytes),
+                                    str(user.get("full_name") or current_username or "User"),
+                                    role_label,
+                                )
                     except ValueError as exc:
                         st.error(str(exc))
-                    except Exception as exc:
-                        st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
-            with remove_col:
-                if st.button("Remove Picture", key="profile_picture_remove", use_container_width=True):
-                    try:
-                        _refresh_profile_diagnostics(client, config)
-                        _remove_profile_picture(client, config, user_id)
-                        st.success("Profile picture removed.")
-                        st.session_state.pop(SESSION_USER_CACHE, None)
-                        st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
+
+                save_col, cancel_col = st.columns(2)
+                with save_col:
+                    if st.button("Save", key="profile_picture_save", type="primary", use_container_width=True):
+                        try:
+                            _profile_save_picture(
+                                client,
+                                config,
+                                user=user,
+                                user_id=user_id,
+                                current_username=current_username,
+                                uploaded_picture=uploaded_picture,
+                                prepared_jpeg_bytes=prepared_preview_bytes,
+                            )
+                            st.session_state.pop(SESSION_USER_CACHE, None)
+                            st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
+                            st.session_state[avatar_panel_key] = ""
+                            st.session_state[upload_version_key] = int(st.session_state.get(upload_version_key, 0)) + 1
+                            st.rerun()
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        except Exception as exc:
+                            st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
+                with cancel_col:
+                    if st.button("Cancel", key="profile_picture_cancel", use_container_width=True):
+                        st.session_state[avatar_panel_key] = ""
+                        st.session_state[upload_version_key] = int(st.session_state.get(upload_version_key, 0)) + 1
+                        st.session_state.pop("profile_picture_zoom_v4425", None)
                         st.rerun()
-                    except ValueError as exc:
-                        st.error(str(exc))
-                    except Exception as exc:
-                        st.error(f"Unable to remove profile picture: {_profile_error_text(exc)}")
 
             st.divider()
             st.markdown(
