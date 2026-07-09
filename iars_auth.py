@@ -13,6 +13,11 @@ from io import BytesIO
 
 import streamlit as st
 
+try:
+    from streamlit_cropper import st_cropper
+except Exception:
+    st_cropper = None
+
 from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards, render_transition_guard
 
 
@@ -614,7 +619,20 @@ def _render_profile_picture_editor_styles() -> None:
         .iars-position-panel {border:1px solid rgba(10,65,128,.12);border-radius:18px;background:#FFFFFF;padding:12px 13px;margin:.35rem 0 .75rem 0;box-shadow:0 8px 18px rgba(8,39,81,.06);}
         .iars-position-title {font-weight:850;color:#0A2A5E;margin:0 0 5px 0;}
         .iars-position-sub {font-size:.86rem;color:#5B6A7A;margin:0 0 8px 0;}
-        div[data-testid="stFileUploader"] section {border-radius:16px;border-color:rgba(10,65,128,.22);background:#F8FBFF;}
+        .iars-compact-upload-tip {font-size:.86rem;color:#5B6A7A;margin:.2rem 0 .55rem 0;}
+        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploader"] {margin:0;}
+        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploaderDropzone"] {
+            min-height:auto;padding:.15rem;border:none;background:transparent;
+        }
+        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploaderDropzoneInstructions"] {display:none;}
+        .st-key-profile_picture_upload_icon_area small {display:none;}
+        .st-key-profile_picture_upload_icon_area button[kind="secondary"] {
+            width:48px;height:48px;border-radius:50%;padding:0;border:2px solid #FFFFFF;
+            background:linear-gradient(180deg,#2A8CFF 0%,#1666D7 100%);
+            box-shadow:0 8px 18px rgba(0,0,0,.18); color:transparent; min-width:48px;
+        }
+        .st-key-profile_picture_upload_icon_area button[kind="secondary"]:before {content:"📷"; color:#fff; font-size:1.15rem; line-height:1;}
+        .st-key-profile_picture_upload_icon_area [data-testid="stFileUploaderDropzone"] > div {padding:0;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -834,61 +852,123 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                     else:
                         st.info("Storage setup is checked only when you save or remove a profile picture to keep the menu smooth.")
 
-                    st.caption(
-                        "JPG or PNG · Maximum 5 MB · Preview first, adjust position, then save."
-                    )
-                    uploaded_picture = st.file_uploader(
-                        "Choose JPG or PNG profile picture",
-                        type=["jpg", "jpeg", "png"],
-                        key="profile_picture_upload",
-                        label_visibility="collapsed",
-                    )
+                    _render_profile_picture_editor_styles()
+                    st.markdown('<p class="iars-photo-editor-title">Edit profile picture</p><p class="iars-photo-editor-sub">Click the camera icon to upload a picture. After uploading, use zoom or the crop button to drag and fit the photo.</p>', unsafe_allow_html=True)
+
+                    current_picture = str(user.get("profile_picture_data") or "").strip()
+                    display_picture = current_picture
+                    uploaded_picture = None
+
+                    if display_picture:
+                        _render_profile_picture_card_preview(
+                            display_picture,
+                            str(user.get("full_name") or current_username or "User"),
+                            role_label,
+                        )
+                    else:
+                        st.markdown(
+                            """
+                            <div class="iars-photo-editor-shell">
+                                <p class="iars-photo-editor-title">Current profile picture</p>
+                                <p class="iars-photo-editor-sub">No profile picture yet. Click the camera icon below to upload one.</p>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    st.markdown('<p class="iars-compact-upload-tip">Click the blue camera icon to choose a JPG or PNG file.</p>', unsafe_allow_html=True)
+                    with st.container(key="profile_picture_upload_icon_area"):
+                        uploaded_picture = st.file_uploader(
+                            "Upload profile picture",
+                            type=["jpg", "jpeg", "png"],
+                            key="profile_picture_upload_v4423",
+                            label_visibility="collapsed",
+                        )
+
                     prepared_preview_bytes = None
                     if uploaded_picture is not None:
                         try:
-                            _render_profile_picture_editor_styles()
-                            # Functional, compact editor: avoids the tall default cropper interface that caused the plain white panel.
-                            zoom = st.slider(
-                                "Zoom",
-                                min_value=1.00,
-                                max_value=2.50,
-                                value=1.00,
-                                step=0.05,
-                                key="profile_picture_zoom_v4422",
-                                help="Increase zoom if you want the face to appear larger inside the circle.",
-                            )
-                            pos_col1, pos_col2 = st.columns(2)
-                            with pos_col1:
-                                x_position = st.slider(
-                                    "Move left / right",
-                                    min_value=-100,
-                                    max_value=100,
-                                    value=0,
-                                    step=5,
-                                    key="profile_picture_x_v4422",
+                            source_image = _profile_picture_image(uploaded_picture)
+                            editor_col, preview_col = st.columns([1.15, 0.95])
+                            with editor_col:
+                                st.markdown('<div class="iars-position-panel"><p class="iars-position-title">Position and crop</p><p class="iars-position-sub">Use the zoom controls below. If you want drag-style cropping, click <b>Crop photo</b>.</p></div>', unsafe_allow_html=True)
+
+                                dec_col, zoom_col, inc_col = st.columns([0.22, 0.56, 0.22])
+                                current_zoom = float(st.session_state.get("profile_picture_zoom_v4423", 1.00))
+                                with dec_col:
+                                    if st.button("−", key="profile_zoom_minus_v4423", use_container_width=True):
+                                        current_zoom = max(1.00, round(current_zoom - 0.05, 2))
+                                        st.session_state["profile_picture_zoom_v4423"] = current_zoom
+                                with zoom_col:
+                                    zoom = st.slider(
+                                        "Zoom",
+                                        min_value=1.00,
+                                        max_value=2.50,
+                                        value=float(st.session_state.get("profile_picture_zoom_v4423", current_zoom)),
+                                        step=0.05,
+                                        key="profile_picture_zoom_v4423",
+                                        label_visibility="collapsed",
+                                    )
+                                with inc_col:
+                                    if st.button("+", key="profile_zoom_plus_v4423", use_container_width=True):
+                                        current_zoom = min(2.50, round(float(st.session_state.get("profile_picture_zoom_v4423", zoom)) + 0.05, 2))
+                                        st.session_state["profile_picture_zoom_v4423"] = current_zoom
+
+                                crop_mode = st.toggle(
+                                    "Crop photo (drag the image)",
+                                    value=bool(st.session_state.get("profile_picture_crop_mode_v4423", False)),
+                                    key="profile_picture_crop_mode_v4423",
                                 )
-                            with pos_col2:
-                                y_position = st.slider(
-                                    "Move up / down",
-                                    min_value=-100,
-                                    max_value=100,
-                                    value=0,
-                                    step=5,
-                                    key="profile_picture_y_v4422",
-                                )
-                            prepared_preview_bytes = _profile_picture_positioned_jpeg(
-                                uploaded_picture,
-                                zoom=zoom,
-                                x_position=x_position,
-                                y_position=y_position,
-                            )
-                            _render_profile_picture_card_preview(
-                                _profile_picture_data_uri(prepared_preview_bytes),
-                                str(user.get("full_name") or current_username or "User"),
-                                role_label,
-                            )
+
+                                if crop_mode and st_cropper is not None:
+                                    st.caption("Drag the photo and resize the crop area. The preview updates automatically.")
+                                    cropped_image = st_cropper(
+                                        source_image,
+                                        aspect_ratio=(1, 1),
+                                        box_color="#F3C247",
+                                        realtime_update=True,
+                                        return_type="image",
+                                        key="profile_picture_cropper_v4423",
+                                    )
+                                    prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
+                                else:
+                                    if crop_mode and st_cropper is None:
+                                        st.info("Drag-crop component is unavailable in this environment, so the editor is using zoom and position controls instead.")
+                                    pos_col1, pos_col2 = st.columns(2)
+                                    with pos_col1:
+                                        x_position = st.slider(
+                                            "Move left / right",
+                                            min_value=-100,
+                                            max_value=100,
+                                            value=int(st.session_state.get("profile_picture_x_v4423", 0)),
+                                            step=5,
+                                            key="profile_picture_x_v4423",
+                                        )
+                                    with pos_col2:
+                                        y_position = st.slider(
+                                            "Move up / down",
+                                            min_value=-100,
+                                            max_value=100,
+                                            value=int(st.session_state.get("profile_picture_y_v4423", 0)),
+                                            step=5,
+                                            key="profile_picture_y_v4423",
+                                        )
+                                    prepared_preview_bytes = _profile_picture_positioned_jpeg(
+                                        uploaded_picture,
+                                        zoom=float(st.session_state.get("profile_picture_zoom_v4423", zoom)),
+                                        x_position=x_position,
+                                        y_position=y_position,
+                                    )
+                            with preview_col:
+                                if prepared_preview_bytes is not None:
+                                    _render_profile_picture_card_preview(
+                                        _profile_picture_data_uri(prepared_preview_bytes),
+                                        str(user.get("full_name") or current_username or "User"),
+                                        role_label,
+                                    )
                         except ValueError as exc:
                             st.error(str(exc))
+
                     save_col, remove_col = st.columns(2)
                     with save_col:
                         if st.button("Save Picture", key="profile_picture_save", type="primary", use_container_width=True):
