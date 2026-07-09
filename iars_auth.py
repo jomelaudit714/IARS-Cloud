@@ -455,7 +455,7 @@ def _profile_picture_zoomed_image(source_image: Any, zoom: float = 1.0) -> Any:
         raise ValueError("The selected image could not be processed.") from exc
 
 
-def _avatar_circle_box_algorithm(img: Any) -> dict[str, int]:
+def _avatar_circle_box_algorithm(img: Any, *args: Any, **kwargs: Any) -> dict[str, int]:
     try:
         width, height = img.size
     except Exception:
@@ -629,7 +629,7 @@ def _render_profile_picture_editor_styles() -> None:
         .st-key-avatar_camera_trigger [data-testid="stPopover"] > button [data-testid="stMarkdownContainer"], .st-key-avatar_camera_trigger button[kind="secondary"] [data-testid="stMarkdownContainer"], .st-key-avatar_camera_trigger > div > button [data-testid="stMarkdownContainer"] {display:none!important;}
         .st-key-avatar_camera_trigger button:hover, .st-key-avatar_camera_trigger button:focus, .st-key-avatar_camera_trigger button:active {background:transparent!important;box-shadow:none!important;transform:none!important;outline:none!important;opacity:0!important;}
         .st-key-avatar_camera_menu {min-width:178px!important;padding:.25rem!important;}
-        .st-key-avatar_camera_menu .stButton>button {min-height:38px!important;border-radius:10px!important;justify-content:flex-start!important;padding-left:.85rem!important;}
+        .st-key-avatar_camera_menu .stButton>button {min-height:38px!important;border-radius:10px!important;justify-content:center!important;text-align:center!important;padding-left:.85rem!important;padding-right:.85rem!important;}
         [data-testid="stDialog"] {max-width:min(36vw,460px)!important;}
         [data-testid="stDialog"] [data-testid="stFileUploaderDropzone"], [role="dialog"] [data-testid="stFileUploaderDropzone"] {min-height:60px!important;padding:.4rem!important;border-radius:12px!important;background:#F8FBFF!important;border-color:#B9CAE0!important;}
         [data-testid="stDialog"] [data-testid="stFileUploaderDropzoneInstructions"] p, [role="dialog"] [data-testid="stFileUploaderDropzoneInstructions"] p {font-size:.84rem!important;}
@@ -869,10 +869,14 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                 _close_avatar_dialogs(clear_upload=True)
                 st.rerun()
 
-    if st.session_state.get(AVATAR_VIEW_DIALOG_OPEN):
-        _see_avatar_dialog()
+    # Streamlit allows only one dialog in a script run.  Prioritize the active
+    # avatar mode and clear the other flag before opening a dialog.
     if st.session_state.get(AVATAR_EDIT_DIALOG_OPEN):
+        st.session_state[AVATAR_VIEW_DIALOG_OPEN] = False
         _change_avatar_dialog()
+    elif st.session_state.get(AVATAR_VIEW_DIALOG_OPEN):
+        st.session_state[AVATAR_EDIT_DIALOG_OPEN] = False
+        _see_avatar_dialog()
 
 
 def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -> None:
@@ -899,9 +903,11 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
     ):
         with st.container(key="avatar_camera_menu"):
             if st.button("See Avatar", key="avatar_camera_open_view", use_container_width=True):
+                st.session_state[AVATAR_EDIT_DIALOG_OPEN] = False
                 st.session_state[AVATAR_VIEW_DIALOG_OPEN] = True
                 st.rerun()
             if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", use_container_width=True):
+                st.session_state[AVATAR_VIEW_DIALOG_OPEN] = False
                 st.session_state[AVATAR_EDIT_DIALOG_OPEN] = True
                 st.rerun()
 
