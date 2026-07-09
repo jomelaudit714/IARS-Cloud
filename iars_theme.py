@@ -270,8 +270,9 @@ section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] .stButton>but
 .edl-topbar-date {{position:relative;z-index:1;color:#D8E3F2;font-size:.72rem;white-space:nowrap;font-weight:560;}}
 .edl-user-chip {{position:relative;z-index:1;display:flex;align-items:center;gap:.72rem;background:rgba(255,255,255,.10);border:1px solid rgba(228,174,47,.65);border-radius:12px;padding:.42rem .72rem;min-width:196px;min-height:60px;box-shadow:inset 0 1px 0 rgba(255,255,255,.09);text-decoration:none!important;cursor:pointer;transition:.14s ease;pointer-events:none;}}
 .edl-user-chip:hover {{background:rgba(255,255,255,.16);border-color:rgba(246,212,107,.90);transform:translateY(-1px);text-decoration:none!important;}}
-.edl-user-avatar {{width:46px;height:46px;flex:0 0 46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#F6D46B,#C88A08);color:#061A36;font-size:.88rem;font-weight:850;box-shadow:0 4px 11px rgba(0,0,0,.20);overflow:hidden;}}
+.edl-user-avatar {{position:relative;width:46px;height:46px;flex:0 0 46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#F6D46B,#C88A08);color:#061A36;font-size:.88rem;font-weight:850;box-shadow:0 4px 11px rgba(0,0,0,.20);overflow:visible;}}
 .edl-user-avatar img {{display:block;width:100%;height:100%;object-fit:cover;border-radius:50%;}}
+.edl-user-avatar-badge {{position:absolute;right:-3px;bottom:-3px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#2A8CFF 0%,#1666D7 100%);border:2px solid #FFF;color:#FFF;font-size:.58rem;box-shadow:0 4px 10px rgba(0,0,0,.18);}}
 .edl-user-chip strong {{display:block;color:#FFF;font-size:.82rem;font-weight:800;white-space:nowrap;}}
 .edl-user-chip span {{display:block;color:#F2CF68;font-size:.69rem;margin-top:.08rem;font-weight:700;}}
 .edl-user-chevron {{margin-left:auto;color:#D7E2F1;font-size:.74rem;}}
@@ -1106,9 +1107,9 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
     subtitle = subtitles.get(page_title, "EDL GROUP OF COMPANIES Internal Audit workspace")
     picture = str(user.get("profile_picture_data") or "").strip()
     if picture.startswith("data:image/"):
-        avatar_html = f'<div class="edl-user-avatar"><img src="{html.escape(picture, quote=True)}" alt="Profile picture"></div>'
+        avatar_html = f'<div class="edl-user-avatar"><img src="{html.escape(picture, quote=True)}" alt="Profile picture"><div class="edl-user-avatar-badge">📷</div></div>'
     else:
-        avatar_html = f'<div class="edl-user-avatar">{html.escape(initials)}</div>'
+        avatar_html = f'<div class="edl-user-avatar">{html.escape(initials)}<div class="edl-user-avatar-badge">📷</div></div>'
     _render_html(
         '<div class="edl-topbar">'
         f'<div class="edl-topbar-title"><h1>{html.escape(page_title)}</h1><p>{html.escape(subtitle)}</p></div>'
