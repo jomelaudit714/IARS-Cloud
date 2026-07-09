@@ -622,14 +622,14 @@ def _render_profile_picture_editor_styles() -> None:
         .iars-card-avatar-camera {position:absolute;right:-5px;bottom:-4px;width:28px;height:28px;border-radius:50%;background:#1E78D7;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:900;box-shadow:0 5px 12px rgba(0,0,0,.23);}
         .iars-card-avatar-name {font-weight:900;color:#FFF;margin:0;font-size:1.02rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .iars-card-avatar-role {font-weight:900;color:#F3C247;margin:4px 0 0 0;font-size:.8rem;}
-        .st-key-avatar_camera_trigger {position:fixed!important;right:191px!important;top:49px!important;z-index:100061!important;width:28px!important;height:28px!important;}
-        .st-key-avatar_camera_trigger [data-testid="stPopover"] {width:28px!important;height:28px!important;margin:0!important;padding:0!important;}
-        .st-key-avatar_camera_trigger [data-testid="stPopover"] > button, .st-key-avatar_camera_trigger button[kind="secondary"], .st-key-avatar_camera_trigger > div > button {width:28px!important;height:28px!important;min-height:28px!important;margin:0!important;padding:0!important;border-radius:50%!important;border:2px solid #FFFFFF!important;background:linear-gradient(180deg,#2A8CFF 0%,#1666D7 100%)!important;color:#FFFFFF!important;box-shadow:0 5px 12px rgba(0,0,0,.23)!important;font-size:0!important;line-height:0!important;overflow:hidden!important;}
-        .st-key-avatar_camera_trigger [data-testid="stPopover"] > button::before, .st-key-avatar_camera_trigger button[kind="secondary"]::before, .st-key-avatar_camera_trigger > div > button::before {content:"📷";font-size:1rem;line-height:1;color:#FFFFFF;}
+        .st-key-avatar_camera_trigger {position:fixed!important;right:191px!important;top:49px!important;z-index:100061!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"] {width:30px!important;height:30px!important;margin:0!important;padding:0!important;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"] > button, .st-key-avatar_camera_trigger button[kind="secondary"], .st-key-avatar_camera_trigger > div > button {width:30px!important;height:30px!important;min-height:30px!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;color:transparent!important;font-size:0!important;line-height:0!important;opacity:0!important;cursor:pointer!important;overflow:hidden!important;}
+        .st-key-avatar_camera_trigger [data-testid="stPopover"] > button::before, .st-key-avatar_camera_trigger button[kind="secondary"]::before, .st-key-avatar_camera_trigger > div > button::before {content:""!important;display:none!important;}
         .st-key-avatar_camera_trigger [data-testid="stPopover"] > button [data-testid="stMarkdownContainer"], .st-key-avatar_camera_trigger button[kind="secondary"] [data-testid="stMarkdownContainer"], .st-key-avatar_camera_trigger > div > button [data-testid="stMarkdownContainer"] {display:none!important;}
-        .st-key-avatar_camera_trigger button:hover, .st-key-avatar_camera_trigger button:focus, .st-key-avatar_camera_trigger button:active {filter:brightness(1.03)!important;transform:none!important;outline:none!important;}
-        .st-key-avatar_camera_menu [data-testid="stPopoverContent"] {min-width:180px!important;}
-        .st-key-avatar_camera_menu .stButton>button {min-height:38px!important;border-radius:10px!important;}
+        .st-key-avatar_camera_trigger button:hover, .st-key-avatar_camera_trigger button:focus, .st-key-avatar_camera_trigger button:active {background:transparent!important;box-shadow:none!important;transform:none!important;outline:none!important;opacity:0!important;}
+        .st-key-avatar_camera_menu {min-width:178px!important;padding:.25rem!important;}
+        .st-key-avatar_camera_menu .stButton>button {min-height:38px!important;border-radius:10px!important;justify-content:flex-start!important;padding-left:.85rem!important;}
         [data-testid="stDialog"] {max-width:min(36vw,460px)!important;}
         [data-testid="stDialog"] [data-testid="stFileUploaderDropzone"], [role="dialog"] [data-testid="stFileUploaderDropzone"] {min-height:60px!important;padding:.4rem!important;border-radius:12px!important;background:#F8FBFF!important;border-color:#B9CAE0!important;}
         [data-testid="stDialog"] [data-testid="stFileUploaderDropzoneInstructions"] p, [role="dialog"] [data-testid="stFileUploaderDropzoneInstructions"] p {font-size:.84rem!important;}
@@ -642,6 +642,9 @@ def _render_profile_picture_editor_styles() -> None:
         [data-testid="stDialog"] .cropper-dashed, [role="dialog"] .cropper-dashed, [data-testid="stDialog"] .cropper-line, [role="dialog"] .cropper-line, [data-testid="stDialog"] .cropper-point, [role="dialog"] .cropper-point, [data-testid="stDialog"] .cropper-center, [role="dialog"] .cropper-center {display:none!important;}
         [data-testid="stDialog"] .cropper-modal, [role="dialog"] .cropper-modal {background:rgba(6,26,54,.42)!important;}
         [data-testid="stDialog"] .cropper-crop-box, [role="dialog"] .cropper-crop-box, [data-testid="stDialog"] .cropper-view-box, [role="dialog"] .cropper-view-box {pointer-events:none!important;}
+
+        [data-testid="stDialog"] section, [role="dialog"] section {padding-top:.8rem!important;}
+        [data-testid="stDialog"] .cropper-container, [role="dialog"] .cropper-container {margin-left:auto!important;margin-right:auto!important;}
         @media(max-width:900px) { .st-key-avatar_camera_trigger {right:127px!important;top:45px!important;} [data-testid="stDialog"] {max-width:min(92vw,420px)!important;} }
         </style>
         """,
@@ -733,7 +736,7 @@ def _profile_save_picture(
     current_username: str,
     uploaded_picture: Any,
     prepared_jpeg_bytes: bytes | None = None,
-) -> None:
+) -> str:
     if uploaded_picture is None:
         raise ValueError("Please choose a JPG or PNG picture first.")
 
@@ -782,7 +785,12 @@ def _profile_save_picture(
         user_id=None if is_admin_user(user) else user_id,
         success=True,
     )
+    updated_user = dict(user)
+    updated_user["profile_picture_data"] = picture_data
+    updated_user["profile_picture_path"] = picture_path
+    _cache_session_user(updated_user)
     st.success("Profile picture updated successfully.")
+    return picture_data
 
 
 def _close_avatar_dialogs(clear_upload: bool = False) -> None:
@@ -827,13 +835,14 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                         st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, zoom)) + 0.05, 2))
                 if st_cropper is not None:
                     crop_source = _profile_picture_zoomed_image(source_image, float(st.session_state.get(zoom_key, zoom)))
+                    cropper_key = f"profile_picture_cropper_dialog_{int(float(st.session_state.get(zoom_key, zoom)) * 100)}_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}"
                     cropped_image = st_cropper(
                         crop_source,
                         aspect_ratio=(1, 1),
                         box_color="#FFFFFF",
                         realtime_update=True,
                         return_type="image",
-                        key="profile_picture_cropper_dialog",
+                        key=cropper_key,
                         stroke_width=2,
                         box_algorithm=_avatar_circle_box_algorithm,
                         should_resize_image=False,
@@ -848,8 +857,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
             if st.button("Save", key="profile_picture_save_dialog", type="primary", use_container_width=True):
                 try:
                     _profile_save_picture(client, config, user=user, user_id=user_id, current_username=current_username, uploaded_picture=uploaded_picture, prepared_jpeg_bytes=prepared_preview_bytes)
-                    st.session_state.pop(SESSION_USER_CACHE, None)
-                    st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
+                    st.session_state[SESSION_CACHE_LOADED_AT] = _utc_now()
                     _close_avatar_dialogs(clear_upload=True)
                     st.rerun()
                 except ValueError as exc:
