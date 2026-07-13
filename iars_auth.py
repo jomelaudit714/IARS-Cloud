@@ -708,6 +708,7 @@ PROFILE_MENU_OPEN = "iars_profile_menu_open"
 AVATAR_VIEW_DIALOG_OPEN = "iars_avatar_view_dialog_open"
 AVATAR_EDIT_DIALOG_OPEN = "iars_avatar_edit_dialog_open"
 AVATAR_UPLOAD_VERSION = "iars_avatar_upload_version"
+AVATAR_DIALOG_MODE = "iars_avatar_dialog_mode"
 
 
 def _profile_diagnostics_cached(client: Any, config: AuthConfig) -> dict[str, Any]:
@@ -796,9 +797,16 @@ def _profile_save_picture(
 def _close_avatar_dialogs(clear_upload: bool = False) -> None:
     st.session_state[AVATAR_VIEW_DIALOG_OPEN] = False
     st.session_state[AVATAR_EDIT_DIALOG_OPEN] = False
+    st.session_state[AVATAR_DIALOG_MODE] = ""
     if clear_upload:
         st.session_state[AVATAR_UPLOAD_VERSION] = int(st.session_state.get(AVATAR_UPLOAD_VERSION, 0)) + 1
         st.session_state.pop("profile_picture_zoom_dialog", None)
+
+
+def _open_avatar_mode(mode: str) -> None:
+    st.session_state[AVATAR_DIALOG_MODE] = mode
+    st.session_state[AVATAR_VIEW_DIALOG_OPEN] = mode == "see"
+    st.session_state[AVATAR_EDIT_DIALOG_OPEN] = mode == "change"
 
 
 def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig, *, current_username: str, role_label: str, user_id: str) -> None:
@@ -845,7 +853,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                         key=cropper_key,
                         stroke_width=2,
                         box_algorithm=_avatar_circle_box_algorithm,
-                        should_resize_image=False,
+                        should_resize_image=True,
                     )
                     prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
                 else:
@@ -903,12 +911,10 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
     ):
         with st.container(key="avatar_camera_menu"):
             if st.button("See Avatar", key="avatar_camera_open_view", use_container_width=True):
-                st.session_state[AVATAR_EDIT_DIALOG_OPEN] = False
-                st.session_state[AVATAR_VIEW_DIALOG_OPEN] = True
+                _open_avatar_mode("see")
                 st.rerun()
             if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", use_container_width=True):
-                st.session_state[AVATAR_VIEW_DIALOG_OPEN] = False
-                st.session_state[AVATAR_EDIT_DIALOG_OPEN] = True
+                _open_avatar_mode("change")
                 st.rerun()
 
     with st.popover(
