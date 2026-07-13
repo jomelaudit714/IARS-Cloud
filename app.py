@@ -1063,6 +1063,17 @@ auditor_options = build_auditor_options(auditors_df, additional_auditor_rows)
 if not auditor_options:
     auditor_options = sorted({_clean_option(name) for name in AUDITORS if _clean_option(name)}, key=str.casefold)
 
+
+def _clear_avatar_dialog_state_on_navigation() -> None:
+    for key in [
+        "iars_avatar_view_dialog_open",
+        "iars_avatar_edit_dialog_open",
+        "iars_avatar_dialog_mode",
+        "profile_picture_pending_upload_signature",
+        "profile_picture_pending_preview_bytes",
+    ]:
+        st.session_state.pop(key, None)
+
 nav_options = [
     "🏠 Dashboard",
     "📄 Generate Extraction",
@@ -1107,6 +1118,7 @@ with st.sidebar:
         width="stretch",
         type="primary" if dashboard_selected else "secondary",
     ):
+        _clear_avatar_dialog_state_on_navigation()
         st.session_state["main_navigation"] = dashboard_label
 
     audit_expanded = selected_page in audit_report_nav
@@ -1120,6 +1132,7 @@ with st.sidebar:
                 width="stretch",
                 type="primary" if is_selected else "secondary",
             ):
+                _clear_avatar_dialog_state_on_navigation()
                 st.session_state["main_navigation"] = nav_label
 
     remaining_nav = [label for label in standalone_nav if label != dashboard_label]
@@ -1132,6 +1145,7 @@ with st.sidebar:
             width="stretch",
             type="primary" if is_selected else "secondary",
         ):
+            _clear_avatar_dialog_state_on_navigation()
             st.session_state["main_navigation"] = nav_label
 
     st.divider()
@@ -1144,7 +1158,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.47", page_title=page_key)
+render_app_header(auth_user, version="4.4.51", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 

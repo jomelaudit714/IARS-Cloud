@@ -491,8 +491,8 @@ def _avatar_adjust_number(value: Any, delta: int, *, min_value: int = -100, max_
 
 
 def _render_avatar_native_move_controls(x_key: str, y_key: str, zoom_key: str) -> None:
-    """Native Streamlit controls for moving the crop circle/selection safely."""
-    st.caption("Move the crop circle using the arrows. The saved avatar will be based on the selected circle area.")
+    """Native Streamlit movement controls that simulate drag without HTML/components."""
+    st.caption("Move the photo inside the circle using the arrows. Use Fine/Normal/Coarse for movement speed.")
 
     step_key = "profile_picture_move_step_dialog"
     st.session_state.setdefault(step_key, "Normal")
@@ -517,7 +517,7 @@ def _render_avatar_native_move_controls(x_key: str, y_key: str, zoom_key: str) -
             st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), -step)
             st.rerun()
     with center_c:
-        if st.button("Center Circle", key="profile_move_center_dialog", width="stretch"):
+        if st.button("Center", key="profile_move_center_dialog", width="stretch"):
             st.session_state[x_key] = 0
             st.session_state[y_key] = 0
             st.session_state[zoom_key] = max(1.0, float(st.session_state.get(zoom_key, 1.0)))
@@ -743,17 +743,22 @@ def _render_profile_picture_editor_styles() -> None:
     st.markdown(
         """
         <style>
-        /* V4.4.47: crop circle selection editor uses native Streamlit controls. */
-
-        /* V4.4.46: center See Avatar and Change Avatar dialogs. */
+        /* V4.4.51: force avatar dialogs to the true center of the viewport. */
         div[data-testid="stDialog"] {
             align-items:center!important;
             justify-content:center!important;
         }
+        div[data-testid="stDialog"] > div,
         div[data-testid="stDialog"] div[role="dialog"],
         div[role="dialog"][aria-modal="true"] {
             margin:auto!important;
             align-self:center!important;
+        }
+        div[data-testid="stDialog"] div[role="dialog"] {
+            left:50%!important;
+            top:50%!important;
+            transform:translate(-50%, -50%)!important;
+            position:fixed!important;
         }
 
         .iars-photo-editor-shell {border:1px solid rgba(243,194,71,.58);border-radius:20px;padding:12px;background:linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%);box-shadow:0 14px 34px rgba(7,32,72,.10);margin:.2rem 0 .45rem 0;}
@@ -939,13 +944,59 @@ def _profile_save_picture(
     return picture_data
 
 
+
+
+def _profile_remove_picture(
+    client: Any,
+    config: AuthConfig,
+    *,
+    user: dict[str, Any],
+    user_id: str,
+    current_username: str,
+) -> None:
+    diagnostics = _profile_diagnostics_cached(client, config)
+    if not diagnostics.get("table_ready"):
+        diagnostics = _refresh_profile_diagnostics(client, config)
+    if not diagnostics.get("table_ready"):
+        raise ValueError(
+            "The profile table is not accessible. Run the updated "
+            "SUPABASE_PROFILE_SETUP.sql, then refresh the app."
+        )
+
+    _upsert_profile(
+        client,
+        config,
+        user_id,
+        {"profile_picture_path": None, "profile_picture_data": None},
+    )
+    _log_event(
+        client,
+        config,
+        event_type="profile_picture_removed",
+        username=current_username,
+        user_id=None if is_admin_user(user) else user_id,
+        success=True,
+    )
+    updated_user = dict(user)
+    updated_user["profile_picture_data"] = ""
+    updated_user["profile_picture_path"] = ""
+    _cache_session_user(updated_user)
+    st.success("Profile picture removed.")
+
 def _close_avatar_dialogs(clear_upload: bool = False) -> None:
+    """Close avatar dialogs and remove stale dialog/upload state."""
     st.session_state[AVATAR_VIEW_DIALOG_OPEN] = False
     st.session_state[AVATAR_EDIT_DIALOG_OPEN] = False
     st.session_state[AVATAR_DIALOG_MODE] = ""
+    st.session_state.pop("profile_picture_pending_upload_signature", None)
+    st.session_state.pop("profile_picture_pending_preview_bytes", None)
     if clear_upload:
         st.session_state[AVATAR_UPLOAD_VERSION] = int(st.session_state.get(AVATAR_UPLOAD_VERSION, 0)) + 1
-        st.session_state.pop("profile_picture_zoom_dialog", None)
+    st.session_state.pop("profile_picture_zoom_dialog", None)
+    st.session_state.pop("profile_picture_x_dialog", None)
+    st.session_state.pop("profile_picture_y_dialog", None)
+    st.session_state.pop("profile_picture_move_step_dialog", None)
+    st.session_state.pop("profile_picture_crop_size_dialog", None)
 
 
 def _open_avatar_mode(mode: str) -> None:
@@ -961,16 +1012,18 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
     def _see_avatar_dialog() -> None:
         _render_avatar_full_view(current_picture)
         if st.button("Close", key="profile_avatar_dialog_close", width="stretch"):
-            _close_avatar_dialogs()
+            _close_avatar_dialogs(clear_upload=True)
             st.rerun()
 
-    @st.dialog("Change Avatar", width="medium")
+    @st.dialog("Change Avatar", width="small")
     def _change_avatar_dialog() -> None:
+        st.caption("Upload a clear, centered JPG or PNG. The system will automatically fit it into the profile circle.")
+
         if AVATAR_UPLOAD_VERSION not in st.session_state:
             st.session_state[AVATAR_UPLOAD_VERSION] = 0
         uploader_key = f"profile_picture_upload_dialog_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}"
         uploaded_picture = st.file_uploader(
-            "Upload photo",
+            "Upload image",
             type=["jpg", "jpeg", "png"],
             key=uploader_key,
             label_visibility="collapsed",
@@ -979,63 +1032,43 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         prepared_preview_bytes = None
         if uploaded_picture is not None:
             try:
-                source_image = _profile_picture_image(uploaded_picture)
-                st.caption("Stable crop-circle editor: move the crop circle/selection, then the avatar will be saved based on the selected area.")
-
-                zoom_key = "profile_picture_zoom_dialog"
-                x_key = "profile_picture_x_dialog"
-                y_key = "profile_picture_y_dialog"
-                st.session_state.setdefault(zoom_key, 1.00)
-                st.session_state.setdefault(x_key, 0)
-                st.session_state.setdefault(y_key, 0)
-
-                minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
-                with minus_col:
-                    if st.button("−", key="profile_zoom_minus_dialog", width="stretch"):
-                        st.session_state[zoom_key] = max(
-                            1.00,
-                            round(float(st.session_state.get(zoom_key, 1.00)) - 0.05, 2),
-                        )
-                        st.rerun()
-                with zoom_col:
-                    st.slider(
-                        "Zoom",
-                        min_value=1.00,
-                        max_value=2.50,
-                        value=float(st.session_state.get(zoom_key, 1.00)),
-                        step=0.05,
-                        key=zoom_key,
-                        label_visibility="collapsed",
-                    )
-                with plus_col:
-                    if st.button("+", key="profile_zoom_plus_dialog", width="stretch"):
-                        st.session_state[zoom_key] = min(
-                            2.50,
-                            round(float(st.session_state.get(zoom_key, 1.00)) + 0.05, 2),
-                        )
-                        st.rerun()
-
-                _render_avatar_native_move_controls(x_key, y_key, zoom_key)
-                with st.expander("Fine tune with sliders", expanded=False):
-                    st.slider("Move crop circle left / right", -100, 100, int(st.session_state.get(x_key, 0)), 5, key=x_key)
-                    st.slider("Move crop circle up / down", -100, 100, int(st.session_state.get(y_key, 0)), 5, key=y_key)
-
-                prepared_preview_bytes = _profile_picture_positioned_jpeg_from_image(
-                    source_image,
-                    zoom=float(st.session_state.get(zoom_key, 1.00)),
-                    x_position=int(st.session_state.get(x_key, 0)),
-                    y_position=int(st.session_state.get(y_key, 0)),
-                )
-                st.caption("Avatar preview based on the current crop circle:")
+                prepared_preview_bytes = _profile_picture_jpeg(uploaded_picture)
+                st.caption("Preview:")
                 _render_avatar_editor_preview(prepared_preview_bytes)
+                st.session_state["profile_picture_pending_preview_bytes"] = prepared_preview_bytes
+                st.session_state["profile_picture_pending_upload_signature"] = _avatar_upload_signature(uploaded_picture)
             except ValueError as exc:
                 st.error(str(exc))
             except Exception as exc:
-                st.error(f"Unable to prepare avatar editor: {_profile_error_text(exc)}")
+                st.error(f"Unable to prepare avatar preview: {_profile_error_text(exc)}")
+        elif current_picture:
+            st.caption("Current avatar:")
+            _render_avatar_full_view(current_picture)
+        else:
+            st.info("No avatar uploaded yet.")
+
+        if current_picture:
+            if st.button("Remove Avatar", key="profile_picture_remove_dialog", width="stretch"):
+                try:
+                    _profile_remove_picture(
+                        client,
+                        config,
+                        user=user,
+                        user_id=user_id,
+                        current_username=current_username,
+                    )
+                    st.session_state.pop(SESSION_USER_CACHE, None)
+                    st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
+                    _close_avatar_dialogs(clear_upload=True)
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Unable to remove profile picture: {_profile_error_text(exc)}")
 
         save_col, cancel_col = st.columns(2)
         with save_col:
-            if st.button("Save", key="profile_picture_save_dialog", type="primary", width="stretch"):
+            if st.button("Save Avatar", key="profile_picture_save_dialog", type="primary", width="stretch", disabled=uploaded_picture is None):
                 try:
                     _profile_save_picture(
                         client,
@@ -1049,9 +1082,6 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                     st.session_state.pop(SESSION_USER_CACHE, None)
                     st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
                     _close_avatar_dialogs(clear_upload=True)
-                    st.session_state.pop("profile_picture_x_dialog", None)
-                    st.session_state.pop("profile_picture_y_dialog", None)
-                    st.session_state.pop("profile_picture_move_step_dialog", None)
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
@@ -1060,9 +1090,6 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         with cancel_col:
             if st.button("Cancel", key="profile_picture_cancel_dialog", width="stretch"):
                 _close_avatar_dialogs(clear_upload=True)
-                st.session_state.pop("profile_picture_x_dialog", None)
-                st.session_state.pop("profile_picture_y_dialog", None)
-                st.session_state.pop("profile_picture_move_step_dialog", None)
                 st.rerun()
 
     if st.session_state.get(AVATAR_EDIT_DIALOG_OPEN):
