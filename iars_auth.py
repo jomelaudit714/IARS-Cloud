@@ -491,8 +491,8 @@ def _avatar_adjust_number(value: Any, delta: int, *, min_value: int = -100, max_
 
 
 def _render_avatar_native_move_controls(x_key: str, y_key: str, zoom_key: str) -> None:
-    """Native Streamlit movement controls that simulate drag without HTML/components."""
-    st.caption("Move the photo inside the circle using the arrows. Use Fine/Normal/Coarse for movement speed.")
+    """Native Streamlit controls for moving the crop circle/selection safely."""
+    st.caption("Move the crop circle using the arrows. The saved avatar will be based on the selected circle area.")
 
     step_key = "profile_picture_move_step_dialog"
     st.session_state.setdefault(step_key, "Normal")
@@ -517,7 +517,7 @@ def _render_avatar_native_move_controls(x_key: str, y_key: str, zoom_key: str) -
             st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), -step)
             st.rerun()
     with center_c:
-        if st.button("Center", key="profile_move_center_dialog", width="stretch"):
+        if st.button("Center Circle", key="profile_move_center_dialog", width="stretch"):
             st.session_state[x_key] = 0
             st.session_state[y_key] = 0
             st.session_state[zoom_key] = max(1.0, float(st.session_state.get(zoom_key, 1.0)))
@@ -743,6 +743,8 @@ def _render_profile_picture_editor_styles() -> None:
     st.markdown(
         """
         <style>
+        /* V4.4.47: crop circle selection editor uses native Streamlit controls. */
+
         /* V4.4.46: center See Avatar and Change Avatar dialogs. */
         div[data-testid="stDialog"] {
             align-items:center!important;
@@ -978,7 +980,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         if uploaded_picture is not None:
             try:
                 source_image = _profile_picture_image(uploaded_picture)
-                st.caption("Stable circle crop editor: use zoom and movement controls. Browser drag is disabled to prevent Streamlit Cloud segmentation fault.")
+                st.caption("Stable crop-circle editor: move the crop circle/selection, then the avatar will be saved based on the selected area.")
 
                 zoom_key = "profile_picture_zoom_dialog"
                 x_key = "profile_picture_x_dialog"
@@ -1015,8 +1017,8 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
 
                 _render_avatar_native_move_controls(x_key, y_key, zoom_key)
                 with st.expander("Fine tune with sliders", expanded=False):
-                    st.slider("Move photo left / right", -100, 100, int(st.session_state.get(x_key, 0)), 5, key=x_key)
-                    st.slider("Move photo up / down", -100, 100, int(st.session_state.get(y_key, 0)), 5, key=y_key)
+                    st.slider("Move crop circle left / right", -100, 100, int(st.session_state.get(x_key, 0)), 5, key=x_key)
+                    st.slider("Move crop circle up / down", -100, 100, int(st.session_state.get(y_key, 0)), 5, key=y_key)
 
                 prepared_preview_bytes = _profile_picture_positioned_jpeg_from_image(
                     source_image,
@@ -1024,6 +1026,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                     x_position=int(st.session_state.get(x_key, 0)),
                     y_position=int(st.session_state.get(y_key, 0)),
                 )
+                st.caption("Avatar preview based on the current crop circle:")
                 _render_avatar_editor_preview(prepared_preview_bytes)
             except ValueError as exc:
                 st.error(str(exc))
