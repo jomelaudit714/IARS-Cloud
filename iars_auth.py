@@ -12,9 +12,8 @@ from typing import Any
 from io import BytesIO
 
 import streamlit as st
-import streamlit.components.v1 as components
 
-# V4.4.36: Inline HTML drag avatar editor; no declare_component and no local component folder.
+# V4.4.39: Avatar drag editor using Streamlit Components v2, same pattern as PDF Tagging.
 st_cropper = None
 
 from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards, render_transition_guard
@@ -468,231 +467,370 @@ def _avatar_circle_box_algorithm(img: Any, *args: Any, **kwargs: Any) -> dict[st
 
 
 
-def _avatar_qparam(name: str, default: str = "") -> str:
-    try:
-        value = st.query_params.get(name, default)
-        if isinstance(value, list):
-            return str(value[0] if value else default)
-        return str(value if value is not None else default)
-    except Exception:
-        try:
-            value = st.experimental_get_query_params().get(name, [default])
-            return str(value[0] if isinstance(value, list) and value else value or default)
-        except Exception:
-            return default
 
-
-def _avatar_qfloat(name: str, default: float, *, min_value: float, max_value: float) -> float:
-    try:
-        raw = _avatar_qparam(name, str(default))
-        value = float(raw)
-    except Exception:
-        value = float(default)
-    return max(min_value, min(max_value, value))
-
-
-def _avatar_qint(name: str, default: int, *, min_value: int, max_value: int) -> int:
-    try:
-        raw = _avatar_qparam(name, str(default))
-        value = int(round(float(raw)))
-    except Exception:
-        value = int(default)
-    return max(min_value, min(max_value, value))
-
-
-def _avatar_upload_signature(uploaded_picture: Any) -> str:
-    try:
-        data = uploaded_picture.getvalue()
-    except Exception:
-        data = b""
-    return hashlib.sha1(data).hexdigest()[:16] if data else "no_upload"
-
-
-def _render_avatar_inline_drag_editor(
-    image_data_uri: str,
-    *,
-    x_position: int,
-    y_position: int,
-    zoom: float,
-    upload_signature: str,
-) -> None:
-    """Render a no-dependency drag editor using inline HTML.
-
-    This does not use streamlit-cropper and does not use declare_component, so
-    there is no local component folder for Streamlit Cloud to load.
-
-    The browser editor updates URL query params on drag release / zoom click.
-    Python then performs the actual crop using PIL and the uploaded image bytes.
-    """
-    safe_image = json.dumps(str(image_data_uri or ""))
-    safe_sig = json.dumps(str(upload_signature or ""))
-    x_position = max(-100, min(100, int(x_position)))
-    y_position = max(-100, min(100, int(y_position)))
-    zoom = max(1.0, min(2.5, float(zoom or 1.0)))
-
-    editor_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-html, body {{
-  margin:0; padding:0; background:transparent; overflow:hidden;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-}}
-.wrap {{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:4px 0 0; }}
-.stage {{
-  width:260px; height:260px; border-radius:50%; overflow:hidden; position:relative;
-  background:#eef4ff; border:4px solid #F3C247;
-  box-shadow:0 10px 24px rgba(6,26,54,.22);
-  touch-action:none; cursor:grab; user-select:none;
-}}
-.stage:active {{ cursor:grabbing; }}
-.avatar-img {{
-  position:absolute; left:0; top:0; transform-origin:center center;
-  user-select:none; -webkit-user-drag:none; pointer-events:none; max-width:none;
-}}
-.shade {{
-  pointer-events:none; position:absolute; inset:-6px; border-radius:50%;
-  box-shadow:0 0 0 999px rgba(6,26,54,.16);
-}}
-.controls {{
-  width:260px; display:grid; grid-template-columns:42px 1fr 42px;
-  gap:10px; align-items:center;
-}}
-button.zoom {{
-  width:42px; height:38px; border:1px solid #cfd9e7; border-radius:10px;
-  background:#fff; color:#061A36; font-size:22px; font-weight:800;
-  line-height:1; cursor:pointer; box-shadow:0 2px 8px rgba(6,26,54,.08);
-}}
-button.zoom:active {{ transform:translateY(1px); }}
-input[type=range] {{ width:100%; accent-color:#F3C247; }}
-.caption {{ font-size:12px; color:#526579; text-align:center; margin-top:-2px; }}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div id="stage" class="stage">
-    <img id="img" class="avatar-img" draggable="false">
-    <div class="shade"></div>
+AVATAR_DRAG_EDITOR_HTML = r"""
+<div class="iars-avatar-editor">
+  <div class="avatar-stage" id="avatar-stage">
+    <img id="avatar-image" class="avatar-image" draggable="false" />
+    <div class="avatar-ring"></div>
   </div>
-  <div class="controls">
-    <button class="zoom" id="minus" type="button">−</button>
-    <input id="zoom" type="range" min="1" max="2.5" step="0.01" value="{zoom}">
-    <button class="zoom" id="plus" type="button">+</button>
+  <div class="avatar-controls">
+    <button type="button" id="zoom-out" title="Zoom out">−</button>
+    <input id="zoom-slider" type="range" min="1" max="2.5" step="0.01" value="1" />
+    <button type="button" id="zoom-in" title="Zoom in">+</button>
   </div>
-  <div class="caption">Drag the photo, then release. Zoom using − / +.</div>
+  <div class="avatar-hint">Drag the picture inside the fixed circle. Use − / + to zoom.</div>
 </div>
-<script>
-const imageData = {safe_image};
-const uploadSig = {safe_sig};
-const stage = document.getElementById("stage");
-const img = document.getElementById("img");
-const zoomInput = document.getElementById("zoom");
-const minus = document.getElementById("minus");
-const plus = document.getElementById("plus");
-
-let naturalW = 1, naturalH = 1, stageSize = 260;
-let zoom = {zoom};
-let xPct = {x_position};
-let yPct = {y_position};
-let scale = 1, minScale = 1, x = 0, y = 0;
-let dragging = false, lastX = 0, lastY = 0;
-
-function clamp(v, lo, hi) {{ return Math.max(lo, Math.min(hi, v)); }}
-function computeMinScale() {{
-  minScale = Math.max(stageSize / naturalW, stageSize / naturalH);
-  scale = minScale * zoom;
-}}
-function percentToXY() {{
-  computeMinScale();
-  const w = naturalW * scale, h = naturalH * scale;
-  const extraX = Math.max(0, w - stageSize);
-  const extraY = Math.max(0, h - stageSize);
-  x = -extraX / 2 - (xPct / 100) * (extraX / 2);
-  y = -extraY / 2 - (yPct / 100) * (extraY / 2);
-  clampXY();
-}}
-function xyToPercent() {{
-  const w = naturalW * scale, h = naturalH * scale;
-  const extraX = Math.max(0, w - stageSize);
-  const extraY = Math.max(0, h - stageSize);
-  xPct = extraX > 0 ? clamp(Math.round(((-x - extraX/2) / (extraX/2)) * 100), -100, 100) : 0;
-  yPct = extraY > 0 ? clamp(Math.round(((-y - extraY/2) / (extraY/2)) * 100), -100, 100) : 0;
-}}
-function clampXY() {{
-  const w = naturalW * scale, h = naturalH * scale;
-  const minX = Math.min(0, stageSize - w);
-  const minY = Math.min(0, stageSize - h);
-  x = clamp(x, minX, 0);
-  y = clamp(y, minY, 0);
-  if (w <= stageSize) x = (stageSize - w) / 2;
-  if (h <= stageSize) y = (stageSize - h) / 2;
-}}
-function apply() {{
-  computeMinScale();
-  clampXY();
-  img.style.width = (naturalW * scale) + "px";
-  img.style.height = (naturalH * scale) + "px";
-  img.style.transform = `translate(${{x}}px, ${{y}}px)`;
-}}
-function updateParent() {{
-  xyToPercent();
-  const url = new URL(window.parent.location.href);
-  url.searchParams.set("avatar_sig", uploadSig);
-  url.searchParams.set("avatar_x", String(xPct));
-  url.searchParams.set("avatar_y", String(yPct));
-  url.searchParams.set("avatar_zoom", String(Math.round(zoom * 100) / 100));
-  window.parent.location.href = url.toString();
-}}
-function setZoom(z, update=true) {{
-  const oldScale = scale || minScale;
-  const centerX = stageSize / 2, centerY = stageSize / 2;
-  const imgPointX = (centerX - x) / oldScale;
-  const imgPointY = (centerY - y) / oldScale;
-  zoom = clamp(parseFloat(z || 1), 1, 2.5);
-  zoomInput.value = zoom;
-  computeMinScale();
-  x = centerX - imgPointX * scale;
-  y = centerY - imgPointY * scale;
-  apply();
-  if (update) updateParent();
-}}
-
-img.onload = () => {{
-  naturalW = img.naturalWidth || 1;
-  naturalH = img.naturalHeight || 1;
-  zoomInput.value = zoom;
-  percentToXY();
-  apply();
-}};
-img.src = imageData;
-
-stage.addEventListener("pointerdown", (e) => {{
-  dragging = true; lastX = e.clientX; lastY = e.clientY;
-  stage.setPointerCapture(e.pointerId);
-}});
-stage.addEventListener("pointermove", (e) => {{
-  if (!dragging) return;
-  x += e.clientX - lastX;
-  y += e.clientY - lastY;
-  lastX = e.clientX; lastY = e.clientY;
-  apply();
-}});
-stage.addEventListener("pointerup", (e) => {{
-  dragging = false;
-  try {{ stage.releasePointerCapture(e.pointerId); }} catch (_) {{}}
-  updateParent();
-}});
-stage.addEventListener("pointercancel", () => {{ dragging = false; }});
-zoomInput.addEventListener("change", () => setZoom(zoomInput.value, true));
-minus.addEventListener("click", () => setZoom(zoom - 0.05, true));
-plus.addEventListener("click", () => setZoom(zoom + 0.05, true));
-</script>
-</body>
-</html>
 """
-    components.html(editor_html, height=330, scrolling=False)
+
+AVATAR_DRAG_EDITOR_CSS = r"""
+.iars-avatar-editor {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 0 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.avatar-stage {
+  width: 260px;
+  height: 260px;
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #eef4ff;
+  border: 4px solid #F3C247;
+  box-shadow: 0 10px 24px rgba(6, 26, 54, .22);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.avatar-stage:active { cursor: grabbing; }
+.avatar-image {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: center center;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  max-width: none;
+}
+.avatar-ring {
+  pointer-events: none;
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(6, 26, 54, .16);
+}
+.avatar-controls {
+  width: 260px;
+  display: grid;
+  grid-template-columns: 42px 1fr 42px;
+  gap: 10px;
+  align-items: center;
+}
+.avatar-controls button {
+  width: 42px;
+  height: 38px;
+  border: 1px solid #cfd9e7;
+  border-radius: 10px;
+  background: #fff;
+  color: #061A36;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(6,26,54,.08);
+}
+.avatar-controls button:active { transform: translateY(1px); }
+.avatar-controls input[type=range] {
+  width: 100%;
+  accent-color: #F3C247;
+}
+.avatar-hint {
+  font-size: 12px;
+  color: #526579;
+  text-align: center;
+  margin-top: -2px;
+}
+"""
+
+AVATAR_DRAG_EDITOR_JS = r"""
+export default function(component) {
+  const { parentElement, data, setStateValue } = component;
+  const stage = parentElement.querySelector('#avatar-stage');
+  const image = parentElement.querySelector('#avatar-image');
+  const zoomSlider = parentElement.querySelector('#zoom-slider');
+  const zoomIn = parentElement.querySelector('#zoom-in');
+  const zoomOut = parentElement.querySelector('#zoom-out');
+
+  const stageSize = 260;
+  const imageData = String(data?.image_data ?? '');
+  const signature = String(data?.upload_signature ?? '');
+  const editor = data?.editor && typeof data.editor === 'object' ? data.editor : {};
+
+  let naturalW = 1;
+  let naturalH = 1;
+  let zoom = clamp(Number(editor.zoom ?? 1), 1, 2.5);
+  let xPct = clamp(Number(editor.x_position ?? 0), -100, 100);
+  let yPct = clamp(Number(editor.y_position ?? 0), -100, 100);
+  let scale = 1;
+  let minScale = 1;
+  let x = 0;
+  let y = 0;
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+  let syncTimer = null;
+  let lastSnapshot = '';
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function computeMinScale() {
+    minScale = Math.max(stageSize / naturalW, stageSize / naturalH);
+    scale = minScale * zoom;
+  }
+
+  function clampXY() {
+    const w = naturalW * scale;
+    const h = naturalH * scale;
+    const minX = Math.min(0, stageSize - w);
+    const minY = Math.min(0, stageSize - h);
+    x = clamp(x, minX, 0);
+    y = clamp(y, minY, 0);
+    if (w <= stageSize) x = (stageSize - w) / 2;
+    if (h <= stageSize) y = (stageSize - h) / 2;
+  }
+
+  function pctToXY() {
+    computeMinScale();
+    const w = naturalW * scale;
+    const h = naturalH * scale;
+    const extraX = Math.max(0, w - stageSize);
+    const extraY = Math.max(0, h - stageSize);
+    x = -extraX / 2 - (xPct / 100) * (extraX / 2);
+    y = -extraY / 2 - (yPct / 100) * (extraY / 2);
+    clampXY();
+  }
+
+  function xyToPct() {
+    const w = naturalW * scale;
+    const h = naturalH * scale;
+    const extraX = Math.max(0, w - stageSize);
+    const extraY = Math.max(0, h - stageSize);
+    xPct = extraX > 0 ? clamp(Math.round(((-x - extraX / 2) / (extraX / 2)) * 100), -100, 100) : 0;
+    yPct = extraY > 0 ? clamp(Math.round(((-y - extraY / 2) / (extraY / 2)) * 100), -100, 100) : 0;
+  }
+
+  function apply() {
+    computeMinScale();
+    clampXY();
+    image.style.width = `${naturalW * scale}px`;
+    image.style.height = `${naturalH * scale}px`;
+    image.style.transform = `translate(${x}px, ${y}px)`;
+  }
+
+  function currentValue() {
+    xyToPct();
+    return {
+      avatar: {
+        upload_signature: signature,
+        x_position: Number(xPct),
+        y_position: Number(yPct),
+        zoom: Number(Math.round(zoom * 100) / 100),
+        updated_at: Date.now(),
+      }
+    };
+  }
+
+  function syncNow() {
+    const value = currentValue();
+    const snapshot = JSON.stringify(value.avatar);
+    if (snapshot !== lastSnapshot) {
+      lastSnapshot = snapshot;
+      setStateValue('avatar', value.avatar);
+    }
+  }
+
+  function scheduleSync(wait = 180) {
+    if (syncTimer) window.clearTimeout(syncTimer);
+    syncTimer = window.setTimeout(syncNow, wait);
+  }
+
+  function setZoom(nextZoom, shouldSync = true) {
+    const oldScale = scale || minScale;
+    const centerX = stageSize / 2;
+    const centerY = stageSize / 2;
+    const imgPointX = (centerX - x) / oldScale;
+    const imgPointY = (centerY - y) / oldScale;
+
+    zoom = clamp(Number(nextZoom || 1), 1, 2.5);
+    zoomSlider.value = String(zoom);
+    computeMinScale();
+
+    x = centerX - imgPointX * scale;
+    y = centerY - imgPointY * scale;
+    apply();
+    if (shouldSync) scheduleSync(80);
+  }
+
+  function init() {
+    if (!imageData) return;
+    image.onload = () => {
+      naturalW = image.naturalWidth || 1;
+      naturalH = image.naturalHeight || 1;
+      zoomSlider.value = String(zoom);
+      pctToXY();
+      apply();
+      syncNow();
+    };
+    image.src = imageData;
+  }
+
+  stage.addEventListener('pointerdown', (event) => {
+    dragging = true;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    stage.setPointerCapture(event.pointerId);
+  });
+
+  stage.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    x += event.clientX - lastX;
+    y += event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    apply();
+    scheduleSync(240);
+  });
+
+  stage.addEventListener('pointerup', (event) => {
+    dragging = false;
+    try { stage.releasePointerCapture(event.pointerId); } catch (_) {}
+    syncNow();
+  });
+
+  stage.addEventListener('pointercancel', () => {
+    dragging = false;
+    syncNow();
+  });
+
+  zoomSlider.addEventListener('input', () => setZoom(zoomSlider.value, false));
+  zoomSlider.addEventListener('change', () => setZoom(zoomSlider.value, true));
+  zoomIn.addEventListener('click', () => setZoom(zoom + 0.05, true));
+  zoomOut.addEventListener('click', () => setZoom(zoom - 0.05, true));
+
+  init();
+}
+"""
+
+
+def _register_avatar_drag_component_v2():
+    return st.components.v2.component(
+        name="iars_avatar_drag_editor_v1",
+        html=AVATAR_DRAG_EDITOR_HTML,
+        css=AVATAR_DRAG_EDITOR_CSS,
+        js=AVATAR_DRAG_EDITOR_JS,
+        isolate_styles=True,
+    )
+
+
+def _read_avatar_drag_state(component_state: Any, default: dict[str, Any]) -> dict[str, Any]:
+    if component_state is None:
+        return default
+    if isinstance(component_state, dict):
+        value = component_state.get("avatar", component_state)
+    else:
+        value = getattr(component_state, "avatar", default)
+    if not isinstance(value, dict):
+        return default
+    result = dict(default)
+    result.update(value)
+    return result
+
+
+def _avatar_drag_editor_v2(
+    *,
+    image_data: str,
+    upload_signature: str,
+    key: str,
+    default_state: dict[str, Any],
+    height: int = 342,
+) -> dict[str, Any]:
+    current_state = _read_avatar_drag_state(st.session_state.get(key), default_state)
+    if str(current_state.get("upload_signature") or "") != str(upload_signature or ""):
+        current_state = dict(default_state)
+
+    component = _register_avatar_drag_component_v2()
+    value = component(
+        data={
+            "image_data": image_data,
+            "upload_signature": upload_signature,
+            "editor": current_state,
+        },
+        default={"avatar": current_state},
+        key=key,
+        width="stretch",
+        height=height,
+    )
+    return _read_avatar_drag_state(value, current_state)
+
+
+def _avatar_adjust_number(value: Any, delta: int, *, min_value: int = -100, max_value: int = 100) -> int:
+    try:
+        current = int(round(float(value)))
+    except Exception:
+        current = 0
+    return max(min_value, min(max_value, current + int(delta)))
+
+
+def _render_avatar_native_move_controls(x_key: str, y_key: str, zoom_key: str) -> None:
+    """Native Streamlit movement controls that simulate drag without HTML/components."""
+    st.caption("Move the photo inside the circle using the arrows. Use Fine/Normal/Coarse for movement speed.")
+
+    step_key = "profile_picture_move_step_dialog"
+    st.session_state.setdefault(step_key, "Normal")
+    speed = st.radio(
+        "Movement speed",
+        ["Fine", "Normal", "Coarse"],
+        horizontal=True,
+        key=step_key,
+        label_visibility="collapsed",
+    )
+    step = 2 if speed == "Fine" else 5 if speed == "Normal" else 12
+
+    up_l, up_c, up_r = st.columns([0.34, 0.32, 0.34])
+    with up_c:
+        if st.button("▲", key="profile_move_up_dialog", use_container_width=True):
+            st.session_state[y_key] = _avatar_adjust_number(st.session_state.get(y_key, 0), -step)
+            st.rerun()
+
+    left_c, center_c, right_c = st.columns(3)
+    with left_c:
+        if st.button("◀", key="profile_move_left_dialog", use_container_width=True):
+            st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), -step)
+            st.rerun()
+    with center_c:
+        if st.button("Center", key="profile_move_center_dialog", use_container_width=True):
+            st.session_state[x_key] = 0
+            st.session_state[y_key] = 0
+            st.session_state[zoom_key] = max(1.0, float(st.session_state.get(zoom_key, 1.0)))
+            st.rerun()
+    with right_c:
+        if st.button("▶", key="profile_move_right_dialog", use_container_width=True):
+            st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), step)
+            st.rerun()
+
+    down_l, down_c, down_r = st.columns([0.34, 0.32, 0.34])
+    with down_c:
+        if st.button("▼", key="profile_move_down_dialog", use_container_width=True):
+            st.session_state[y_key] = _avatar_adjust_number(st.session_state.get(y_key, 0), step)
+            st.rerun()
 
 
 def _render_avatar_editor_preview(jpeg_bytes: bytes) -> None:
@@ -1128,37 +1266,60 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         if uploaded_picture is not None:
             try:
                 source_image = _profile_picture_image(uploaded_picture)
+                st.caption("Drag the picture inside the fixed circle. This uses the same Components v2 pattern as PDF Tagging, not the old HTML/component path that crashed.")
                 upload_signature = _avatar_upload_signature(uploaded_picture)
-                query_signature = _avatar_qparam("avatar_sig", "")
-
-                if query_signature == upload_signature:
-                    zoom = _avatar_qfloat("avatar_zoom", 1.0, min_value=1.0, max_value=2.5)
-                    x_position = _avatar_qint("avatar_x", 0, min_value=-100, max_value=100)
-                    y_position = _avatar_qint("avatar_y", 0, min_value=-100, max_value=100)
-                else:
-                    zoom = 1.0
-                    x_position = 0
-                    y_position = 0
-
+                default_drag_state = {
+                    "upload_signature": upload_signature,
+                    "x_position": 0,
+                    "y_position": 0,
+                    "zoom": 1.0,
+                    "updated_at": 0,
+                }
                 upload_data_uri = _profile_picture_data_uri(_profile_picture_jpeg(image=source_image))
-                _render_avatar_inline_drag_editor(
-                    upload_data_uri,
-                    x_position=x_position,
-                    y_position=y_position,
-                    zoom=zoom,
+                drag_state = _avatar_drag_editor_v2(
+                    image_data=upload_data_uri,
                     upload_signature=upload_signature,
+                    key=f"profile_avatar_drag_v2_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}",
+                    default_state=default_drag_state,
                 )
 
                 prepared_preview_bytes = _profile_picture_positioned_jpeg_from_image(
                     source_image,
-                    zoom=zoom,
-                    x_position=x_position,
-                    y_position=y_position,
+                    zoom=float(drag_state.get("zoom", 1.0)),
+                    x_position=int(float(drag_state.get("x_position", 0))),
+                    y_position=int(float(drag_state.get("y_position", 0))),
                 )
+
+                with st.expander("Fallback controls if drag does not update", expanded=False):
+                    zoom_key = "profile_picture_zoom_dialog"
+                    x_key = "profile_picture_x_dialog"
+                    y_key = "profile_picture_y_dialog"
+                    st.session_state.setdefault(zoom_key, float(drag_state.get("zoom", 1.0)))
+                    st.session_state.setdefault(x_key, int(float(drag_state.get("x_position", 0))))
+                    st.session_state.setdefault(y_key, int(float(drag_state.get("y_position", 0))))
+                    minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
+                    with minus_col:
+                        if st.button("−", key="profile_zoom_minus_dialog", use_container_width=True):
+                            st.session_state[zoom_key] = max(1.00, round(float(st.session_state.get(zoom_key, 1.00)) - 0.05, 2))
+                    with zoom_col:
+                        st.slider("Zoom", min_value=1.00, max_value=2.50, value=float(st.session_state.get(zoom_key, 1.00)), step=0.05, key=zoom_key, label_visibility="collapsed")
+                    with plus_col:
+                        if st.button("+", key="profile_zoom_plus_dialog", use_container_width=True):
+                            st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, 1.00)) + 0.05, 2))
+                    _render_avatar_native_move_controls(x_key, y_key, zoom_key)
+                    st.slider("Move photo left / right", -100, 100, int(st.session_state.get(x_key, 0)), 5, key=x_key)
+                    st.slider("Move photo up / down", -100, 100, int(st.session_state.get(y_key, 0)), 5, key=y_key)
+                    fallback_preview_bytes = _profile_picture_positioned_jpeg_from_image(
+                        source_image,
+                        zoom=float(st.session_state.get(zoom_key, 1.0)),
+                        x_position=int(st.session_state.get(x_key, 0)),
+                        y_position=int(st.session_state.get(y_key, 0)),
+                    )
+                    if st.button("Use fallback controls for save", key="profile_use_fallback_avatar", use_container_width=True):
+                        prepared_preview_bytes = fallback_preview_bytes
+                    _render_avatar_editor_preview(fallback_preview_bytes)
             except ValueError as exc:
                 st.error(str(exc))
-            except Exception as exc:
-                st.error(f"Unable to prepare avatar editor: {_profile_error_text(exc)}")
 
         save_col, cancel_col = st.columns(2)
         with save_col:
@@ -1176,6 +1337,9 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                     st.session_state.pop(SESSION_USER_CACHE, None)
                     st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
                     _close_avatar_dialogs(clear_upload=True)
+                    st.session_state.pop("profile_picture_x_dialog", None)
+                    st.session_state.pop("profile_picture_y_dialog", None)
+                    st.session_state.pop("profile_picture_move_step_dialog", None)
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
@@ -1184,6 +1348,9 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         with cancel_col:
             if st.button("Cancel", key="profile_picture_cancel_dialog", use_container_width=True):
                 _close_avatar_dialogs(clear_upload=True)
+                st.session_state.pop("profile_picture_x_dialog", None)
+                st.session_state.pop("profile_picture_y_dialog", None)
+                st.session_state.pop("profile_picture_move_step_dialog", None)
                 st.rerun()
 
     if st.session_state.get(AVATAR_EDIT_DIALOG_OPEN):
