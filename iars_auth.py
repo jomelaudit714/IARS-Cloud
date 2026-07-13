@@ -468,6 +468,20 @@ def _avatar_circle_box_algorithm(img: Any, *args: Any, **kwargs: Any) -> dict[st
 
 
 
+
+def _avatar_upload_signature(uploaded_picture: Any) -> str:
+    """Return a stable short signature for the uploaded avatar file.
+
+    Kept defensively so older dialog paths that still reference this helper
+    will not crash. This does not use any component/HTML/cropper path.
+    """
+    try:
+        data = uploaded_picture.getvalue()
+    except Exception:
+        data = b""
+    return hashlib.sha1(data).hexdigest()[:16] if data else "no_upload"
+
+
 def _avatar_adjust_number(value: Any, delta: int, *, min_value: int = -100, max_value: int = 100) -> int:
     try:
         current = int(round(float(value)))
