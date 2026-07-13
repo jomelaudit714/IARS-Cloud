@@ -8,56 +8,14 @@ import hmac
 import json
 import re
 import secrets
-import tempfile
 from typing import Any
 from io import BytesIO
-from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-# V4.4.35: Custom drag avatar editor with safe runtime component directory fallback.
+# V4.4.36: Inline HTML drag avatar editor; no declare_component and no local component folder.
 st_cropper = None
-
-_AVATAR_DRAG_EDITOR_HTML_B64 = "PCFET0NUWVBFIGh0bWw+CjxodG1sPgo8aGVhZD4KICA8bWV0YSBjaGFyc2V0PSJVVEYtOCIgLz4KICA8c3R5bGU+CiAgICBodG1sLCBib2R5IHsKICAgICAgbWFyZ2luOiAwOwogICAgICBwYWRkaW5nOiAwOwogICAgICBiYWNrZ3JvdW5kOiB0cmFuc3BhcmVudDsKICAgICAgZm9udC1mYW1pbHk6IC1hcHBsZS1zeXN0ZW0sIEJsaW5rTWFjU3lzdGVtRm9udCwgIlNlZ29lIFVJIiwgc2Fucy1zZXJpZjsKICAgICAgb3ZlcmZsb3c6IGhpZGRlbjsKICAgIH0KICAgIC53cmFwIHsKICAgICAgd2lkdGg6IDEwMCU7CiAgICAgIGJveC1zaXppbmc6IGJvcmRlci1ib3g7CiAgICAgIHBhZGRpbmc6IDRweCA0cHggMCA0cHg7CiAgICAgIGRpc3BsYXk6IGZsZXg7CiAgICAgIGZsZXgtZGlyZWN0aW9uOiBjb2x1bW47CiAgICAgIGFsaWduLWl0ZW1zOiBjZW50ZXI7CiAgICAgIGdhcDogMTBweDsKICAgIH0KICAgIC5zdGFnZSB7CiAgICAgIHdpZHRoOiAyNjBweDsKICAgICAgaGVpZ2h0OiAyNjBweDsKICAgICAgcG9zaXRpb246IHJlbGF0aXZlOwogICAgICBib3JkZXItcmFkaXVzOiA1MCU7CiAgICAgIG92ZXJmbG93OiBoaWRkZW47CiAgICAgIGJhY2tncm91bmQ6ICNlZWY0ZmY7CiAgICAgIGJvcmRlcjogNHB4IHNvbGlkICNGM0MyNDc7CiAgICAgIGJveC1zaGFkb3c6IDAgMTBweCAyNHB4IHJnYmEoNiwgMjYsIDU0LCAuMjIpOwogICAgICB0b3VjaC1hY3Rpb246IG5vbmU7CiAgICAgIGN1cnNvcjogZ3JhYjsKICAgICAgdXNlci1zZWxlY3Q6IG5vbmU7CiAgICB9CiAgICAuc3RhZ2U6YWN0aXZlIHsgY3Vyc29yOiBncmFiYmluZzsgfQogICAgLmF2YXRhci1pbWcgewogICAgICBwb3NpdGlvbjogYWJzb2x1dGU7CiAgICAgIGxlZnQ6IDA7CiAgICAgIHRvcDogMDsKICAgICAgdHJhbnNmb3JtLW9yaWdpbjogY2VudGVyIGNlbnRlcjsKICAgICAgdXNlci1zZWxlY3Q6IG5vbmU7CiAgICAgIC13ZWJraXQtdXNlci1kcmFnOiBub25lOwogICAgICBwb2ludGVyLWV2ZW50czogbm9uZTsKICAgICAgbWF4LXdpZHRoOiBub25lOwogICAgfQogICAgLnNoYWRlIHsKICAgICAgcG9pbnRlci1ldmVudHM6IG5vbmU7CiAgICAgIHBvc2l0aW9uOiBhYnNvbHV0ZTsKICAgICAgaW5zZXQ6IC02cHg7CiAgICAgIGJvcmRlci1yYWRpdXM6IDUwJTsKICAgICAgYm94LXNoYWRvdzogMCAwIDAgOTk5cHggcmdiYSg2LCAyNiwgNTQsIC4xOCk7CiAgICB9CiAgICAuY29udHJvbHMgewogICAgICB3aWR0aDogMjYwcHg7CiAgICAgIGRpc3BsYXk6IGdyaWQ7CiAgICAgIGdyaWQtdGVtcGxhdGUtY29sdW1uczogNDJweCAxZnIgNDJweDsKICAgICAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICAgICAgZ2FwOiAxMHB4OwogICAgfQogICAgYnV0dG9uLnpvb20gewogICAgICB3aWR0aDogNDJweDsKICAgICAgaGVpZ2h0OiAzOHB4OwogICAgICBib3JkZXI6IDFweCBzb2xpZCAjY2ZkOWU3OwogICAgICBib3JkZXItcmFkaXVzOiAxMHB4OwogICAgICBiYWNrZ3JvdW5kOiAjZmZmZmZmOwogICAgICBjb2xvcjogIzA2MUEzNjsKICAgICAgZm9udC1zaXplOiAyMnB4OwogICAgICBmb250LXdlaWdodDogODAwOwogICAgICBsaW5lLWhlaWdodDogMTsKICAgICAgY3Vyc29yOiBwb2ludGVyOwogICAgICBib3gtc2hhZG93OiAwIDJweCA4cHggcmdiYSg2LDI2LDU0LC4wOCk7CiAgICB9CiAgICBidXR0b24uem9vbTphY3RpdmUgeyB0cmFuc2Zvcm06IHRyYW5zbGF0ZVkoMXB4KTsgfQogICAgaW5wdXRbdHlwZT1yYW5nZV0gewogICAgICB3aWR0aDogMTAwJTsKICAgICAgYWNjZW50LWNvbG9yOiAjRjNDMjQ3OwogICAgfQogICAgLmVtcHR5IHsKICAgICAgd2lkdGg6IDI2MHB4OwogICAgICBoZWlnaHQ6IDE3MHB4OwogICAgICBib3JkZXI6IDFweCBkYXNoZWQgI2I5YzlkZDsKICAgICAgYm9yZGVyLXJhZGl1czogMTRweDsKICAgICAgYmFja2dyb3VuZDogI2Y4ZmJmZjsKICAgICAgZGlzcGxheTogZmxleDsKICAgICAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICAgICAganVzdGlmeS1jb250ZW50OiBjZW50ZXI7CiAgICAgIGNvbG9yOiAjNTI2NTc5OwogICAgICBmb250LXNpemU6IDEzcHg7CiAgICAgIHRleHQtYWxpZ246IGNlbnRlcjsKICAgICAgcGFkZGluZzogMTJweDsKICAgICAgYm94LXNpemluZzogYm9yZGVyLWJveDsKICAgIH0KICA8L3N0eWxlPgo8L2hlYWQ+Cjxib2R5PgogIDxkaXYgY2xhc3M9IndyYXAiIGlkPSJ3cmFwIj4KICAgIDxkaXYgaWQ9ImVtcHR5IiBjbGFzcz0iZW1wdHkiIHN0eWxlPSJkaXNwbGF5Om5vbmU7Ij5VcGxvYWQgcGhvdG8gZmlyc3Q8L2Rpdj4KICAgIDxkaXYgaWQ9InN0YWdlIiBjbGFzcz0ic3RhZ2UiIHN0eWxlPSJkaXNwbGF5Om5vbmU7Ij4KICAgICAgPGltZyBpZD0iaW1nIiBjbGFzcz0iYXZhdGFyLWltZyIgZHJhZ2dhYmxlPSJmYWxzZSIgLz4KICAgICAgPGRpdiBjbGFzcz0ic2hhZGUiPjwvZGl2PgogICAgPC9kaXY+CiAgICA8ZGl2IGlkPSJjb250cm9scyIgY2xhc3M9ImNvbnRyb2xzIiBzdHlsZT0iZGlzcGxheTpub25lOyI+CiAgICAgIDxidXR0b24gY2xhc3M9Inpvb20iIGlkPSJtaW51cyIgdHlwZT0iYnV0dG9uIj7iiJI8L2J1dHRvbj4KICAgICAgPGlucHV0IGlkPSJ6b29tIiB0eXBlPSJyYW5nZSIgbWluPSIxIiBtYXg9IjIuNSIgc3RlcD0iMC4wMSIgdmFsdWU9IjEiIC8+CiAgICAgIDxidXR0b24gY2xhc3M9Inpvb20iIGlkPSJwbHVzIiB0eXBlPSJidXR0b24iPis8L2J1dHRvbj4KICAgIDwvZGl2PgogIDwvZGl2PgogIDxzY3JpcHQ+CiAgICBjb25zdCBTdHJlYW1saXQgPSB7CiAgICAgIHJlYWR5OiBmdW5jdGlvbigpIHsKICAgICAgICB3aW5kb3cucGFyZW50LnBvc3RNZXNzYWdlKHtpc1N0cmVhbWxpdE1lc3NhZ2U6IHRydWUsIHR5cGU6ICJzdHJlYW1saXQ6Y29tcG9uZW50UmVhZHkiLCBhcGlWZXJzaW9uOiAxfSwgIioiKTsKICAgICAgfSwKICAgICAgc2V0RnJhbWVIZWlnaHQ6IGZ1bmN0aW9uKGhlaWdodCkgewogICAgICAgIHdpbmRvdy5wYXJlbnQucG9zdE1lc3NhZ2Uoe2lzU3RyZWFtbGl0TWVzc2FnZTogdHJ1ZSwgdHlwZTogInN0cmVhbWxpdDpzZXRGcmFtZUhlaWdodCIsIGhlaWdodDogaGVpZ2h0fSwgIioiKTsKICAgICAgfSwKICAgICAgc2V0Q29tcG9uZW50VmFsdWU6IGZ1bmN0aW9uKHZhbHVlKSB7CiAgICAgICAgd2luZG93LnBhcmVudC5wb3N0TWVzc2FnZSh7aXNTdHJlYW1saXRNZXNzYWdlOiB0cnVlLCB0eXBlOiAic3RyZWFtbGl0OnNldENvbXBvbmVudFZhbHVlIiwgdmFsdWU6IHZhbHVlfSwgIioiKTsKICAgICAgfQogICAgfTsKCiAgICBjb25zdCBzdGFnZSA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJzdGFnZSIpOwogICAgY29uc3QgZW1wdHkgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiZW1wdHkiKTsKICAgIGNvbnN0IGNvbnRyb2xzID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImNvbnRyb2xzIik7CiAgICBjb25zdCBpbWcgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiaW1nIik7CiAgICBjb25zdCB6b29tSW5wdXQgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiem9vbSIpOwogICAgY29uc3QgbWludXMgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgibWludXMiKTsKICAgIGNvbnN0IHBsdXMgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgicGx1cyIpOwoKICAgIGxldCBpbWFnZURhdGEgPSAiIjsKICAgIGxldCBpbWFnZUxvYWRlZCA9IGZhbHNlOwogICAgbGV0IG5hdHVyYWxXID0gMSwgbmF0dXJhbEggPSAxOwogICAgbGV0IHN0YWdlU2l6ZSA9IDI2MDsKICAgIGxldCB6b29tID0gMTsKICAgIGxldCBtaW5TY2FsZSA9IDE7CiAgICBsZXQgc2NhbGUgPSAxOwogICAgbGV0IHggPSAwOwogICAgbGV0IHkgPSAwOwogICAgbGV0IGRyYWdnaW5nID0gZmFsc2U7CiAgICBsZXQgbGFzdFggPSAwOwogICAgbGV0IGxhc3RZID0gMDsKICAgIGxldCBsYXN0VmFsdWUgPSAiIjsKCiAgICBmdW5jdGlvbiBjbGFtcCh2LCBsbywgaGkpIHsgcmV0dXJuIE1hdGgubWF4KGxvLCBNYXRoLm1pbihoaSwgdikpOyB9CgogICAgZnVuY3Rpb24gY29tcHV0ZU1pblNjYWxlKCkgewogICAgICBtaW5TY2FsZSA9IE1hdGgubWF4KHN0YWdlU2l6ZSAvIG5hdHVyYWxXLCBzdGFnZVNpemUgLyBuYXR1cmFsSCk7CiAgICAgIHNjYWxlID0gbWluU2NhbGUgKiB6b29tOwogICAgfQoKICAgIGZ1bmN0aW9uIGNsYW1wUG9zaXRpb24oKSB7CiAgICAgIGNvbnN0IHcgPSBuYXR1cmFsVyAqIHNjYWxlOwogICAgICBjb25zdCBoID0gbmF0dXJhbEggKiBzY2FsZTsKICAgICAgY29uc3QgbWluWCA9IE1hdGgubWluKDAsIHN0YWdlU2l6ZSAtIHcpOwogICAgICBjb25zdCBtaW5ZID0gTWF0aC5taW4oMCwgc3RhZ2VTaXplIC0gaCk7CiAgICAgIHggPSBjbGFtcCh4LCBtaW5YLCAwKTsKICAgICAgeSA9IGNsYW1wKHksIG1pblksIDApOwogICAgICBpZiAodyA8PSBzdGFnZVNpemUpIHggPSAoc3RhZ2VTaXplIC0gdykgLyAyOwogICAgICBpZiAoaCA8PSBzdGFnZVNpemUpIHkgPSAoc3RhZ2VTaXplIC0gaCkgLyAyOwogICAgfQoKICAgIGZ1bmN0aW9uIGFwcGx5VHJhbnNmb3JtKCkgewogICAgICBjb21wdXRlTWluU2NhbGUoKTsKICAgICAgY2xhbXBQb3NpdGlvbigpOwogICAgICBpbWcuc3R5bGUud2lkdGggPSAobmF0dXJhbFcgKiBzY2FsZSkgKyAicHgiOwogICAgICBpbWcuc3R5bGUuaGVpZ2h0ID0gKG5hdHVyYWxIICogc2NhbGUpICsgInB4IjsKICAgICAgaW1nLnN0eWxlLnRyYW5zZm9ybSA9IGB0cmFuc2xhdGUoJHt4fXB4LCAke3l9cHgpYDsKICAgICAgZXhwb3J0Q3JvcCgpOwogICAgfQoKICAgIGZ1bmN0aW9uIGV4cG9ydENyb3AoKSB7CiAgICAgIGlmICghaW1hZ2VMb2FkZWQpIHJldHVybjsKICAgICAgY29uc3QgY2FudmFzID0gZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgiY2FudmFzIik7CiAgICAgIGNhbnZhcy53aWR0aCA9IDMyMDsKICAgICAgY2FudmFzLmhlaWdodCA9IDMyMDsKICAgICAgY29uc3QgY3R4ID0gY2FudmFzLmdldENvbnRleHQoIjJkIik7CiAgICAgIGN0eC5maWxsU3R5bGUgPSAiI2ZmZmZmZiI7CiAgICAgIGN0eC5maWxsUmVjdCgwLCAwLCAzMjAsIDMyMCk7CgogICAgICBjb25zdCBzeCA9IC14IC8gc2NhbGU7CiAgICAgIGNvbnN0IHN5ID0gLXkgLyBzY2FsZTsKICAgICAgY29uc3Qgc3cgPSBzdGFnZVNpemUgLyBzY2FsZTsKICAgICAgY29uc3Qgc2ggPSBzdGFnZVNpemUgLyBzY2FsZTsKCiAgICAgIHRyeSB7CiAgICAgICAgY3R4LmRyYXdJbWFnZShpbWcsIHN4LCBzeSwgc3csIHNoLCAwLCAwLCAzMjAsIDMyMCk7CiAgICAgICAgY29uc3QgZGF0YVVybCA9IGNhbnZhcy50b0RhdGFVUkwoImltYWdlL2pwZWciLCAwLjg4KTsKICAgICAgICBpZiAoZGF0YVVybCAhPT0gbGFzdFZhbHVlKSB7CiAgICAgICAgICBsYXN0VmFsdWUgPSBkYXRhVXJsOwogICAgICAgICAgU3RyZWFtbGl0LnNldENvbXBvbmVudFZhbHVlKGRhdGFVcmwpOwogICAgICAgIH0KICAgICAgfSBjYXRjaCAoZXJyKSB7CiAgICAgICAgU3RyZWFtbGl0LnNldENvbXBvbmVudFZhbHVlKCIiKTsKICAgICAgfQogICAgfQoKICAgIGZ1bmN0aW9uIGNlbnRlckltYWdlKCkgewogICAgICBjb21wdXRlTWluU2NhbGUoKTsKICAgICAgY29uc3QgdyA9IG5hdHVyYWxXICogc2NhbGU7CiAgICAgIGNvbnN0IGggPSBuYXR1cmFsSCAqIHNjYWxlOwogICAgICB4ID0gKHN0YWdlU2l6ZSAtIHcpIC8gMjsKICAgICAgeSA9IChzdGFnZVNpemUgLSBoKSAvIDI7CiAgICAgIGFwcGx5VHJhbnNmb3JtKCk7CiAgICB9CgogICAgZnVuY3Rpb24gc2V0Wm9vbSh6KSB7CiAgICAgIGNvbnN0IG9sZFNjYWxlID0gc2NhbGUgfHwgbWluU2NhbGU7CiAgICAgIGNvbnN0IGNlbnRlclggPSBzdGFnZVNpemUgLyAyOwogICAgICBjb25zdCBjZW50ZXJZID0gc3RhZ2VTaXplIC8gMjsKICAgICAgY29uc3QgaW1nUG9pbnRYID0gKGNlbnRlclggLSB4KSAvIG9sZFNjYWxlOwogICAgICBjb25zdCBpbWdQb2ludFkgPSAoY2VudGVyWSAtIHkpIC8gb2xkU2NhbGU7CgogICAgICB6b29tID0gY2xhbXAocGFyc2VGbG9hdCh6IHx8IDEpLCAxLCAyLjUpOwogICAgICB6b29tSW5wdXQudmFsdWUgPSB6b29tLnRvU3RyaW5nKCk7CiAgICAgIGNvbXB1dGVNaW5TY2FsZSgpOwoKICAgICAgeCA9IGNlbnRlclggLSBpbWdQb2ludFggKiBzY2FsZTsKICAgICAgeSA9IGNlbnRlclkgLSBpbWdQb2ludFkgKiBzY2FsZTsKICAgICAgYXBwbHlUcmFuc2Zvcm0oKTsKICAgIH0KCiAgICBmdW5jdGlvbiBpbml0SW1hZ2Uoc3JjKSB7CiAgICAgIGltYWdlRGF0YSA9IHNyYyB8fCAiIjsKICAgICAgaWYgKCFpbWFnZURhdGEpIHsKICAgICAgICBzdGFnZS5zdHlsZS5kaXNwbGF5ID0gIm5vbmUiOwogICAgICAgIGNvbnRyb2xzLnN0eWxlLmRpc3BsYXkgPSAibm9uZSI7CiAgICAgICAgZW1wdHkuc3R5bGUuZGlzcGxheSA9ICJmbGV4IjsKICAgICAgICBTdHJlYW1saXQuc2V0RnJhbWVIZWlnaHQoMjA1KTsKICAgICAgICByZXR1cm47CiAgICAgIH0KCiAgICAgIGVtcHR5LnN0eWxlLmRpc3BsYXkgPSAibm9uZSI7CiAgICAgIHN0YWdlLnN0eWxlLmRpc3BsYXkgPSAiYmxvY2siOwogICAgICBjb250cm9scy5zdHlsZS5kaXNwbGF5ID0gImdyaWQiOwogICAgICBpbWcub25sb2FkID0gKCkgPT4gewogICAgICAgIGltYWdlTG9hZGVkID0gdHJ1ZTsKICAgICAgICBuYXR1cmFsVyA9IGltZy5uYXR1cmFsV2lkdGggfHwgMTsKICAgICAgICBuYXR1cmFsSCA9IGltZy5uYXR1cmFsSGVpZ2h0IHx8IDE7CiAgICAgICAgem9vbSA9IGNsYW1wKHBhcnNlRmxvYXQoem9vbUlucHV0LnZhbHVlIHx8IDEpLCAxLCAyLjUpOwogICAgICAgIGNlbnRlckltYWdlKCk7CiAgICAgICAgU3RyZWFtbGl0LnNldEZyYW1lSGVpZ2h0KDMzMCk7CiAgICAgIH07CiAgICAgIGltZy5zcmMgPSBpbWFnZURhdGE7CiAgICB9CgogICAgc3RhZ2UuYWRkRXZlbnRMaXN0ZW5lcigicG9pbnRlcmRvd24iLCAoZSkgPT4gewogICAgICBpZiAoIWltYWdlTG9hZGVkKSByZXR1cm47CiAgICAgIGRyYWdnaW5nID0gdHJ1ZTsKICAgICAgbGFzdFggPSBlLmNsaWVudFg7CiAgICAgIGxhc3RZID0gZS5jbGllbnRZOwogICAgICBzdGFnZS5zZXRQb2ludGVyQ2FwdHVyZShlLnBvaW50ZXJJZCk7CiAgICB9KTsKCiAgICBzdGFnZS5hZGRFdmVudExpc3RlbmVyKCJwb2ludGVybW92ZSIsIChlKSA9PiB7CiAgICAgIGlmICghZHJhZ2dpbmcpIHJldHVybjsKICAgICAgeCArPSBlLmNsaWVudFggLSBsYXN0WDsKICAgICAgeSArPSBlLmNsaWVudFkgLSBsYXN0WTsKICAgICAgbGFzdFggPSBlLmNsaWVudFg7CiAgICAgIGxhc3RZID0gZS5jbGllbnRZOwogICAgICBhcHBseVRyYW5zZm9ybSgpOwogICAgfSk7CgogICAgc3RhZ2UuYWRkRXZlbnRMaXN0ZW5lcigicG9pbnRlcnVwIiwgKGUpID0+IHsKICAgICAgZHJhZ2dpbmcgPSBmYWxzZTsKICAgICAgdHJ5IHsgc3RhZ2UucmVsZWFzZVBvaW50ZXJDYXB0dXJlKGUucG9pbnRlcklkKTsgfSBjYXRjaCAoXykge30KICAgIH0pOwoKICAgIHN0YWdlLmFkZEV2ZW50TGlzdGVuZXIoInBvaW50ZXJjYW5jZWwiLCAoKSA9PiB7IGRyYWdnaW5nID0gZmFsc2U7IH0pOwoKICAgIHpvb21JbnB1dC5hZGRFdmVudExpc3RlbmVyKCJpbnB1dCIsICgpID0+IHNldFpvb20oem9vbUlucHV0LnZhbHVlKSk7CiAgICBtaW51cy5hZGRFdmVudExpc3RlbmVyKCJjbGljayIsICgpID0+IHNldFpvb20oem9vbSAtIDAuMDUpKTsKICAgIHBsdXMuYWRkRXZlbnRMaXN0ZW5lcigiY2xpY2siLCAoKSA9PiBzZXRab29tKHpvb20gKyAwLjA1KSk7CgogICAgd2luZG93LmFkZEV2ZW50TGlzdGVuZXIoIm1lc3NhZ2UiLCAoZXZlbnQpID0+IHsKICAgICAgY29uc3QgZGF0YSA9IGV2ZW50LmRhdGEgfHwge307CiAgICAgIGlmIChkYXRhLnR5cGUgIT09ICJzdHJlYW1saXQ6cmVuZGVyIikgcmV0dXJuOwogICAgICBjb25zdCBhcmdzID0gZGF0YS5hcmdzIHx8IHt9OwogICAgICBjb25zdCBuZXdJbWFnZSA9IGFyZ3MuaW1hZ2VEYXRhIHx8ICIiOwogICAgICBjb25zdCBzdGFydFpvb20gPSBhcmdzLnpvb20gfHwgMTsKICAgICAgaWYgKG5ld0ltYWdlICE9PSBpbWFnZURhdGEpIHsKICAgICAgICB6b29tSW5wdXQudmFsdWUgPSBTdHJpbmcoY2xhbXAoc3RhcnRab29tLCAxLCAyLjUpKTsKICAgICAgICBpbml0SW1hZ2UobmV3SW1hZ2UpOwogICAgICB9IGVsc2UgaWYgKGltYWdlTG9hZGVkKSB7CiAgICAgICAgc2V0Wm9vbSh6b29tSW5wdXQudmFsdWUpOwogICAgICB9CiAgICAgIHNldFRpbWVvdXQoKCkgPT4gU3RyZWFtbGl0LnNldEZyYW1lSGVpZ2h0KGRvY3VtZW50LmJvZHkuc2Nyb2xsSGVpZ2h0ICsgOCksIDUwKTsKICAgIH0pOwoKICAgIFN0cmVhbWxpdC5yZWFkeSgpOwogICAgU3RyZWFtbGl0LnNldEZyYW1lSGVpZ2h0KDMzMCk7CiAgPC9zY3JpcHQ+CjwvYm9keT4KPC9odG1sPgo="
-
-
-def _avatar_drag_editor_html() -> str:
-    return base64.b64decode(_AVATAR_DRAG_EDITOR_HTML_B64.encode("ascii")).decode("utf-8")
-
-
-def _ensure_avatar_drag_component_dir() -> Path:
-    """Return a valid avatar editor component folder.
-
-    Streamlit Cloud can crash on import when the component folder is missing from
-    the deployed repository. To prevent that, we use the packaged folder when it
-    exists, otherwise we create the same component in /tmp at runtime.
-    """
-    packaged_dir = Path(__file__).resolve().parent / "components" / "avatar_drag_editor"
-    packaged_index = packaged_dir / "index.html"
-    if packaged_index.exists():
-        return packaged_dir
-
-    runtime_dir = Path(tempfile.gettempdir()) / "iars_avatar_drag_editor"
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    runtime_index = runtime_dir / "index.html"
-    html = _avatar_drag_editor_html()
-    if not runtime_index.exists() or runtime_index.read_text(encoding="utf-8", errors="ignore") != html:
-        runtime_index.write_text(html, encoding="utf-8")
-    return runtime_dir
-
-
-try:
-    _AVATAR_DRAG_COMPONENT_DIR = _ensure_avatar_drag_component_dir()
-    _avatar_drag_editor_component = components.declare_component(
-        "iars_avatar_drag_editor",
-        path=str(_AVATAR_DRAG_COMPONENT_DIR),
-    )
-except Exception:
-    _AVATAR_DRAG_COMPONENT_DIR = None
-    _avatar_drag_editor_component = None
-
-
 
 from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards, render_transition_guard
 
@@ -510,23 +468,231 @@ def _avatar_circle_box_algorithm(img: Any, *args: Any, **kwargs: Any) -> dict[st
 
 
 
-def _render_avatar_drag_editor_component(image_data_uri: str, *, key: str = "iars_avatar_drag_editor") -> str:
-    """Render the custom no-third-party drag avatar editor and return a 320x320 JPEG data URI.
-
-    This avoids streamlit-cropper and its deployment crashes while still allowing:
-    fixed circle + draggable image + plus/minus zoom.
-    """
+def _avatar_qparam(name: str, default: str = "") -> str:
     try:
-        value = _avatar_drag_editor_component(
-            imageData=str(image_data_uri or ""),
-            zoom=1.0,
-            key=key,
-            default="",
-        )
-        return str(value or "")
-    except Exception as exc:
-        st.error(f"Avatar editor failed to load: {_profile_error_text(exc)}")
-        return ""
+        value = st.query_params.get(name, default)
+        if isinstance(value, list):
+            return str(value[0] if value else default)
+        return str(value if value is not None else default)
+    except Exception:
+        try:
+            value = st.experimental_get_query_params().get(name, [default])
+            return str(value[0] if isinstance(value, list) and value else value or default)
+        except Exception:
+            return default
+
+
+def _avatar_qfloat(name: str, default: float, *, min_value: float, max_value: float) -> float:
+    try:
+        raw = _avatar_qparam(name, str(default))
+        value = float(raw)
+    except Exception:
+        value = float(default)
+    return max(min_value, min(max_value, value))
+
+
+def _avatar_qint(name: str, default: int, *, min_value: int, max_value: int) -> int:
+    try:
+        raw = _avatar_qparam(name, str(default))
+        value = int(round(float(raw)))
+    except Exception:
+        value = int(default)
+    return max(min_value, min(max_value, value))
+
+
+def _avatar_upload_signature(uploaded_picture: Any) -> str:
+    try:
+        data = uploaded_picture.getvalue()
+    except Exception:
+        data = b""
+    return hashlib.sha1(data).hexdigest()[:16] if data else "no_upload"
+
+
+def _render_avatar_inline_drag_editor(
+    image_data_uri: str,
+    *,
+    x_position: int,
+    y_position: int,
+    zoom: float,
+    upload_signature: str,
+) -> None:
+    """Render a no-dependency drag editor using inline HTML.
+
+    This does not use streamlit-cropper and does not use declare_component, so
+    there is no local component folder for Streamlit Cloud to load.
+
+    The browser editor updates URL query params on drag release / zoom click.
+    Python then performs the actual crop using PIL and the uploaded image bytes.
+    """
+    safe_image = json.dumps(str(image_data_uri or ""))
+    safe_sig = json.dumps(str(upload_signature or ""))
+    x_position = max(-100, min(100, int(x_position)))
+    y_position = max(-100, min(100, int(y_position)))
+    zoom = max(1.0, min(2.5, float(zoom or 1.0)))
+
+    editor_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+html, body {{
+  margin:0; padding:0; background:transparent; overflow:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}}
+.wrap {{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:4px 0 0; }}
+.stage {{
+  width:260px; height:260px; border-radius:50%; overflow:hidden; position:relative;
+  background:#eef4ff; border:4px solid #F3C247;
+  box-shadow:0 10px 24px rgba(6,26,54,.22);
+  touch-action:none; cursor:grab; user-select:none;
+}}
+.stage:active {{ cursor:grabbing; }}
+.avatar-img {{
+  position:absolute; left:0; top:0; transform-origin:center center;
+  user-select:none; -webkit-user-drag:none; pointer-events:none; max-width:none;
+}}
+.shade {{
+  pointer-events:none; position:absolute; inset:-6px; border-radius:50%;
+  box-shadow:0 0 0 999px rgba(6,26,54,.16);
+}}
+.controls {{
+  width:260px; display:grid; grid-template-columns:42px 1fr 42px;
+  gap:10px; align-items:center;
+}}
+button.zoom {{
+  width:42px; height:38px; border:1px solid #cfd9e7; border-radius:10px;
+  background:#fff; color:#061A36; font-size:22px; font-weight:800;
+  line-height:1; cursor:pointer; box-shadow:0 2px 8px rgba(6,26,54,.08);
+}}
+button.zoom:active {{ transform:translateY(1px); }}
+input[type=range] {{ width:100%; accent-color:#F3C247; }}
+.caption {{ font-size:12px; color:#526579; text-align:center; margin-top:-2px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="stage" class="stage">
+    <img id="img" class="avatar-img" draggable="false">
+    <div class="shade"></div>
+  </div>
+  <div class="controls">
+    <button class="zoom" id="minus" type="button">−</button>
+    <input id="zoom" type="range" min="1" max="2.5" step="0.01" value="{zoom}">
+    <button class="zoom" id="plus" type="button">+</button>
+  </div>
+  <div class="caption">Drag the photo, then release. Zoom using − / +.</div>
+</div>
+<script>
+const imageData = {safe_image};
+const uploadSig = {safe_sig};
+const stage = document.getElementById("stage");
+const img = document.getElementById("img");
+const zoomInput = document.getElementById("zoom");
+const minus = document.getElementById("minus");
+const plus = document.getElementById("plus");
+
+let naturalW = 1, naturalH = 1, stageSize = 260;
+let zoom = {zoom};
+let xPct = {x_position};
+let yPct = {y_position};
+let scale = 1, minScale = 1, x = 0, y = 0;
+let dragging = false, lastX = 0, lastY = 0;
+
+function clamp(v, lo, hi) {{ return Math.max(lo, Math.min(hi, v)); }}
+function computeMinScale() {{
+  minScale = Math.max(stageSize / naturalW, stageSize / naturalH);
+  scale = minScale * zoom;
+}}
+function percentToXY() {{
+  computeMinScale();
+  const w = naturalW * scale, h = naturalH * scale;
+  const extraX = Math.max(0, w - stageSize);
+  const extraY = Math.max(0, h - stageSize);
+  x = -extraX / 2 - (xPct / 100) * (extraX / 2);
+  y = -extraY / 2 - (yPct / 100) * (extraY / 2);
+  clampXY();
+}}
+function xyToPercent() {{
+  const w = naturalW * scale, h = naturalH * scale;
+  const extraX = Math.max(0, w - stageSize);
+  const extraY = Math.max(0, h - stageSize);
+  xPct = extraX > 0 ? clamp(Math.round(((-x - extraX/2) / (extraX/2)) * 100), -100, 100) : 0;
+  yPct = extraY > 0 ? clamp(Math.round(((-y - extraY/2) / (extraY/2)) * 100), -100, 100) : 0;
+}}
+function clampXY() {{
+  const w = naturalW * scale, h = naturalH * scale;
+  const minX = Math.min(0, stageSize - w);
+  const minY = Math.min(0, stageSize - h);
+  x = clamp(x, minX, 0);
+  y = clamp(y, minY, 0);
+  if (w <= stageSize) x = (stageSize - w) / 2;
+  if (h <= stageSize) y = (stageSize - h) / 2;
+}}
+function apply() {{
+  computeMinScale();
+  clampXY();
+  img.style.width = (naturalW * scale) + "px";
+  img.style.height = (naturalH * scale) + "px";
+  img.style.transform = `translate(${{x}}px, ${{y}}px)`;
+}}
+function updateParent() {{
+  xyToPercent();
+  const url = new URL(window.parent.location.href);
+  url.searchParams.set("avatar_sig", uploadSig);
+  url.searchParams.set("avatar_x", String(xPct));
+  url.searchParams.set("avatar_y", String(yPct));
+  url.searchParams.set("avatar_zoom", String(Math.round(zoom * 100) / 100));
+  window.parent.location.href = url.toString();
+}}
+function setZoom(z, update=true) {{
+  const oldScale = scale || minScale;
+  const centerX = stageSize / 2, centerY = stageSize / 2;
+  const imgPointX = (centerX - x) / oldScale;
+  const imgPointY = (centerY - y) / oldScale;
+  zoom = clamp(parseFloat(z || 1), 1, 2.5);
+  zoomInput.value = zoom;
+  computeMinScale();
+  x = centerX - imgPointX * scale;
+  y = centerY - imgPointY * scale;
+  apply();
+  if (update) updateParent();
+}}
+
+img.onload = () => {{
+  naturalW = img.naturalWidth || 1;
+  naturalH = img.naturalHeight || 1;
+  zoomInput.value = zoom;
+  percentToXY();
+  apply();
+}};
+img.src = imageData;
+
+stage.addEventListener("pointerdown", (e) => {{
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  stage.setPointerCapture(e.pointerId);
+}});
+stage.addEventListener("pointermove", (e) => {{
+  if (!dragging) return;
+  x += e.clientX - lastX;
+  y += e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  apply();
+}});
+stage.addEventListener("pointerup", (e) => {{
+  dragging = false;
+  try {{ stage.releasePointerCapture(e.pointerId); }} catch (_) {{}}
+  updateParent();
+}});
+stage.addEventListener("pointercancel", () => {{ dragging = false; }});
+zoomInput.addEventListener("change", () => setZoom(zoomInput.value, true));
+minus.addEventListener("click", () => setZoom(zoom - 0.05, true));
+plus.addEventListener("click", () => setZoom(zoom + 0.05, true));
+</script>
+</body>
+</html>
+"""
+    components.html(editor_html, height=330, scrolling=False)
 
 
 def _render_avatar_editor_preview(jpeg_bytes: bytes) -> None:
@@ -961,19 +1127,34 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         prepared_preview_bytes = None
         if uploaded_picture is not None:
             try:
-                # Use PIL only for validation and safe data URI creation.
                 source_image = _profile_picture_image(uploaded_picture)
+                upload_signature = _avatar_upload_signature(uploaded_picture)
+                query_signature = _avatar_qparam("avatar_sig", "")
+
+                if query_signature == upload_signature:
+                    zoom = _avatar_qfloat("avatar_zoom", 1.0, min_value=1.0, max_value=2.5)
+                    x_position = _avatar_qint("avatar_x", 0, min_value=-100, max_value=100)
+                    y_position = _avatar_qint("avatar_y", 0, min_value=-100, max_value=100)
+                else:
+                    zoom = 1.0
+                    x_position = 0
+                    y_position = 0
+
                 upload_data_uri = _profile_picture_data_uri(_profile_picture_jpeg(image=source_image))
-                edited_data_uri = _render_avatar_drag_editor_component(
+                _render_avatar_inline_drag_editor(
                     upload_data_uri,
-                    key=f"avatar_drag_editor_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}",
+                    x_position=x_position,
+                    y_position=y_position,
+                    zoom=zoom,
+                    upload_signature=upload_signature,
                 )
 
-                if edited_data_uri.startswith("data:image/"):
-                    prepared_preview_bytes = base64.b64decode(edited_data_uri.split(",", 1)[1])
-                else:
-                    prepared_preview_bytes = _profile_picture_jpeg(image=source_image)
-                    _render_avatar_editor_preview(prepared_preview_bytes)
+                prepared_preview_bytes = _profile_picture_positioned_jpeg_from_image(
+                    source_image,
+                    zoom=zoom,
+                    x_position=x_position,
+                    y_position=y_position,
+                )
             except ValueError as exc:
                 st.error(str(exc))
             except Exception as exc:
