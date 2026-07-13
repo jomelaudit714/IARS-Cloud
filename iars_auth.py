@@ -806,29 +806,29 @@ def _render_avatar_native_move_controls(x_key: str, y_key: str, zoom_key: str) -
 
     up_l, up_c, up_r = st.columns([0.34, 0.32, 0.34])
     with up_c:
-        if st.button("▲", key="profile_move_up_dialog", use_container_width=True):
+        if st.button("▲", key="profile_move_up_dialog", width="stretch"):
             st.session_state[y_key] = _avatar_adjust_number(st.session_state.get(y_key, 0), -step)
             st.rerun()
 
     left_c, center_c, right_c = st.columns(3)
     with left_c:
-        if st.button("◀", key="profile_move_left_dialog", use_container_width=True):
+        if st.button("◀", key="profile_move_left_dialog", width="stretch"):
             st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), -step)
             st.rerun()
     with center_c:
-        if st.button("Center", key="profile_move_center_dialog", use_container_width=True):
+        if st.button("Center", key="profile_move_center_dialog", width="stretch"):
             st.session_state[x_key] = 0
             st.session_state[y_key] = 0
             st.session_state[zoom_key] = max(1.0, float(st.session_state.get(zoom_key, 1.0)))
             st.rerun()
     with right_c:
-        if st.button("▶", key="profile_move_right_dialog", use_container_width=True):
+        if st.button("▶", key="profile_move_right_dialog", width="stretch"):
             st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), step)
             st.rerun()
 
     down_l, down_c, down_r = st.columns([0.34, 0.32, 0.34])
     with down_c:
-        if st.button("▼", key="profile_move_down_dialog", use_container_width=True):
+        if st.button("▼", key="profile_move_down_dialog", width="stretch"):
             st.session_state[y_key] = _avatar_adjust_number(st.session_state.get(y_key, 0), step)
             st.rerun()
 
@@ -1246,7 +1246,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
     @st.dialog("See Avatar", width="small")
     def _see_avatar_dialog() -> None:
         _render_avatar_full_view(current_picture)
-        if st.button("Close", key="profile_avatar_dialog_close", use_container_width=True):
+        if st.button("Close", key="profile_avatar_dialog_close", width="stretch"):
             _close_avatar_dialogs()
             st.rerun()
 
@@ -1299,12 +1299,12 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                     st.session_state.setdefault(y_key, int(float(drag_state.get("y_position", 0))))
                     minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
                     with minus_col:
-                        if st.button("−", key="profile_zoom_minus_dialog", use_container_width=True):
+                        if st.button("−", key="profile_zoom_minus_dialog", width="stretch"):
                             st.session_state[zoom_key] = max(1.00, round(float(st.session_state.get(zoom_key, 1.00)) - 0.05, 2))
                     with zoom_col:
                         st.slider("Zoom", min_value=1.00, max_value=2.50, value=float(st.session_state.get(zoom_key, 1.00)), step=0.05, key=zoom_key, label_visibility="collapsed")
                     with plus_col:
-                        if st.button("+", key="profile_zoom_plus_dialog", use_container_width=True):
+                        if st.button("+", key="profile_zoom_plus_dialog", width="stretch"):
                             st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, 1.00)) + 0.05, 2))
                     _render_avatar_native_move_controls(x_key, y_key, zoom_key)
                     st.slider("Move photo left / right", -100, 100, int(st.session_state.get(x_key, 0)), 5, key=x_key)
@@ -1315,7 +1315,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                         x_position=int(st.session_state.get(x_key, 0)),
                         y_position=int(st.session_state.get(y_key, 0)),
                     )
-                    if st.button("Use fallback controls for save", key="profile_use_fallback_avatar", use_container_width=True):
+                    if st.button("Use fallback controls for save", key="profile_use_fallback_avatar", width="stretch"):
                         prepared_preview_bytes = fallback_preview_bytes
                     _render_avatar_editor_preview(fallback_preview_bytes)
             except ValueError as exc:
@@ -1323,7 +1323,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
 
         save_col, cancel_col = st.columns(2)
         with save_col:
-            if st.button("Save", key="profile_picture_save_dialog", type="primary", use_container_width=True):
+            if st.button("Save", key="profile_picture_save_dialog", type="primary", width="stretch"):
                 try:
                     _profile_save_picture(
                         client,
@@ -1346,7 +1346,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                 except Exception as exc:
                     st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
         with cancel_col:
-            if st.button("Cancel", key="profile_picture_cancel_dialog", use_container_width=True):
+            if st.button("Cancel", key="profile_picture_cancel_dialog", width="stretch"):
                 _close_avatar_dialogs(clear_upload=True)
                 st.session_state.pop("profile_picture_x_dialog", None)
                 st.session_state.pop("profile_picture_y_dialog", None)
@@ -1379,15 +1379,14 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
         "📷",
         key="avatar_camera_trigger",
         help=None,
-        use_container_width=False,
         width="content",
         on_change="ignore",
     ):
         with st.container(key="avatar_camera_menu"):
-            if st.button("See Avatar", key="avatar_camera_open_view", use_container_width=True):
+            if st.button("See Avatar", key="avatar_camera_open_view", width="stretch"):
                 _open_avatar_mode("see")
                 st.rerun()
-            if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", use_container_width=True):
+            if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", width="stretch"):
                 _open_avatar_mode("change")
                 st.rerun()
 
@@ -1395,7 +1394,6 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
         "​",
         key="profile_menu_trigger",
         help=None,
-        use_container_width=True,
         width="content",
         on_change="ignore",
     ):
@@ -1410,7 +1408,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                         st.text_input("Current Username", value=current_username, disabled=True)
                         new_username_input = st.text_input("New Username", placeholder="Enter a new username")
                         current_password = st.text_input("Current Password", type="password")
-                        submitted = st.form_submit_button("Update Username", type="primary", use_container_width=True)
+                        submitted = st.form_submit_button("Update Username", type="primary", width="stretch")
                     if submitted:
                         try:
                             new_username = normalize_username(new_username_input)
@@ -1445,7 +1443,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                         current_password = st.text_input("Current Password", type="password", key="profile_current_password")
                         new_password = st.text_input("New Password", type="password", key="profile_new_password")
                         confirm_password = st.text_input("Confirm New Password", type="password", key="profile_confirm_password")
-                        submitted = st.form_submit_button("Update Password", type="primary", use_container_width=True)
+                        submitted = st.form_submit_button("Update Password", type="primary", width="stretch")
                     if submitted:
                         try:
                             if not _verify_current_password(client, config, user, current_password):
@@ -1883,7 +1881,7 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
                 "Forgot password?",
                 key="auth_forgot_submit",
                 type="tertiary",
-                use_container_width=True,
+                width="stretch",
             )
 
         submitted = st.form_submit_button(
@@ -1891,7 +1889,7 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
             key="auth_signin_submit",
             type="primary",
             icon=":material/lock:",
-            use_container_width=True,
+            width="stretch",
         )
 
     if forgot_clicked:
@@ -1932,7 +1930,7 @@ def _render_sign_up(client: Any, config: AuthConfig) -> None:
         confirmation = st.text_input(
             "Confirm Password", type="password", autocomplete="new-password"
         )
-        submitted = st.form_submit_button("Submit Registration", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Submit Registration", type="primary", width="stretch")
 
     if not submitted:
         return
@@ -1981,7 +1979,7 @@ def _render_verify_account(client: Any, config: AuthConfig) -> None:
         code_input = st.text_input(
             "Activation Code", max_chars=6, placeholder="123456", type="password"
         )
-        submitted = st.form_submit_button("Verify Account", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Verify Account", type="primary", width="stretch")
 
     if not submitted:
         return
@@ -2053,7 +2051,7 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
             "Username / Nickname", key="reset_request_username"
         )
         request_submitted = st.form_submit_button(
-            "Request Password Reset", use_container_width=True
+            "Request Password Reset", width="stretch"
         )
     if request_submitted:
         try:
@@ -2088,7 +2086,7 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
             "Confirm New Password", type="password", autocomplete="new-password"
         )
         submitted = st.form_submit_button(
-            "Change Password", type="primary", use_container_width=True
+            "Change Password", type="primary", width="stretch"
         )
 
     if not submitted:
@@ -2268,7 +2266,7 @@ def render_auth_gate(config: AuthConfig):
             st.button(
                 "← Back to Sign In",
                 key="auth_back_signup",
-                use_container_width=True,
+                width="stretch",
                 on_click=_set_auth_view,
                 args=("sign_in",),
             )
@@ -2279,7 +2277,7 @@ def render_auth_gate(config: AuthConfig):
             st.button(
                 "← Back to Sign In",
                 key="auth_back_verify",
-                use_container_width=True,
+                width="stretch",
                 on_click=_set_auth_view,
                 args=("sign_in",),
             )
@@ -2290,7 +2288,7 @@ def render_auth_gate(config: AuthConfig):
             st.button(
                 "← Back to Sign In",
                 key="auth_back_forgot",
-                use_container_width=True,
+                width="stretch",
                 on_click=_set_auth_view,
                 args=("sign_in",),
             )
@@ -2325,7 +2323,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         selected_label = st.selectbox(
             "Pending registration", list(labels), key="admin_pending_user"
         )
-        if st.button("Approve and Generate Activation Code", use_container_width=True):
+        if st.button("Approve and Generate Activation Code", width="stretch"):
             user = labels[selected_label]
             code, code_hash = _new_code(config, str(user["id"]), "activate")
             _update_user(
@@ -2368,7 +2366,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         selected_label = st.selectbox(
             "Reissue activation code", list(labels), key="admin_reissue_user"
         )
-        if st.button("Generate New Activation Code", use_container_width=True):
+        if st.button("Generate New Activation Code", width="stretch"):
             user = labels[selected_label]
             code, code_hash = _new_code(config, str(user["id"]), "activate")
             _update_user(
@@ -2397,7 +2395,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         selected_label = st.selectbox(
             "Password-reset request", list(labels), key="admin_reset_user"
         )
-        if st.button("Generate Password Reset Code", use_container_width=True):
+        if st.button("Generate Password Reset Code", width="stretch"):
             user = labels[selected_label]
             code, code_hash = _new_code(config, str(user["id"]), "reset")
             _update_user(
@@ -2440,7 +2438,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         )
         st.code(str(last_code.get("code")))
         st.caption(f"Valid for {last_code.get('expires')}. Give it directly to the user.")
-        if st.button("Hide Code", key="admin_hide_code", use_container_width=True):
+        if st.button("Hide Code", key="admin_hide_code", width="stretch"):
             st.session_state.pop(ADMIN_LAST_CODE, None)
             st.rerun()
 
@@ -2457,19 +2455,19 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         left, right = st.columns(2)
         with left:
             if current_status == "Active" and st.button(
-                "Suspend", key="admin_suspend", use_container_width=True
+                "Suspend", key="admin_suspend", width="stretch"
             ):
                 _update_user(client, config, str(user["id"]), {"status": "Suspended"})
                 clear = st.session_state.pop(ADMIN_LAST_CODE, None)
                 _ = clear
                 st.rerun()
             if current_status == "Suspended" and st.button(
-                "Reactivate", key="admin_reactivate", use_container_width=True
+                "Reactivate", key="admin_reactivate", width="stretch"
             ):
                 _update_user(client, config, str(user["id"]), {"status": "Active"})
                 st.rerun()
         with right:
-            if st.button("Deactivate", key="admin_deactivate", use_container_width=True):
+            if st.button("Deactivate", key="admin_deactivate", width="stretch"):
                 _update_user(client, config, str(user["id"]), {"status": "Deactivated"})
                 st.rerun()
 

@@ -438,10 +438,10 @@ def render_auditor_selector(label: str, key: str, auditor_options):
             label_visibility="collapsed",
         )
     with button_col:
-        if st.button("Search", key=f"{key}_search_button", use_container_width=True):
+        if st.button("Search", key=f"{key}_search_button", width="stretch"):
             st.session_state[search_state] = query.strip()
     with clear_col:
-        if st.button("Clear", key=f"{key}_clear_button", use_container_width=True):
+        if st.button("Clear", key=f"{key}_clear_button", width="stretch"):
             st.session_state[search_state] = ""
 
     applied = str(st.session_state.get(search_state, "") or "").strip().casefold()
@@ -820,7 +820,7 @@ def render_document_library_page(
         if st.button(
             "Upload to Shared Library",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key=f"document_upload_button_{collection}",
         ):
             if uploaded_document is None:
@@ -936,7 +936,7 @@ def render_document_library_page(
     with action_1:
         if st.button(
             "Prepare Download",
-            use_container_width=True,
+            width="stretch",
             key=f"library_load_{collection}",
         ):
             try:
@@ -964,7 +964,7 @@ def render_document_library_page(
                 data=selected_bytes,
                 file_name=str(selected_record.get("original_filename", "document")),
                 mime=str(selected_record.get("mime_type", "application/octet-stream")),
-                use_container_width=True,
+                width="stretch",
                 key=f"library_download_button_{collection}",
             )
             if str(selected_record.get("file_extension", "")).lower() == "pdf":
@@ -1104,7 +1104,7 @@ with st.sidebar:
     if st.button(
         dashboard_label,
         key="sidebar_nav_dashboard",
-        use_container_width=True,
+        width="stretch",
         type="primary" if dashboard_selected else "secondary",
     ):
         st.session_state["main_navigation"] = dashboard_label
@@ -1117,7 +1117,7 @@ with st.sidebar:
             if st.button(
                 nav_label,
                 key=f"audit_nav_{audit_index}_{nav_key}",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if is_selected else "secondary",
             ):
                 st.session_state["main_navigation"] = nav_label
@@ -1129,7 +1129,7 @@ with st.sidebar:
         if st.button(
             nav_label,
             key=f"sidebar_nav_{nav_index}_{nav_key}",
-            use_container_width=True,
+            width="stretch",
             type="primary" if is_selected else "secondary",
         ):
             st.session_state["main_navigation"] = nav_label
@@ -1144,7 +1144,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.40", page_title=page_key)
+render_app_header(auth_user, version="4.4.41", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -1225,13 +1225,13 @@ if page_key == "Dashboard":
 
     with action_col:
         render_section_header("Quick Actions", "Open a core workspace.")
-        st.button("📄 Generate Extraction", key="dash_action_generate", use_container_width=True, type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
-        st.button("🗂️ Archive PDFs", key="dash_action_archive", use_container_width=True, on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
-        st.button("🏷️ PDF Tagging", key="dash_action_tagging", use_container_width=True, on_click=_navigate_to, args=("🏷️ PDF Tagging",))
-        st.button("📚 Audit Workpapers", key="dash_action_workpapers", use_container_width=True, on_click=_navigate_to, args=("📚 Audit Workpapers",))
-        st.button("📜 Policies & Memos", key="dash_action_policies", use_container_width=True, on_click=_navigate_to, args=("📜 Policies & Memoranda",))
+        st.button("📄 Generate Extraction", key="dash_action_generate", width="stretch", type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
+        st.button("🗂️ Archive PDFs", key="dash_action_archive", width="stretch", on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
+        st.button("🏷️ PDF Tagging", key="dash_action_tagging", width="stretch", on_click=_navigate_to, args=("🏷️ PDF Tagging",))
+        st.button("📚 Audit Workpapers", key="dash_action_workpapers", width="stretch", on_click=_navigate_to, args=("📚 Audit Workpapers",))
+        st.button("📜 Policies & Memos", key="dash_action_policies", width="stretch", on_click=_navigate_to, args=("📜 Policies & Memoranda",))
         if is_admin_user(auth_user):
-            st.button("👥 User Management", key="dash_action_users", use_container_width=True, on_click=_navigate_to, args=("👥 User Management",))
+            st.button("👥 User Management", key="dash_action_users", width="stretch", on_click=_navigate_to, args=("👥 User Management",))
 
     with overview_col:
         render_section_header("System Overview", "Current environment status.")
@@ -2053,7 +2053,7 @@ if page_key == "Master Data" and is_admin_user(auth_user):
                 if st.button(
                     "Activate Updated Master Data",
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                     key="activate_master_data",
                 ):
                     save_uploaded_master(uploaded_master)
