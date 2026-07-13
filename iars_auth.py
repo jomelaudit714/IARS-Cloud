@@ -12,11 +12,17 @@ from typing import Any
 from io import BytesIO
 
 import streamlit as st
+import streamlit.components.v1 as components
 
-try:
-    from streamlit_cropper import st_cropper
-except Exception:
-    st_cropper = None
+# V4.4.32: Removed streamlit-cropper custom component to avoid deployment segmentation faults.
+st_cropper = None
+
+_AVATAR_DRAG_COMPONENT_DIR = Path(__file__).resolve().parent / "components" / "avatar_drag_editor"
+_avatar_drag_editor_component = components.declare_component(
+    "iars_avatar_drag_editor",
+    path=str(_AVATAR_DRAG_COMPONENT_DIR),
+)
+
 
 from iars_theme import render_brand_stripe, render_login_hero, render_section_header, render_sidebar_user, render_metric_cards, render_transition_guard
 
@@ -467,6 +473,92 @@ def _avatar_circle_box_algorithm(img: Any, *args: Any, **kwargs: Any) -> dict[st
     return {"left": left, "top": top, "width": int(side), "height": int(side)}
 
 
+
+
+def _render_avatar_drag_editor_component(image_data_uri: str, *, key: str = "iars_avatar_drag_editor") -> str:
+    """Render the custom no-third-party drag avatar editor and return a 320x320 JPEG data URI.
+
+    This avoids streamlit-cropper and its deployment crashes while still allowing:
+    fixed circle + draggable image + plus/minus zoom.
+    """
+    try:
+        value = _avatar_drag_editor_component(
+            imageData=str(image_data_uri or ""),
+            zoom=1.0,
+            key=key,
+            default="",
+        )
+        return str(value or "")
+    except Exception as exc:
+        st.error(f"Avatar editor failed to load: {_profile_error_text(exc)}")
+        return ""
+
+
+def _render_avatar_editor_preview(jpeg_bytes: bytes) -> None:
+    if not jpeg_bytes:
+        return
+    data_uri = _profile_picture_data_uri(jpeg_bytes)
+    safe_uri = data_uri.replace("'", "%27").replace('"', "%22")
+    st.markdown(
+        f"""
+        <div style="display:flex;justify-content:center;align-items:center;margin:.55rem 0 .65rem 0;">
+            <div style="width:220px;height:220px;border-radius:50%;overflow:hidden;border:4px solid #F3C247;
+                        box-shadow:0 10px 26px rgba(6,26,54,.18);background:#EEF4FF;">
+                <img src="{safe_uri}" alt="Avatar preview" style="width:100%;height:100%;object-fit:cover;display:block;">
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _profile_picture_positioned_jpeg_from_image(
+    image: Any,
+    *,
+    zoom: float = 1.0,
+    x_position: int = 0,
+    y_position: int = 0,
+) -> bytes:
+    try:
+        from PIL import Image
+
+        if not isinstance(image, Image.Image):
+            raise ValueError("The selected image could not be processed.")
+        source = image.convert("RGB")
+        canvas = 720
+        zoom = max(1.0, min(2.5, float(zoom or 1.0)))
+        x_position = max(-100, min(100, int(x_position or 0)))
+        y_position = max(-100, min(100, int(y_position or 0)))
+
+        base_scale = max(canvas / source.width, canvas / source.height)
+        scale = base_scale * zoom
+        resized = source.resize(
+            (
+                max(1, int(round(source.width * scale))),
+                max(1, int(round(source.height * scale))),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+        extra_x = max(0, resized.width - canvas)
+        extra_y = max(0, resized.height - canvas)
+        left = int(round((extra_x / 2) + (x_position / 100) * (extra_x / 2)))
+        top = int(round((extra_y / 2) + (y_position / 100) * (extra_y / 2)))
+        left = max(0, min(extra_x, left))
+        top = max(0, min(extra_y, top))
+
+        cropped = resized.crop((left, top, left + canvas, top + canvas)).resize(
+            (320, 320), Image.Resampling.LANCZOS
+        )
+        output = BytesIO()
+        cropped.save(output, format="JPEG", quality=88, optimize=True)
+        return output.getvalue()
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("The selected image could not be processed.") from exc
+
+
 def _profile_picture_path(user_id: str) -> str:
     safe_id = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(user_id or "user")).strip("_") or "user"
     return f"profiles/{safe_id}/avatar.jpg"
@@ -824,48 +916,49 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
         if AVATAR_UPLOAD_VERSION not in st.session_state:
             st.session_state[AVATAR_UPLOAD_VERSION] = 0
         uploader_key = f"profile_picture_upload_dialog_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}"
-        uploaded_picture = st.file_uploader("Upload photo", type=["jpg", "jpeg", "png"], key=uploader_key, label_visibility="collapsed")
+        uploaded_picture = st.file_uploader(
+            "Upload photo",
+            type=["jpg", "jpeg", "png"],
+            key=uploader_key,
+            label_visibility="collapsed",
+        )
+
         prepared_preview_bytes = None
         if uploaded_picture is not None:
             try:
+                # Use PIL only for validation and safe data URI creation.
                 source_image = _profile_picture_image(uploaded_picture)
-                minus_col, zoom_col, plus_col = st.columns([0.18, 0.64, 0.18])
-                zoom_key = "profile_picture_zoom_dialog"
-                if zoom_key not in st.session_state:
-                    st.session_state[zoom_key] = 1.00
-                with minus_col:
-                    if st.button("−", key="profile_zoom_minus_dialog", use_container_width=True):
-                        st.session_state[zoom_key] = max(1.00, round(float(st.session_state.get(zoom_key, 1.00)) - 0.05, 2))
-                with zoom_col:
-                    zoom = st.slider("Zoom", min_value=1.00, max_value=2.50, value=float(st.session_state.get(zoom_key, 1.00)), step=0.05, key=zoom_key, label_visibility="collapsed")
-                with plus_col:
-                    if st.button("+", key="profile_zoom_plus_dialog", use_container_width=True):
-                        st.session_state[zoom_key] = min(2.50, round(float(st.session_state.get(zoom_key, zoom)) + 0.05, 2))
-                if st_cropper is not None:
-                    crop_source = _profile_picture_zoomed_image(source_image, float(st.session_state.get(zoom_key, zoom)))
-                    cropper_key = f"profile_picture_cropper_dialog_{int(float(st.session_state.get(zoom_key, zoom)) * 100)}_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}"
-                    cropped_image = st_cropper(
-                        crop_source,
-                        aspect_ratio=(1, 1),
-                        box_color="#FFFFFF",
-                        realtime_update=True,
-                        return_type="image",
-                        key=cropper_key,
-                        stroke_width=2,
-                        box_algorithm=_avatar_circle_box_algorithm,
-                        should_resize_image=True,
-                    )
-                    prepared_preview_bytes = _profile_picture_jpeg(image=cropped_image)
+                upload_data_uri = _profile_picture_data_uri(_profile_picture_jpeg(image=source_image))
+                edited_data_uri = _render_avatar_drag_editor_component(
+                    upload_data_uri,
+                    key=f"avatar_drag_editor_{st.session_state.get(AVATAR_UPLOAD_VERSION, 0)}",
+                )
+
+                if edited_data_uri.startswith("data:image/"):
+                    prepared_preview_bytes = base64.b64decode(edited_data_uri.split(",", 1)[1])
                 else:
-                    prepared_preview_bytes = _profile_picture_jpeg(uploaded_picture)
+                    prepared_preview_bytes = _profile_picture_jpeg(image=source_image)
+                    _render_avatar_editor_preview(prepared_preview_bytes)
             except ValueError as exc:
                 st.error(str(exc))
+            except Exception as exc:
+                st.error(f"Unable to prepare avatar editor: {_profile_error_text(exc)}")
+
         save_col, cancel_col = st.columns(2)
         with save_col:
             if st.button("Save", key="profile_picture_save_dialog", type="primary", use_container_width=True):
                 try:
-                    _profile_save_picture(client, config, user=user, user_id=user_id, current_username=current_username, uploaded_picture=uploaded_picture, prepared_jpeg_bytes=prepared_preview_bytes)
-                    st.session_state[SESSION_CACHE_LOADED_AT] = _utc_now()
+                    _profile_save_picture(
+                        client,
+                        config,
+                        user=user,
+                        user_id=user_id,
+                        current_username=current_username,
+                        uploaded_picture=uploaded_picture,
+                        prepared_jpeg_bytes=prepared_preview_bytes,
+                    )
+                    st.session_state.pop(SESSION_USER_CACHE, None)
+                    st.session_state.pop(SESSION_CACHE_LOADED_AT, None)
                     _close_avatar_dialogs(clear_upload=True)
                     st.rerun()
                 except ValueError as exc:
@@ -877,8 +970,6 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                 _close_avatar_dialogs(clear_upload=True)
                 st.rerun()
 
-    # Streamlit allows only one dialog in a script run.  Prioritize the active
-    # avatar mode and clear the other flag before opening a dialog.
     if st.session_state.get(AVATAR_EDIT_DIALOG_OPEN):
         st.session_state[AVATAR_VIEW_DIALOG_OPEN] = False
         _change_avatar_dialog()
