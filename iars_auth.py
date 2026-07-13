@@ -10,11 +10,12 @@ import re
 import secrets
 from typing import Any
 from io import BytesIO
+from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-# V4.4.32: Removed streamlit-cropper custom component to avoid deployment segmentation faults.
+# V4.4.34: Custom drag avatar editor; Path import fixed before component declaration.
 st_cropper = None
 
 _AVATAR_DRAG_COMPONENT_DIR = Path(__file__).resolve().parent / "components" / "avatar_drag_editor"
