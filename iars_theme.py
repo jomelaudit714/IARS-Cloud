@@ -90,10 +90,18 @@ section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{position:abso
 section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {{display:none!important;}}
 section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{margin-left:auto!important;align-self:center!important;}}
 
-/* V4.4.58: restore collapsed sidebar and expand the content area.
-   Existing EDL colors/theme remain unchanged. */
-[data-testid="collapsedControl"],
-[data-testid="stSidebarCollapsedControl"] {{
+/* V4.4.59: exact Streamlit 1.47 collapsed-sidebar restore control.
+   Keep the existing EDL navy-and-gold appearance. */
+header[data-testid="stHeader"]:has([data-testid="stExpandSidebarButton"]) {{
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
+  overflow:visible!important;
+  z-index:100499!important;
+  pointer-events:none!important;
+}}
+
+[data-testid="stExpandSidebarButton"] {{
   display:flex!important;
   visibility:visible!important;
   opacity:1!important;
@@ -102,18 +110,16 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{margi
   top:10px!important;
   z-index:100500!important;
   pointer-events:auto!important;
-}}
-
-[data-testid="collapsedControl"] button,
-[data-testid="stSidebarCollapsedControl"] button {{
-  display:flex!important;
   align-items:center!important;
   justify-content:center!important;
   width:38px!important;
   min-width:38px!important;
+  max-width:38px!important;
   height:38px!important;
   min-height:38px!important;
+  max-height:38px!important;
   padding:0!important;
+  margin:0!important;
   border-radius:9px!important;
   border:1px solid var(--edl-gold)!important;
   background:var(--edl-navy-2)!important;
@@ -121,10 +127,15 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{margi
   box-shadow:0 6px 15px rgba(6,26,54,.22)!important;
 }}
 
-[data-testid="collapsedControl"] button:hover,
-[data-testid="stSidebarCollapsedControl"] button:hover {{
+[data-testid="stExpandSidebarButton"]:hover {{
   background:var(--edl-navy-3)!important;
   border-color:var(--edl-gold-light)!important;
+}}
+
+[data-testid="stExpandSidebarButton"] svg,
+[data-testid="stExpandSidebarButton"] svg path {{
+  color:#FFF!important;
+  fill:#FFF!important;
 }}
 
 section[data-testid="stSidebar"][aria-expanded="false"] {{
