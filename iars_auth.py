@@ -507,29 +507,29 @@ def _render_avatar_native_move_controls(x_key: str, y_key: str, zoom_key: str) -
 
     up_l, up_c, up_r = st.columns([0.34, 0.32, 0.34])
     with up_c:
-        if st.button("▲", key="profile_move_up_dialog", width="stretch"):
+        if st.button("▲", key="profile_move_up_dialog", use_container_width=True):
             st.session_state[y_key] = _avatar_adjust_number(st.session_state.get(y_key, 0), -step)
             st.rerun()
 
     left_c, center_c, right_c = st.columns(3)
     with left_c:
-        if st.button("◀", key="profile_move_left_dialog", width="stretch"):
+        if st.button("◀", key="profile_move_left_dialog", use_container_width=True):
             st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), -step)
             st.rerun()
     with center_c:
-        if st.button("Center", key="profile_move_center_dialog", width="stretch"):
+        if st.button("Center", key="profile_move_center_dialog", use_container_width=True):
             st.session_state[x_key] = 0
             st.session_state[y_key] = 0
             st.session_state[zoom_key] = max(1.0, float(st.session_state.get(zoom_key, 1.0)))
             st.rerun()
     with right_c:
-        if st.button("▶", key="profile_move_right_dialog", width="stretch"):
+        if st.button("▶", key="profile_move_right_dialog", use_container_width=True):
             st.session_state[x_key] = _avatar_adjust_number(st.session_state.get(x_key, 0), step)
             st.rerun()
 
     down_l, down_c, down_r = st.columns([0.34, 0.32, 0.34])
     with down_c:
-        if st.button("▼", key="profile_move_down_dialog", width="stretch"):
+        if st.button("▼", key="profile_move_down_dialog", use_container_width=True):
             st.session_state[y_key] = _avatar_adjust_number(st.session_state.get(y_key, 0), step)
             st.rerun()
 
@@ -1041,7 +1041,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
     @st.dialog("See Avatar", width="small")
     def _see_avatar_dialog() -> None:
         _render_avatar_full_view(current_picture)
-        if st.button("Close", key="profile_avatar_dialog_close", width="stretch"):
+        if st.button("Close", key="profile_avatar_dialog_close", use_container_width=True):
             _close_avatar_dialogs(clear_upload=True)
             st.rerun()
 
@@ -1078,7 +1078,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
             st.info("No avatar uploaded yet.")
 
         if current_picture:
-            if st.button("Remove Avatar", key="profile_picture_remove_dialog", width="stretch"):
+            if st.button("Remove Avatar", key="profile_picture_remove_dialog", use_container_width=True):
                 try:
                     _profile_remove_picture(
                         client,
@@ -1098,7 +1098,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
 
         save_col, cancel_col = st.columns(2)
         with save_col:
-            if st.button("Save Avatar", key="profile_picture_save_dialog", type="primary", width="stretch", disabled=uploaded_picture is None):
+            if st.button("Save Avatar", key="profile_picture_save_dialog", type="primary", use_container_width=True, disabled=uploaded_picture is None):
                 try:
                     _profile_save_picture(
                         client,
@@ -1118,7 +1118,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
                 except Exception as exc:
                     st.error(f"Unable to save profile picture: {_profile_error_text(exc)}")
         with cancel_col:
-            if st.button("Cancel", key="profile_picture_cancel_dialog", width="stretch"):
+            if st.button("Cancel", key="profile_picture_cancel_dialog", use_container_width=True):
                 _close_avatar_dialogs(clear_upload=True)
                 st.rerun()
 
@@ -1133,9 +1133,9 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
 def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -> None:
     """Render the top-right profile menu with a front-end popover.
 
-    The user-card open/close action uses Streamlit's popover with on_change="ignore",
-    so opening and closing the menu no longer triggers a full app rerun.  Database
-    and Storage checks are performed only when the user saves/removes data.
+    The user-card and camera controls use native Streamlit popovers. Opening or
+    closing a popover does not trigger a full app rerun. Database and Storage
+    checks are performed only when the user saves or removes data.
     """
     current_username = user_username(user)
     role_label = "Administrator" if is_admin_user(user) else "Auditor"
@@ -1144,100 +1144,90 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
     _render_profile_picture_editor_styles()
     _render_avatar_dialogs(client, user, config, current_username=current_username, role_label=role_label, user_id=user_id)
 
-    with st.popover(
-        "​",
-        key="profile_menu_trigger",
-        help=None,
-        width="content",
-        on_change="ignore",
-    ):
-        with st.container(key="iars_profile_menu"):
-            st.markdown("## Edit Profile")
-            st.caption(f"@{current_username} · {role_label}")
-            st.caption("Close this panel by clicking the top-right user card again or anywhere outside the menu.")
+    with st.container(key="profile_menu_trigger"):
+        with st.popover("​", help=None, use_container_width=True):
+            with st.container(key="iars_profile_menu"):
+                st.markdown("## Edit Profile")
+                st.caption(f"@{current_username} · {role_label}")
+                st.caption("Close this panel by clicking the top-right user card again or anywhere outside the menu.")
 
-            with st.expander("Change Username", expanded=False):
-                with st.container(key="profile_username_panel"):
-                    with st.form("profile_change_username_form"):
-                        st.text_input("Current Username", value=current_username, disabled=True)
-                        new_username_input = st.text_input("New Username", placeholder="Enter a new username")
-                        current_password = st.text_input("Current Password", type="password")
-                        submitted = st.form_submit_button("Update Username", type="primary", width="stretch")
-                    if submitted:
-                        try:
-                            new_username = normalize_username(new_username_input)
-                            if new_username == current_username:
-                                raise ValueError("Enter a different username.")
-                            if not _verify_current_password(client, config, user, current_password):
-                                raise ValueError("Current password is incorrect.")
-                            if not _username_is_available(client, config, new_username, user):
-                                raise ValueError("That username is already in use.")
-                            if is_admin_user(user):
-                                _upsert_profile(client, config, "admin", {"username_override": new_username})
-                            else:
-                                _update_user(client, config, user_id, {"username": new_username})
-                            st.session_state[SESSION_USERNAME] = new_username
-                            cached_user = dict(user)
-                            cached_user["username"] = new_username
-                            _cache_session_user(cached_user)
-                            if _has_persistent_auth_token():
-                                refreshed_user = {**user, "username": new_username}
-                                _store_persistent_auth_token(config, refreshed_user, True)
-                            _log_event(client, config, event_type="username_changed", username=new_username, user_id=None if is_admin_user(user) else user_id, success=True)
-                            st.success("Username updated successfully.")
-                            st.rerun()
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        except Exception as exc:
-                            st.error(f"Unable to update username: {_profile_error_text(exc)}")
+                with st.expander("Change Username", expanded=False):
+                    with st.container(key="profile_username_panel"):
+                        with st.form("profile_change_username_form"):
+                            st.text_input("Current Username", value=current_username, disabled=True)
+                            new_username_input = st.text_input("New Username", placeholder="Enter a new username")
+                            current_password = st.text_input("Current Password", type="password")
+                            submitted = st.form_submit_button("Update Username", type="primary", use_container_width=True)
+                        if submitted:
+                            try:
+                                new_username = normalize_username(new_username_input)
+                                if new_username == current_username:
+                                    raise ValueError("Enter a different username.")
+                                if not _verify_current_password(client, config, user, current_password):
+                                    raise ValueError("Current password is incorrect.")
+                                if not _username_is_available(client, config, new_username, user):
+                                    raise ValueError("That username is already in use.")
+                                if is_admin_user(user):
+                                    _upsert_profile(client, config, "admin", {"username_override": new_username})
+                                else:
+                                    _update_user(client, config, user_id, {"username": new_username})
+                                st.session_state[SESSION_USERNAME] = new_username
+                                cached_user = dict(user)
+                                cached_user["username"] = new_username
+                                _cache_session_user(cached_user)
+                                if _has_persistent_auth_token():
+                                    refreshed_user = {**user, "username": new_username}
+                                    _store_persistent_auth_token(config, refreshed_user, True)
+                                _log_event(client, config, event_type="username_changed", username=new_username, user_id=None if is_admin_user(user) else user_id, success=True)
+                                st.success("Username updated successfully.")
+                                st.rerun()
+                            except ValueError as exc:
+                                st.error(str(exc))
+                            except Exception as exc:
+                                st.error(f"Unable to update username: {_profile_error_text(exc)}")
 
-            with st.expander("Change Password", expanded=False):
-                with st.container(key="profile_password_panel"):
-                    with st.form("profile_change_password_form"):
-                        current_password = st.text_input("Current Password", type="password", key="profile_current_password")
-                        new_password = st.text_input("New Password", type="password", key="profile_new_password")
-                        confirm_password = st.text_input("Confirm New Password", type="password", key="profile_confirm_password")
-                        submitted = st.form_submit_button("Update Password", type="primary", width="stretch")
-                    if submitted:
-                        try:
-                            if not _verify_current_password(client, config, user, current_password):
-                                raise ValueError("Current password is incorrect.")
-                            validated = validate_password(new_password, confirm_password)
-                            if _verify_current_password(client, config, user, validated):
-                                raise ValueError("New password must be different from the current password.")
-                            salt, digest = _new_password_parts(validated)
-                            if is_admin_user(user):
-                                _upsert_profile(client, config, "admin", {"admin_password_salt": salt, "admin_password_hash": digest})
-                            else:
-                                _update_user(client, config, user_id, {"password_salt": salt, "password_hash": digest, "failed_login_attempts": 0, "locked_until": None})
-                            _log_event(client, config, event_type="password_changed", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
-                            st.success("Password updated successfully.")
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        except Exception as exc:
-                            st.error(f"Unable to update password: {_profile_error_text(exc)}")
+                with st.expander("Change Password", expanded=False):
+                    with st.container(key="profile_password_panel"):
+                        with st.form("profile_change_password_form"):
+                            current_password = st.text_input("Current Password", type="password", key="profile_current_password")
+                            new_password = st.text_input("New Password", type="password", key="profile_new_password")
+                            confirm_password = st.text_input("Confirm New Password", type="password", key="profile_confirm_password")
+                            submitted = st.form_submit_button("Update Password", type="primary", use_container_width=True)
+                        if submitted:
+                            try:
+                                if not _verify_current_password(client, config, user, current_password):
+                                    raise ValueError("Current password is incorrect.")
+                                validated = validate_password(new_password, confirm_password)
+                                if _verify_current_password(client, config, user, validated):
+                                    raise ValueError("New password must be different from the current password.")
+                                salt, digest = _new_password_parts(validated)
+                                if is_admin_user(user):
+                                    _upsert_profile(client, config, "admin", {"admin_password_salt": salt, "admin_password_hash": digest})
+                                else:
+                                    _update_user(client, config, user_id, {"password_salt": salt, "password_hash": digest, "failed_login_attempts": 0, "locked_until": None})
+                                _log_event(client, config, event_type="password_changed", username=current_username, user_id=None if is_admin_user(user) else user_id, success=True)
+                                st.success("Password updated successfully.")
+                            except ValueError as exc:
+                                st.error(str(exc))
+                            except Exception as exc:
+                                st.error(f"Unable to update password: {_profile_error_text(exc)}")
 
-            st.divider()
-            st.markdown(
-                '<a class="iars-profile-signout-action" href="?iars_sign_out=1" target="_self" '
-                'aria-label="Sign Out">Sign Out</a>',
-                unsafe_allow_html=True,
-            )
+                st.divider()
+                st.markdown(
+                    '<a class="iars-profile-signout-action" href="?iars_sign_out=1" target="_self" '
+                    'aria-label="Sign Out">Sign Out</a>',
+                    unsafe_allow_html=True,
+                )
 
-    with st.popover(
-        "📷",
-        key="avatar_camera_trigger",
-        help=None,
-        width="content",
-        on_change="ignore",
-    ):
-        with st.container(key="avatar_camera_menu"):
-            if st.button("See Avatar", key="avatar_camera_open_view", width="stretch"):
-                _open_avatar_mode("see")
-                st.rerun()
-            if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", width="stretch"):
-                _open_avatar_mode("change")
-                st.rerun()
+    with st.container(key="avatar_camera_trigger"):
+        with st.popover("📷", help=None, use_container_width=True):
+            with st.container(key="avatar_camera_menu"):
+                if st.button("See Avatar", key="avatar_camera_open_view", use_container_width=True):
+                    _open_avatar_mode("see")
+                    st.rerun()
+                if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", use_container_width=True):
+                    _open_avatar_mode("change")
+                    st.rerun()
 
 
 
@@ -1647,17 +1637,16 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
 
         submitted = st.form_submit_button(
             "Sign In",
-            key="auth_signin_submit",
             type="primary",
             icon=":material/lock:",
-            width="stretch",
+            use_container_width=True,
         )
 
     forgot_clicked = st.button(
         "Forgot password?",
         key="auth_forgot_button",
         type="tertiary",
-        width="stretch",
+        use_container_width=True,
     )
     if forgot_clicked:
         _set_auth_view("forgot")
@@ -1698,7 +1687,7 @@ def _render_sign_up(client: Any, config: AuthConfig) -> None:
         confirmation = st.text_input(
             "Confirm Password", type="password", autocomplete="new-password"
         )
-        submitted = st.form_submit_button("Submit Registration", type="primary", width="stretch")
+        submitted = st.form_submit_button("Submit Registration", type="primary", use_container_width=True)
 
     if not submitted:
         return
@@ -1747,7 +1736,7 @@ def _render_verify_account(client: Any, config: AuthConfig) -> None:
         code_input = st.text_input(
             "Activation Code", max_chars=6, placeholder="123456", type="password"
         )
-        submitted = st.form_submit_button("Verify Account", type="primary", width="stretch")
+        submitted = st.form_submit_button("Verify Account", type="primary", use_container_width=True)
 
     if not submitted:
         return
@@ -1819,7 +1808,7 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
             "Username / Nickname", key="reset_request_username"
         )
         request_submitted = st.form_submit_button(
-            "Request Password Reset", width="stretch"
+            "Request Password Reset", use_container_width=True
         )
     if request_submitted:
         try:
@@ -1854,7 +1843,7 @@ def _render_forgot_password(client: Any, config: AuthConfig) -> None:
             "Confirm New Password", type="password", autocomplete="new-password"
         )
         submitted = st.form_submit_button(
-            "Change Password", type="primary", width="stretch"
+            "Change Password", type="primary", use_container_width=True
         )
 
     if not submitted:
@@ -2034,7 +2023,7 @@ def render_auth_gate(config: AuthConfig):
             st.button(
                 "← Back to Sign In",
                 key="auth_back_signup",
-                width="stretch",
+                use_container_width=True,
                 on_click=_set_auth_view,
                 args=("sign_in",),
             )
@@ -2045,7 +2034,7 @@ def render_auth_gate(config: AuthConfig):
             st.button(
                 "← Back to Sign In",
                 key="auth_back_verify",
-                width="stretch",
+                use_container_width=True,
                 on_click=_set_auth_view,
                 args=("sign_in",),
             )
@@ -2056,7 +2045,7 @@ def render_auth_gate(config: AuthConfig):
             st.button(
                 "← Back to Sign In",
                 key="auth_back_forgot",
-                width="stretch",
+                use_container_width=True,
                 on_click=_set_auth_view,
                 args=("sign_in",),
             )
@@ -2091,7 +2080,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         selected_label = st.selectbox(
             "Pending registration", list(labels), key="admin_pending_user"
         )
-        if st.button("Approve and Generate Activation Code", width="stretch"):
+        if st.button("Approve and Generate Activation Code", use_container_width=True):
             user = labels[selected_label]
             code, code_hash = _new_code(config, str(user["id"]), "activate")
             _update_user(
@@ -2134,7 +2123,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         selected_label = st.selectbox(
             "Reissue activation code", list(labels), key="admin_reissue_user"
         )
-        if st.button("Generate New Activation Code", width="stretch"):
+        if st.button("Generate New Activation Code", use_container_width=True):
             user = labels[selected_label]
             code, code_hash = _new_code(config, str(user["id"]), "activate")
             _update_user(
@@ -2163,7 +2152,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         selected_label = st.selectbox(
             "Password-reset request", list(labels), key="admin_reset_user"
         )
-        if st.button("Generate Password Reset Code", width="stretch"):
+        if st.button("Generate Password Reset Code", use_container_width=True):
             user = labels[selected_label]
             code, code_hash = _new_code(config, str(user["id"]), "reset")
             _update_user(
@@ -2206,7 +2195,7 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         )
         st.code(str(last_code.get("code")))
         st.caption(f"Valid for {last_code.get('expires')}. Give it directly to the user.")
-        if st.button("Hide Code", key="admin_hide_code", width="stretch"):
+        if st.button("Hide Code", key="admin_hide_code", use_container_width=True):
             st.session_state.pop(ADMIN_LAST_CODE, None)
             st.rerun()
 
@@ -2223,19 +2212,19 @@ def _render_admin_controls(client: Any, config: AuthConfig) -> None:
         left, right = st.columns(2)
         with left:
             if current_status == "Active" and st.button(
-                "Suspend", key="admin_suspend", width="stretch"
+                "Suspend", key="admin_suspend", use_container_width=True
             ):
                 _update_user(client, config, str(user["id"]), {"status": "Suspended"})
                 clear = st.session_state.pop(ADMIN_LAST_CODE, None)
                 _ = clear
                 st.rerun()
             if current_status == "Suspended" and st.button(
-                "Reactivate", key="admin_reactivate", width="stretch"
+                "Reactivate", key="admin_reactivate", use_container_width=True
             ):
                 _update_user(client, config, str(user["id"]), {"status": "Active"})
                 st.rerun()
         with right:
-            if st.button("Deactivate", key="admin_deactivate", width="stretch"):
+            if st.button("Deactivate", key="admin_deactivate", use_container_width=True):
                 _update_user(client, config, str(user["id"]), {"status": "Deactivated"})
                 st.rerun()
 

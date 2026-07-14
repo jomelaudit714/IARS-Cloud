@@ -438,10 +438,10 @@ def render_auditor_selector(label: str, key: str, auditor_options):
             label_visibility="collapsed",
         )
     with button_col:
-        if st.button("Search", key=f"{key}_search_button", width="stretch"):
+        if st.button("Search", key=f"{key}_search_button", use_container_width=True):
             st.session_state[search_state] = query.strip()
     with clear_col:
-        if st.button("Clear", key=f"{key}_clear_button", width="stretch"):
+        if st.button("Clear", key=f"{key}_clear_button", use_container_width=True):
             st.session_state[search_state] = ""
 
     applied = str(st.session_state.get(search_state, "") or "").strip().casefold()
@@ -820,7 +820,7 @@ def render_document_library_page(
         if st.button(
             "Upload to Shared Library",
             type="primary",
-            width="stretch",
+            use_container_width=True,
             key=f"document_upload_button_{collection}",
         ):
             if uploaded_document is None:
@@ -915,7 +915,7 @@ def render_document_library_page(
         st.info("No documents match the current filters.")
         return
 
-    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
     labels: list[str] = []
     record_by_label: dict[str, dict] = {}
     for index, record in enumerate(filtered, start=1):
@@ -936,7 +936,7 @@ def render_document_library_page(
     with action_1:
         if st.button(
             "Prepare Download",
-            width="stretch",
+            use_container_width=True,
             key=f"library_load_{collection}",
         ):
             try:
@@ -964,7 +964,7 @@ def render_document_library_page(
                 data=selected_bytes,
                 file_name=str(selected_record.get("original_filename", "document")),
                 mime=str(selected_record.get("mime_type", "application/octet-stream")),
-                width="stretch",
+                use_container_width=True,
                 key=f"library_download_button_{collection}",
             )
             if str(selected_record.get("file_extension", "")).lower() == "pdf":
@@ -1115,7 +1115,7 @@ with st.sidebar:
     if st.button(
         dashboard_label,
         key="sidebar_nav_dashboard",
-        width="stretch",
+        use_container_width=True,
         type="primary" if dashboard_selected else "secondary",
     ):
         _clear_avatar_dialog_state_on_navigation()
@@ -1129,7 +1129,7 @@ with st.sidebar:
             if st.button(
                 nav_label,
                 key=f"audit_nav_{audit_index}_{nav_key}",
-                width="stretch",
+                use_container_width=True,
                 type="primary" if is_selected else "secondary",
             ):
                 _clear_avatar_dialog_state_on_navigation()
@@ -1142,7 +1142,7 @@ with st.sidebar:
         if st.button(
             nav_label,
             key=f"sidebar_nav_{nav_index}_{nav_key}",
-            width="stretch",
+            use_container_width=True,
             type="primary" if is_selected else "secondary",
         ):
             _clear_avatar_dialog_state_on_navigation()
@@ -1158,7 +1158,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.56", page_title=page_key)
+render_app_header(auth_user, version="4.4.57", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -1239,13 +1239,13 @@ if page_key == "Dashboard":
 
     with action_col:
         render_section_header("Quick Actions", "Open a core workspace.")
-        st.button("📄 Generate Extraction", key="dash_action_generate", width="stretch", type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
-        st.button("🗂️ Archive PDFs", key="dash_action_archive", width="stretch", on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
-        st.button("🏷️ PDF Tagging", key="dash_action_tagging", width="stretch", on_click=_navigate_to, args=("🏷️ PDF Tagging",))
-        st.button("📚 Audit Workpapers", key="dash_action_workpapers", width="stretch", on_click=_navigate_to, args=("📚 Audit Workpapers",))
-        st.button("📜 Policies & Memos", key="dash_action_policies", width="stretch", on_click=_navigate_to, args=("📜 Policies & Memoranda",))
+        st.button("📄 Generate Extraction", key="dash_action_generate", use_container_width=True, type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
+        st.button("🗂️ Archive PDFs", key="dash_action_archive", use_container_width=True, on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
+        st.button("🏷️ PDF Tagging", key="dash_action_tagging", use_container_width=True, on_click=_navigate_to, args=("🏷️ PDF Tagging",))
+        st.button("📚 Audit Workpapers", key="dash_action_workpapers", use_container_width=True, on_click=_navigate_to, args=("📚 Audit Workpapers",))
+        st.button("📜 Policies & Memos", key="dash_action_policies", use_container_width=True, on_click=_navigate_to, args=("📜 Policies & Memoranda",))
         if is_admin_user(auth_user):
-            st.button("👥 User Management", key="dash_action_users", width="stretch", on_click=_navigate_to, args=("👥 User Management",))
+            st.button("👥 User Management", key="dash_action_users", use_container_width=True, on_click=_navigate_to, args=("👥 User Management",))
 
     with overview_col:
         render_section_header("System Overview", "Current environment status.")
@@ -1374,7 +1374,7 @@ if page_key == "PDF Tagging":
 
             if all_tag_rows:
                 with st.expander(f"Review saved textbox data ({len(all_tag_rows)})"):
-                    st.dataframe(pd.DataFrame(all_tag_rows), width="stretch", hide_index=True)
+                    st.dataframe(pd.DataFrame(all_tag_rows), use_container_width=True, hide_index=True)
             else:
                 st.info("No completed textbox tags yet. You may proceed without tags or add them in the editor.")
 
@@ -1475,7 +1475,7 @@ if page_key == "PDF Tagging":
                                     )
                                 else:
                                     archive_results.append({"Status": "Skipped", "File": f"tagged_{tag_pdf.name}", "Details": "Generate the tagged PDF first."})
-                            st.dataframe(pd.DataFrame(archive_results), width="stretch", hide_index=True)
+                            st.dataframe(pd.DataFrame(archive_results), use_container_width=True, hide_index=True)
     else:
         st.info("Upload a PDF only when tags are needed. Otherwise, use Generate Extraction directly.")
 
@@ -1588,7 +1588,7 @@ if page_key == "Shared PDF Archive":
                                 )
                             )
                         _invalidate_session_cache("iars_archive_records_cache_v4_4_19")
-                        st.dataframe(pd.DataFrame(results), width="stretch", hide_index=True)
+                        st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
 
             st.divider()
             title_col, refresh_col = st.columns([4, 1])
@@ -1663,7 +1663,7 @@ if page_key == "Shared PDF Archive":
 
                 st.caption(f"Showing {len(filtered)} of {len(records)} archived PDF record(s) from all auditors.")
                 if display_rows:
-                    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
+                    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
 
                     labels = []
                     record_by_label = {}
@@ -1910,7 +1910,7 @@ if page_key == "Generate Extraction":
 
                 edited_result = st.data_editor(
                     final_df,
-                    width="stretch",
+                    use_container_width=True,
                     num_rows="fixed",
                     column_config={
                         "Findings": st.column_config.SelectboxColumn(
@@ -1947,11 +1947,11 @@ if page_key == "Generate Extraction":
 
             if archive_results:
                 st.subheader("Archive Results")
-                st.dataframe(pd.DataFrame(archive_results), width="stretch", hide_index=True)
+                st.dataframe(pd.DataFrame(archive_results), use_container_width=True, hide_index=True)
 
             if processing_errors:
                 st.warning("Some PDF files were not processed.")
-                st.dataframe(pd.DataFrame(processing_errors), width="stretch")
+                st.dataframe(pd.DataFrame(processing_errors), use_container_width=True)
 
     else:
         st.info("Upload one or multiple audit report PDFs to start.")
@@ -2067,7 +2067,7 @@ if page_key == "Master Data" and is_admin_user(auth_user):
                 if st.button(
                     "Activate Updated Master Data",
                     type="primary",
-                    width="stretch",
+                    use_container_width=True,
                     key="activate_master_data",
                 ):
                     save_uploaded_master(uploaded_master)
@@ -2088,7 +2088,7 @@ if page_key == "Master Data" and is_admin_user(auth_user):
         )
         preview_df = master_sheets.get(selected_sheet, pd.DataFrame())
         if isinstance(preview_df, pd.DataFrame):
-            st.dataframe(preview_df.head(200), width="stretch", hide_index=True)
+            st.dataframe(preview_df.head(200), use_container_width=True, hide_index=True)
             if len(preview_df) > 200:
                 st.caption(f"Showing the first 200 of {len(preview_df):,} rows.")
 
