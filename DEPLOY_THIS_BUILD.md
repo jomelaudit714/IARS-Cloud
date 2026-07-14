@@ -1,4 +1,4 @@
-# Deploy IARS V4.4.64
+# Deploy IARS V4.4.65
 
 1. Extract the ZIP.
 2. Upload the contents of the extracted folder to the existing IARS GitHub repository.
@@ -19,7 +19,7 @@
 - Restore the sidebar.
 - Confirm the EDL logo remains centered and the sidebar items are positioned slightly higher.
 
-The PDF Tagging implementation remains unchanged from the approved V4.4.64 build.
+The PDF Tagging implementation remains unchanged from the approved V4.4.65 build.
 
 
 ## Important upload instruction

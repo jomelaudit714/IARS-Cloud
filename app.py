@@ -675,48 +675,160 @@ def _normalized_audit_reference(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
 
 
-def uploaded_archive_duplicate_references(pdf_files, archive_records) -> list[str]:
-    """Return unique IAD references from uploaded PDFs already found in the archive.
+def _normalized_archive_filename(value: str) -> str:
+    """Normalize PDF filenames for a conservative duplicate fallback."""
+    filename = Path(str(value or "")).name.casefold().strip()
+    return re.sub(r"\s+", " ", filename)
 
-    A report is treated as already archived when either its extracted IAD reference
-    matches an archive record or its original PDF hash matches an archived file.
+
+def uploaded_archive_duplicate_matches(
+    pdf_files,
+    archive_records,
+    *,
+    metadata_loader=None,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Return duplicate details and non-fatal metadata warnings.
+
+    Matching order:
+    1. exact original-PDF SHA256
+    2. normalized IAD reference
+    3. exact original filename as a conservative fallback
+
+    Metadata extraction errors are handled per PDF, so one unreadable file no
+    longer disables duplicate checking for every uploaded report.
     """
+    metadata_loader = metadata_loader or cached_archive_metadata
+
     records_by_reference: dict[str, list[dict]] = {}
     records_by_hash: dict[str, dict] = {}
+    records_by_filename: dict[str, list[dict]] = {}
+
     for record in archive_records or []:
         reference = str(record.get("audit_reference", "") or "").strip()
-        normalized = _normalized_audit_reference(reference)
-        if normalized:
-            records_by_reference.setdefault(normalized, []).append(record)
+        normalized_reference = _normalized_audit_reference(reference)
+        if normalized_reference:
+            records_by_reference.setdefault(normalized_reference, []).append(record)
+
         digest = str(record.get("sha256", "") or "").strip().lower()
         if digest:
             records_by_hash[digest] = record
 
-    duplicates: list[str] = []
+        normalized_filename = _normalized_archive_filename(
+            str(record.get("original_filename", "") or "")
+        )
+        if normalized_filename:
+            records_by_filename.setdefault(normalized_filename, []).append(record)
+
+    matches: list[dict[str, str]] = []
+    warnings: list[str] = []
     seen: set[str] = set()
+
     for pdf_file in pdf_files or []:
+        uploaded_name = Path(str(getattr(pdf_file, "name", "") or "uploaded.pdf")).name
         pdf_bytes = pdf_file.getvalue()
-        defaults = cached_archive_metadata(pdf_bytes, pdf_file.name)
-        extracted_reference = str(defaults.get("audit_reference", "") or "").strip()
-        normalized = _normalized_audit_reference(extracted_reference)
         digest = hashlib.sha256(pdf_bytes).hexdigest().lower()
 
+        extracted_reference = ""
+        try:
+            defaults = metadata_loader(pdf_bytes, uploaded_name) or {}
+            extracted_reference = str(defaults.get("audit_reference", "") or "").strip()
+        except Exception as exc:
+            warnings.append(f"{uploaded_name}: unable to read the IAD reference ({exc})")
+
+        normalized_reference = _normalized_audit_reference(extracted_reference)
+        normalized_filename = _normalized_archive_filename(uploaded_name)
+
         matched_record = records_by_hash.get(digest)
-        if matched_record is None and normalized:
-            matches = records_by_reference.get(normalized, [])
-            matched_record = matches[0] if matches else None
+        match_basis = "exact PDF file"
 
-        if matched_record is not None:
-            display_reference = (
-                str(matched_record.get("audit_reference", "") or "").strip()
-                or extracted_reference
+        if matched_record is None and normalized_reference:
+            reference_matches = records_by_reference.get(normalized_reference, [])
+            matched_record = reference_matches[0] if reference_matches else None
+            match_basis = "IAD reference"
+
+        if matched_record is None and normalized_filename:
+            filename_matches = records_by_filename.get(normalized_filename, [])
+            matched_record = filename_matches[0] if filename_matches else None
+            match_basis = "same filename"
+
+        if matched_record is None:
+            continue
+
+        archived_reference = str(
+            matched_record.get("audit_reference", "") or ""
+        ).strip()
+        archived_filename = Path(
+            str(matched_record.get("original_filename", "") or uploaded_name)
+        ).name
+        display_value = archived_reference or extracted_reference or archived_filename
+        identity = (
+            _normalized_audit_reference(archived_reference or extracted_reference)
+            or _normalized_archive_filename(archived_filename)
+            or digest
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+
+        matches.append(
+            {
+                "display": display_value,
+                "uploaded_filename": uploaded_name,
+                "archived_filename": archived_filename,
+                "audit_reference": archived_reference or extracted_reference,
+                "match_basis": match_basis,
+            }
+        )
+
+    return matches, warnings
+
+
+def uploaded_archive_duplicate_references(pdf_files, archive_records) -> list[str]:
+    """Compatibility wrapper returning duplicate display labels only."""
+    matches, _ = uploaded_archive_duplicate_matches(pdf_files, archive_records)
+    return [match["display"] for match in matches]
+
+
+def render_duplicate_archive_notice(
+    duplicate_matches: list[dict[str, str]],
+    duplicate_check_error: str = "",
+    duplicate_metadata_warnings: list[str] | None = None,
+) -> None:
+    """Render persistent duplicate-check feedback in the upload page."""
+    duplicate_metadata_warnings = duplicate_metadata_warnings or []
+
+    if duplicate_matches:
+        duplicate_lines = []
+        for match in duplicate_matches:
+            reference = str(match.get("audit_reference", "") or "").strip()
+            archived_filename = str(
+                match.get("archived_filename", "") or ""
+            ).strip()
+            basis = str(match.get("match_basis", "") or "archive match").strip()
+            label = reference or archived_filename or str(
+                match.get("display", "") or "Archived report"
             )
-            identity = _normalized_audit_reference(display_reference) or display_reference.casefold()
-            if display_reference and identity not in seen:
-                seen.add(identity)
-                duplicates.append(display_reference)
+            duplicate_lines.append(
+                f"- **{label}** — {archived_filename} ({basis})"
+            )
 
-    return duplicates
+        st.error(
+            "**Duplicate report(s) detected — already saved in the PDF Archive.**\n\n"
+            + "\n".join(duplicate_lines)
+            + "\n\nPlease review the uploaded report(s) before continuing."
+        )
+
+    if duplicate_check_error:
+        st.warning(
+            "**Duplicate checking could not be completed.** "
+            f"{duplicate_check_error} Extraction is still available, but "
+            "please verify the PDF Archive manually before saving."
+        )
+    elif duplicate_metadata_warnings and not duplicate_matches:
+        st.warning(
+            "The IAD reference could not be read from one or more PDFs. "
+            "Exact-file and filename duplicate checks were still completed."
+        )
 
 
 @st.cache_resource(show_spinner=False)
@@ -1342,7 +1454,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.64", page_title=page_key)
+render_app_header(auth_user, version="4.4.65", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -1926,32 +2038,36 @@ if page_key == "Generate Extraction":
     if pdf_files:
         st.success(f"{len(pdf_files)} PDF report(s) uploaded successfully.")
 
-        duplicate_references: list[str] = []
+        duplicate_matches: list[dict[str, str]] = []
+        duplicate_metadata_warnings: list[str] = []
+        duplicate_check_error = ""
+
         if archive_ready and archive_client is not None:
             try:
-                archive_records_for_check = _session_ttl_cache(
-                    "iars_archive_duplicate_check_cache_v4_4_19",
-                    180,
-                    lambda: list_archive_records(archive_client, archive_config, limit=1000),
+                # Always request the current Archive records when a report is
+                # uploaded. The previous 180-second cache could hide a report
+                # that had just been saved by this or another signed-in user.
+                archive_records_for_check = list_archive_records(
+                    archive_client,
+                    archive_config,
+                    limit=1000,
                 )
-                duplicate_references = uploaded_archive_duplicate_references(
-                    pdf_files, archive_records_for_check
+                duplicate_matches, duplicate_metadata_warnings = (
+                    uploaded_archive_duplicate_matches(
+                        pdf_files,
+                        archive_records_for_check,
+                    )
                 )
-            except Exception:
-                # Duplicate checking is advisory and must not block extraction when
-                # the archive service is temporarily unavailable.
-                duplicate_references = []
+            except Exception as exc:
+                duplicate_check_error = str(exc) or exc.__class__.__name__
+        elif archive_is_configured(archive_config):
+            duplicate_check_error = "The PDF Archive connection is currently unavailable."
 
-        if duplicate_references:
-            reference_list = "\n".join(f"- **{reference}**" for reference in duplicate_references)
-            reference_term = "IAD Reference No." if len(duplicate_references) == 1 else "IAD Reference Nos."
-            reference_verb = "is" if len(duplicate_references) == 1 else "are"
-            st.error(
-                "**Duplicate report(s) detected in the PDF Archive.**\n\n"
-                f"The following {reference_term} {reference_verb} already in the archive:\n"
-                f"{reference_list}\n\n"
-                "Please review these reports before continuing."
-            )
+        render_duplicate_archive_notice(
+            duplicate_matches,
+            duplicate_check_error,
+            duplicate_metadata_warnings,
+        )
 
         upload_action_options = ["Generate extraction only"]
         if archive_ready:
@@ -2104,6 +2220,10 @@ if page_key == "Generate Extraction":
                 )
 
             if archive_results:
+                _invalidate_session_cache(
+                    "iars_archive_records_cache_v4_4_19",
+                    "iars_archive_duplicate_check_cache_v4_4_19",
+                )
                 st.subheader("Archive Results")
                 st.dataframe(pd.DataFrame(archive_results), use_container_width=True, hide_index=True)
 
