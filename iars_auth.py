@@ -542,7 +542,7 @@ def _render_avatar_editor_preview(jpeg_bytes: bytes) -> None:
     st.markdown(
         f"""
         <div style="display:flex;justify-content:center;align-items:center;margin:.55rem 0 .65rem 0;">
-            <div style="width:220px;height:220px;border-radius:50%;overflow:hidden;border:4px solid #F3C247;
+            <div style="width:155px;height:155px;border-radius:50%;overflow:hidden;border:4px solid #F3C247;
                         box-shadow:0 10px 26px rgba(6,26,54,.18);background:#EEF4FF;">
                 <img src="{safe_uri}" alt="Avatar preview" style="width:100%;height:100%;object-fit:cover;display:block;">
             </div>
@@ -743,6 +743,31 @@ def _render_profile_picture_editor_styles() -> None:
     st.markdown(
         """
         <style>
+        /* V4.4.55: compact centered avatar dialogs that fit vertically. */
+        div[data-testid="stDialog"] div[role="dialog"],
+        div[role="dialog"][aria-modal="true"] {
+            max-height:88vh!important;
+            overflow-y:auto!important;
+            left:50%!important;
+            top:50%!important;
+            transform:translate(-50%, -50%)!important;
+            position:fixed!important;
+        }
+        [data-testid="stDialog"] .iars-photo-editor-shell,
+        [role="dialog"] .iars-photo-editor-shell {
+            padding:8px!important;
+            margin:.15rem 0 .35rem 0!important;
+        }
+        [data-testid="stDialog"] [data-testid="stFileUploaderDropzone"],
+        [role="dialog"] [data-testid="stFileUploaderDropzone"] {
+            min-height:52px!important;
+            padding:.35rem!important;
+        }
+        [data-testid="stDialog"] .stButton>button,
+        [role="dialog"] .stButton>button {
+            min-height:34px!important;
+        }
+
         /* V4.4.51: force avatar dialogs to the true center of the viewport. */
         div[data-testid="stDialog"] {
             align-items:center!important;
@@ -772,7 +797,12 @@ def _render_profile_picture_editor_styles() -> None:
         .iars-card-avatar-camera {position:absolute;right:-5px;bottom:-4px;width:28px;height:28px;border-radius:50%;background:#1E78D7;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:900;box-shadow:0 5px 12px rgba(0,0,0,.23);}
         .iars-card-avatar-name {font-weight:900;color:#FFF;margin:0;font-size:1.02rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .iars-card-avatar-role {font-weight:900;color:#F3C247;margin:4px 0 0 0;font-size:.8rem;}
-        .st-key-avatar_camera_trigger {position:fixed!important;right:191px!important;top:49px!important;z-index:100061!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;}
+        
+        /* V4.4.55: camera popover click target must always win over edit-profile trigger. */
+        .st-key-avatar_camera_trigger, .st-key-avatar_camera_trigger * {
+            pointer-events:auto!important;
+        }
+.st-key-avatar_camera_trigger {position:fixed!important;right:191px!important;top:49px!important;z-index:100061!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;}
         .st-key-avatar_camera_trigger [data-testid="stPopover"] {width:30px!important;height:30px!important;margin:0!important;padding:0!important;}
         .st-key-avatar_camera_trigger [data-testid="stPopover"] > button, .st-key-avatar_camera_trigger button[kind="secondary"], .st-key-avatar_camera_trigger > div > button {width:30px!important;height:30px!important;min-height:30px!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;color:transparent!important;font-size:0!important;line-height:0!important;opacity:0!important;cursor:pointer!important;overflow:hidden!important;}
         .st-key-avatar_camera_trigger [data-testid="stPopover"] > button::before, .st-key-avatar_camera_trigger button[kind="secondary"]::before, .st-key-avatar_camera_trigger > div > button::before {content:""!important;display:none!important;}
@@ -839,7 +869,7 @@ def _render_avatar_full_view(data_uri: str) -> None:
         f"""
         <div class="iars-photo-editor-shell" style="padding:16px;">
             <div style="display:flex;justify-content:center;align-items:center;">
-                <img src="{safe_uri}" alt="Avatar" style="width:280px;height:280px;object-fit:cover;border-radius:18px;border:3px solid #F3C247;box-shadow:0 12px 30px rgba(0,0,0,.18);background:#fff;">
+                <img src="{safe_uri}" alt="Avatar" style="width:210px;height:210px;object-fit:cover;border-radius:18px;border:3px solid #F3C247;box-shadow:0 12px 30px rgba(0,0,0,.18);background:#fff;">
             </div>
         </div>
         """,
@@ -1017,7 +1047,7 @@ def _render_avatar_dialogs(client: Any, user: dict[str, Any], config: AuthConfig
 
     @st.dialog("Change Avatar", width="small")
     def _change_avatar_dialog() -> None:
-        st.caption("Upload a clear, centered JPG or PNG. The system will automatically fit it into the profile circle.")
+        st.caption("Upload JPG/PNG. The system will auto-fit it into the profile circle.")
 
         if AVATAR_UPLOAD_VERSION not in st.session_state:
             st.session_state[AVATAR_UPLOAD_VERSION] = 0
@@ -1115,21 +1145,6 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
     _render_avatar_dialogs(client, user, config, current_username=current_username, role_label=role_label, user_id=user_id)
 
     with st.popover(
-        "📷",
-        key="avatar_camera_trigger",
-        help=None,
-        width="content",
-        on_change="ignore",
-    ):
-        with st.container(key="avatar_camera_menu"):
-            if st.button("See Avatar", key="avatar_camera_open_view", width="stretch"):
-                _open_avatar_mode("see")
-                st.rerun()
-            if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", width="stretch"):
-                _open_avatar_mode("change")
-                st.rerun()
-
-    with st.popover(
         "​",
         key="profile_menu_trigger",
         help=None,
@@ -1208,6 +1223,22 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
                 'aria-label="Sign Out">Sign Out</a>',
                 unsafe_allow_html=True,
             )
+
+    with st.popover(
+        "📷",
+        key="avatar_camera_trigger",
+        help=None,
+        width="content",
+        on_change="ignore",
+    ):
+        with st.container(key="avatar_camera_menu"):
+            if st.button("See Avatar", key="avatar_camera_open_view", width="stretch"):
+                _open_avatar_mode("see")
+                st.rerun()
+            if st.button("Change Avatar", key="avatar_camera_open_change", type="primary", width="stretch"):
+                _open_avatar_mode("change")
+                st.rerun()
+
 
 
 def _log_event(
@@ -1592,10 +1623,10 @@ def _set_auth_view(view: str) -> None:
 
 
 def _render_sign_in(client: Any, config: AuthConfig) -> None:
-    """Render the approved sign-in interface with stable native controls.
+    """Render sign-in with Enter key submitting Sign In only.
 
-    All typing remains inside the browser until a form button is pressed.
-    This avoids per-keystroke reruns and CachedForwardMsg errors.
+    The Forgot Password control is intentionally outside the form so pressing
+    Enter inside username/password cannot trigger the forgot-password view.
     """
     with st.form("iars_native_sign_in_form", clear_on_submit=False, border=False):
         username_input = st.text_input(
@@ -1612,16 +1643,7 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
             key="auth_signin_password",
         )
 
-        remember_col, forgot_col = st.columns([1, 1], vertical_alignment="center")
-        with remember_col:
-            remember = st.checkbox("Remember me", key="auth_remember_me")
-        with forgot_col:
-            forgot_clicked = st.form_submit_button(
-                "Forgot password?",
-                key="auth_forgot_submit",
-                type="tertiary",
-                width="stretch",
-            )
+        remember = st.checkbox("Remember me", key="auth_remember_me")
 
         submitted = st.form_submit_button(
             "Sign In",
@@ -1631,6 +1653,12 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
             width="stretch",
         )
 
+    forgot_clicked = st.button(
+        "Forgot password?",
+        key="auth_forgot_button",
+        type="tertiary",
+        width="stretch",
+    )
     if forgot_clicked:
         _set_auth_view("forgot")
         st.rerun()
@@ -1643,6 +1671,7 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
         _process_sign_in_credentials(client, config, username_input, password, remember=remember)
     except Exception as exc:
         st.error(str(exc) or "Unable to sign in.")
+
 
 def _render_sign_up(client: Any, config: AuthConfig) -> None:
     st.caption(

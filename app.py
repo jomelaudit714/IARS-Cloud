@@ -1158,7 +1158,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.51", page_title=page_key)
+render_app_header(auth_user, version="4.4.55", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 

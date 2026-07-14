@@ -879,7 +879,7 @@ a.iars-verify-action:focus-visible {{
 /* v4.4.17 smooth profile popover: open/close does not rerun the app */
 .st-key-profile_menu_trigger {{
   position:fixed!important;right:12px!important;top:14px!important;z-index:100020!important;
-  width:252px!important;height:66px!important;margin:0!important;padding:0!important;
+  width:170px!important;height:66px!important;margin:0!important;padding:0!important;
 }}
 .st-key-profile_menu_trigger [data-testid="stPopover"] {{width:100%!important;height:100%!important;margin:0!important;padding:0!important;}}
 .st-key-profile_menu_trigger [data-testid="stPopover"] > button,
