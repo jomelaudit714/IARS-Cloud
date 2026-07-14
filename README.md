@@ -1,40 +1,37 @@
-# IARS v4.4.16
+# Internal Audit Report System — V4.4.58
 
-Complete Internal Audit Report System deployment package containing the approved login, dashboard, sidebar, Generate Extraction, PDF Tagging, header cleanup, and profile-menu updates.
+EDL Group of Companies Internal Audit Report System built with Streamlit.
 
-## v4.4.16 Profile Menu and Picture Upload
+## Current approved changes
 
-- The top-right user card itself is the only visible profile-menu trigger.
-- No separate “Open profile menu” box or label is displayed.
-- JPG, JPEG, and PNG uploads are automatically EXIF-corrected, center-cropped to a square, resized to 320 × 320 pixels, and displayed with circular cover fitting.
-- Profile pictures are saved to Supabase Storage when available.
-- If Storage is unavailable, the optimized image is automatically saved through the secure database fallback.
-- The updated `SUPABASE_PROFILE_SETUP.sql` includes explicit `service_role` grants for the profile table and Storage tables.
-- Change Username, Change Password, Change Profile Picture, Remove Picture, and Sign Out remain inside the profile menu.
+- The original V4.4.57 theme, logo treatment, colors, fonts, cards, borders, shadows, and module appearance are retained.
+- The sidebar content is positioned slightly higher.
+- The EDL logo is horizontally centered in the sidebar.
+- A visible navy-and-gold restore button appears when the sidebar is collapsed.
+- The main interface expands into the available width while the sidebar is hidden.
+- The Dashboard no longer displays:
+  - Archive Status
+  - Quick Actions
+  - System Overview
+- The five remaining Dashboard cards retain their original design and become only moderately wider because one card was removed.
+- Recent Archive Activity retains its original design and left-column proportion.
 
-## Retained approved updates
+## Main application files
 
-- 1.8-second true inactivity autosave for PDF Tagging.
-- Exact caret placement at the clicked character.
-- Single-click textbox editing, long-press dragging, border dragging, and blue-handle resizing.
-- Per-textbox font size control from 6–48 pt.
-- Removed duplicate secondary titles from Generate Extraction, PDF Tagging, and Shared PDF Archive.
-- Generate Extraction duplicate-report warning listing repeated IAD reference numbers.
-- Compact, light color-coded extraction choices.
-- Professional dashboard colors and readable status pills.
-- Expandable Audit Report sidebar category and Audit Workpapers naming.
-- Corrected Sign Up, Forgot Password, login, and sidebar alignment.
+- `app.py`
+- `iars_auth.py`
+- `iars_theme.py`
+- `iars_parser.py`
+- `iars_archive.py`
+- `iars_document_library.py`
+- `iars_pdf_editor.py`
+- `requirements.txt`
+- `packages.txt`
 
-## Security
+## Required repository folders
 
-The preview-only authentication bypass and private `.streamlit/secrets.toml` are not included. Keep real credentials only in Streamlit Secrets.
+- `.streamlit/`
+- `assets/`
+- `data/`
 
-## Deployment
-
-1. Run the included latest `SUPABASE_PROFILE_SETUP.sql` in Supabase SQL Editor. It is safe to run over the earlier setup.
-2. Extract the ZIP.
-3. Upload the extracted contents directly to the GitHub repository root connected to Streamlit.
-4. Replace the existing files.
-5. Commit the changes to the deployed branch.
-6. Select **Manage app → Reboot app**.
-7. Refresh the browser with **Ctrl + F5**.
+Do not upload real Supabase keys into GitHub. Store live credentials only in Streamlit Cloud Secrets.

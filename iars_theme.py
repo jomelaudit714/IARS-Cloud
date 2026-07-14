@@ -79,7 +79,7 @@ def apply_iars_theme() -> None:
 html,body,.stApp,[class*="css"] {{font-family:Inter,"Segoe UI",Roboto,Arial,sans-serif;}}
 .stApp {{background:linear-gradient(180deg,#FBFCFE 0%,var(--edl-bg) 100%);color:var(--edl-text);}}
 .block-container {{max-width:1580px;padding:.35rem 1.55rem 3rem;}}
-header[data-testid="stHeader"] {{height:0!important;min-height:0!important;background:transparent!important;border-bottom:0!important;box-shadow:none!important;}}
+header[data-testid="stHeader"] {{height:0!important;min-height:0!important;background:transparent!important;border-bottom:0!important;box-shadow:none!important;overflow:visible!important;}}
 #MainMenu,footer {{visibility:hidden;}}
 [data-testid="stToolbar"] {{top:.08rem;}}
 
@@ -89,6 +89,58 @@ section[data-testid="stSidebar"] > div {{padding-top:0;}}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{position:absolute!important;top:2px!important;right:4px!important;z-index:5!important;height:28px!important;min-height:28px!important;padding:0!important;background:transparent!important;}}
 section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {{display:none!important;}}
 section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{margin-left:auto!important;align-self:center!important;}}
+
+/* V4.4.58: restore collapsed sidebar and expand the content area.
+   Existing EDL colors/theme remain unchanged. */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"] {{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  position:fixed!important;
+  left:10px!important;
+  top:10px!important;
+  z-index:100500!important;
+  pointer-events:auto!important;
+}}
+
+[data-testid="collapsedControl"] button,
+[data-testid="stSidebarCollapsedControl"] button {{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:38px!important;
+  min-width:38px!important;
+  height:38px!important;
+  min-height:38px!important;
+  padding:0!important;
+  border-radius:9px!important;
+  border:1px solid var(--edl-gold)!important;
+  background:var(--edl-navy-2)!important;
+  color:#FFF!important;
+  box-shadow:0 6px 15px rgba(6,26,54,.22)!important;
+}}
+
+[data-testid="collapsedControl"] button:hover,
+[data-testid="stSidebarCollapsedControl"] button:hover {{
+  background:var(--edl-navy-3)!important;
+  border-color:var(--edl-gold-light)!important;
+}}
+
+section[data-testid="stSidebar"][aria-expanded="false"] {{
+  width:0!important;
+  min-width:0!important;
+  max-width:0!important;
+  border-right:0!important;
+  overflow:hidden!important;
+}}
+
+.stApp:has(section[data-testid="stSidebar"][aria-expanded="false"]) .block-container {{
+  width:100%!important;
+  max-width:none!important;
+  padding-left:1.55rem!important;
+  padding-right:1.55rem!important;
+}}
 section[data-testid="stSidebar"] * {{color:#F8FAFC;}}
 section[data-testid="stSidebar"] hr {{border-color:rgba(255,255,255,.10);margin:.7rem 0;}}
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],section[data-testid="stSidebar"] .stCaption {{color:rgba(255,255,255,.62)!important;}}
@@ -267,7 +319,8 @@ div[data-testid="stForm"],div[data-testid="stVerticalBlockBorderWrapper"] {{bord
 
 /* v4.2: native Streamlit image and navigation layout for reliable rendering */
 [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{display:none!important;}}
-section[data-testid="stSidebar"] [data-testid="stImage"] {{display:flex;justify-content:center;margin:0 auto .25rem!important;}}
+section[data-testid="stSidebar"] [data-testid="stImage"] {{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;margin:0 auto .25rem!important;}}
+section[data-testid="stSidebar"] [data-testid="stImage"] > div {{width:auto!important;margin-left:auto!important;margin-right:auto!important;}}
 section[data-testid="stSidebar"] [data-testid="stImage"] img {{width:126px!important;height:126px!important;object-fit:contain;background:#FFF;border-radius:16px;padding:5px;box-shadow:0 12px 28px rgba(0,0,0,.24);}}
 section[data-testid="stSidebar"] .stButton {{margin:.08rem 0;}}
 section[data-testid="stSidebar"] .stButton>button {{width:100%;justify-content:flex-start;text-align:left;min-height:43px;padding:.52rem .68rem;font-size:.78rem;}}
@@ -286,8 +339,8 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 
 
 /* v4.4 exact-reference refinements */
-section[data-testid="stSidebar"] {{width:238px!important;min-width:238px!important;}}
-section[data-testid="stSidebar"] > div:first-child {{padding:18px 10px 18px!important;}}
+section[data-testid="stSidebar"]:not([aria-expanded="false"]) {{width:238px!important;min-width:238px!important;}}
+section[data-testid="stSidebar"] > div:first-child {{padding:6px 10px 18px!important;}}
 section[data-testid="stSidebar"] [data-testid="stImage"] img {{background:transparent!important;border:none!important;box-shadow:none!important;}}
 section[data-testid="stSidebar"] .stButton>button {{min-height:40px!important;border:none!important;background:transparent!important;text-align:left!important;font-weight:620!important;padding:.46rem .62rem!important;}}
 section[data-testid="stSidebar"] .stButton>button:hover {{background:rgba(255,255,255,.08)!important;}}
@@ -312,7 +365,7 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{background:l
 .edl-metric-card {{min-height:104px!important;padding:.7rem .74rem!important;}}
 .edl-metric-value {{font-size:1.22rem!important;}}
 @media(max-width:1200px){{.edl-metric-grid{{grid-template-columns:repeat(3,minmax(0,1fr))!important;}}}}
-@media(max-width:760px){{.edl-metric-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}section[data-testid="stSidebar"]{{width:230px!important;min-width:230px!important;}}}}
+@media(max-width:760px){{.edl-metric-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}section[data-testid="stSidebar"]:not([aria-expanded="false"]){{width:230px!important;min-width:230px!important;}}}}
 
 
 @media(max-width:1000px) {{

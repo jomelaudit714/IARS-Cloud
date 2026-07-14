@@ -23,7 +23,6 @@ from iars_theme import (
     render_library_note,
     render_stepper,
     render_activity_list,
-    render_system_overview,
     # render_transition_guard intentionally not imported in V4.4.19 - sidebar navigation should not show a loading veil.
 )
 from iars_auth import (
@@ -1158,12 +1157,9 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.57", page_title=page_key)
+render_app_header(auth_user, version="4.4.58", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
-
-def _navigate_to(label: str) -> None:
-    st.session_state["main_navigation"] = label
 
 
 if page_key == "Dashboard":
@@ -1216,11 +1212,10 @@ if page_key == "Dashboard":
             {"label": "Archived PDFs", "value": f"{len(home_archive_records):,}" if archive_ready else "Offline", "note": "Shared archive", "icon": "🗂️", "accent": "#6938EF"},
             {"label": "Audit Workpapers", "value": f"{len(home_template_records):,}" if document_library_ready else "Setup", "note": "Reusable resources", "icon": "📚", "accent": "#C88A08"},
             {"label": "Policies & Memos", "value": f"{len(home_policy_records):,}" if document_library_ready else "Setup", "note": "Controlled references", "icon": "📜", "accent": "#087E8B"},
-            {"label": "Archive Status", "value": "Connected" if archive_ready else "Not configured", "note": "Automatic compression", "icon": "🛡️", "accent": "#148A4B" if archive_ready else "#D92D20"},
         ]
     )
 
-    activity_col, action_col, overview_col = st.columns([1.55, 0.9, 0.78], gap="large")
+    activity_col, _, _ = st.columns([1.55, 0.9, 0.78], gap="large")
     with activity_col:
         render_section_header("Recent Archive Activity", "Latest reports saved by authorized auditors.")
         activity_rows = []
@@ -1236,31 +1231,9 @@ if page_key == "Dashboard":
         render_activity_list(activity_rows)
         if home_archive_error:
             st.warning(f"Archive activity could not be loaded: {home_archive_error}")
-
-    with action_col:
-        render_section_header("Quick Actions", "Open a core workspace.")
-        st.button("📄 Generate Extraction", key="dash_action_generate", use_container_width=True, type="primary", on_click=_navigate_to, args=("📄 Generate Extraction",))
-        st.button("🗂️ Archive PDFs", key="dash_action_archive", use_container_width=True, on_click=_navigate_to, args=("🗂️ Shared PDF Archive",))
-        st.button("🏷️ PDF Tagging", key="dash_action_tagging", use_container_width=True, on_click=_navigate_to, args=("🏷️ PDF Tagging",))
-        st.button("📚 Audit Workpapers", key="dash_action_workpapers", use_container_width=True, on_click=_navigate_to, args=("📚 Audit Workpapers",))
-        st.button("📜 Policies & Memos", key="dash_action_policies", use_container_width=True, on_click=_navigate_to, args=("📜 Policies & Memoranda",))
-        if is_admin_user(auth_user):
-            st.button("👥 User Management", key="dash_action_users", use_container_width=True, on_click=_navigate_to, args=("👥 User Management",))
-
-    with overview_col:
-        render_section_header("System Overview", "Current environment status.")
-        render_system_overview(
-            [
-                {"label": "Database", "value": "Operational" if archive_ready else "Review", "ok": archive_ready},
-                {"label": "Master Data", "value": "Ready" if MASTER_DATA_PATH.exists() else "Missing", "ok": MASTER_DATA_PATH.exists()},
-                {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "ok": document_library_ready},
-                {"label": "PDF Compression", "value": "Enabled", "ok": True},
-                {"label": "Shared Access", "value": "All auditors", "ok": True},
-                {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "ok": True},
-            ]
-        )
         if home_library_error:
             st.warning(f"Document-library activity could not be loaded: {home_library_error}")
+
 
 
 if page_key == "PDF Tagging":
