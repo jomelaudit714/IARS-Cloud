@@ -23,6 +23,7 @@ from iars_theme import (
     render_library_note,
     render_stepper,
     render_activity_list,
+    force_sidebar_expanded_once,
     # render_transition_guard intentionally not imported in V4.4.19 - sidebar navigation should not show a loading veil.
 )
 from iars_auth import (
@@ -32,6 +33,7 @@ from iars_auth import (
     render_account_admin_page,
     render_profile_menu,
     is_admin_user,
+    FORCE_SIDEBAR_EXPAND_ONCE,
 )
 
 from iars_archive import (
@@ -95,6 +97,10 @@ apply_iars_theme()
 
 auth_config = read_auth_config(st.secrets)
 auth_client, auth_user = render_auth_gate(auth_config)
+
+_sidebar_expand_token = st.session_state.pop(FORCE_SIDEBAR_EXPAND_ONCE, "")
+if _sidebar_expand_token:
+    force_sidebar_expanded_once(str(_sidebar_expand_token))
 
 MASTER_DATA_PATH = Path("data/Master_Data.xlsx")
 
@@ -1157,7 +1163,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.59", page_title=page_key)
+render_app_header(auth_user, version="4.4.60", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 

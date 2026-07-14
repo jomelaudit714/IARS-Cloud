@@ -1,8 +1,10 @@
-# Internal Audit Report System — V4.4.59
+# Internal Audit Report System — V4.4.60
 
 EDL Group of Companies Internal Audit Report System built with Streamlit.
 
 ## Current approved changes
+
+- The sidebar is expanded after every successful manual sign-in, regardless of an older remembered collapsed browser state.
 
 - The original V4.4.57 theme, logo treatment, colors, fonts, cards, borders, shadows, and module appearance are retained.
 - The sidebar content is positioned slightly higher.

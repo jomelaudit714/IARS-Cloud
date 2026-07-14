@@ -1,4 +1,4 @@
-# Deploy IARS V4.4.59
+# Deploy IARS V4.4.60
 
 1. Extract the ZIP.
 2. Upload the contents of the extracted folder to the existing IARS GitHub repository.
@@ -9,6 +9,7 @@
 
 ## Post-deployment checks
 
+- Sign out, sign in again, and confirm the sidebar is visible by default.
 - Open the Dashboard.
 - Confirm there are five summary cards.
 - Confirm Archive Status, Quick Actions, and System Overview are absent.

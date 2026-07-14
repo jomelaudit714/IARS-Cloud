@@ -35,6 +35,7 @@ SIGN_OUT_PARAM = "iars_sign_out"
 PERSISTENT_AUTH_REMEMBER_DAYS = 7
 AUTH_CACHE_SECONDS = 300
 ADMIN_LAST_CODE = "iars_admin_last_code"
+FORCE_SIDEBAR_EXPAND_ONCE = "iars_force_sidebar_expand_once"
 
 PASSWORD_ITERATIONS = 310_000
 MAX_LOGIN_ATTEMPTS = 5
@@ -1380,6 +1381,10 @@ def _set_session_state(user: dict[str, Any], *, show_mask: bool = False) -> None
 
 def _set_session(user: dict[str, Any], config: AuthConfig | None = None, remember: bool = False) -> None:
     _set_session_state(user, show_mask=False)
+    # Each successful manual sign-in gets a unique one-time client reset.
+    # This clears Streamlit's remembered collapsed-sidebar state, so the
+    # workspace always opens with the sidebar visible after sign-in.
+    st.session_state[FORCE_SIDEBAR_EXPAND_ONCE] = secrets.token_hex(8)
     if config is not None:
         _store_persistent_auth_token(config, user, remember)
 
@@ -1395,6 +1400,7 @@ def clear_auth_session() -> None:
         ADMIN_LAST_CODE,
         PROFILE_MENU_OPEN,
         "iars_show_login_exit_mask",
+        FORCE_SIDEBAR_EXPAND_ONCE,
     ):
         st.session_state.pop(key, None)
     _clear_persistent_auth_token()
