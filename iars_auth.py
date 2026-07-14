@@ -70,32 +70,6 @@ def _secret_value(container: Any, key: str, default: str = "") -> str:
     return str(value or "").strip()
 
 
-def _clean_secret_token(value: str) -> str:
-    """Normalize tokens copied into Streamlit Secrets.
-
-    This avoids false `Invalid API key` failures when the key was pasted with
-    surrounding quotes, a Bearer prefix, or line breaks/spaces.
-    """
-    token = str(value or "").strip()
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
-    token = token.strip().strip('"').strip("'").strip()
-    token = re.sub(r"\s+", "", token)
-    return token
-
-
-def _clean_supabase_url(value: str) -> str:
-    url = str(value or "").strip().strip('"').strip("'").strip()
-    return url.rstrip("/")
-
-
-def _masked_token_hint(value: str) -> str:
-    token = _clean_secret_token(value)
-    if not token:
-        return "empty"
-    return f"length={len(token)}, dots={token.count('.')}, starts={token[:6]}..."
-
-
 def read_auth_config(secrets_container: Any) -> AuthConfig:
     """Read manual admin-code authentication settings from Streamlit Secrets."""
     supabase_section = {}
@@ -113,11 +87,11 @@ def read_auth_config(secrets_container: Any) -> AuthConfig:
         timeout = 30
 
     return AuthConfig(
-        url=_clean_supabase_url(
+        url=(
             _secret_value(supabase_section, "url")
             or _secret_value(secrets_container, "SUPABASE_URL")
         ),
-        service_role_key=_clean_secret_token(
+        service_role_key=(
             _secret_value(supabase_section, "service_role_key")
             or _secret_value(secrets_container, "SUPABASE_SERVICE_ROLE_KEY")
         ),
@@ -158,15 +132,7 @@ def create_auth_client(config: AuthConfig):
         raise RuntimeError("IARS account authentication is not configured.")
     from supabase import create_client
 
-    try:
-        return create_client(config.url, config.service_role_key)
-    except Exception as exc:
-        hint = _masked_token_hint(config.service_role_key)
-        raise RuntimeError(
-            "Invalid Supabase configuration. Check Streamlit Secrets: "
-            "the Supabase URL must be the project URL and service_role_key must be the raw JWT key. "
-            f"Detected key hint: {hint}. Original error: {exc}"
-        ) from exc
+    return create_client(config.url, config.service_role_key)
 
 
 def _response_rows(response: Any) -> list[dict[str, Any]]:

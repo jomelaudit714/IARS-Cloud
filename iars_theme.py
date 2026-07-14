@@ -997,7 +997,7 @@ def render_login_hero() -> None:
     panel_path = _asset_path("login_left_panel.png")
     with st.container(key="edl_login_hero_panel"):
         if panel_path.exists():
-            st.image(str(panel_path), use_container_width=True)
+            st.image(str(panel_path), width="stretch")
         else:
             logo_path = _asset_path("edl_logo.png")
             if logo_path.exists():
@@ -1024,7 +1024,7 @@ def render_dashboard_hero() -> None:
             )
         with image_col:
             if visual_path.exists():
-                st.image(str(visual_path), use_container_width=True)
+                st.image(str(visual_path), width="stretch")
 
 
 def render_section_header(title: str, subtitle: str = "", badge: str = "") -> None:
