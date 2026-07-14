@@ -1,5 +1,9 @@
 
 from pathlib import Path
+import os
+
+# Prevent PyArrow threaded mimalloc crashes before pandas/Streamlit data operations.
+os.environ.setdefault("ARROW_DEFAULT_MEMORY_POOL", "system")
 from io import BytesIO
 from datetime import date
 import base64
@@ -1338,7 +1342,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.63", page_title=page_key)
+render_app_header(auth_user, version="4.4.64", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
