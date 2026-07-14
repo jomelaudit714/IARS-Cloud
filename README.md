@@ -1,4 +1,4 @@
-# Internal Audit Report System — V4.4.61
+# Internal Audit Report System — V4.4.62
 
 EDL Group of Companies Internal Audit Report System built with Streamlit.
 
@@ -37,3 +37,8 @@ EDL Group of Companies Internal Audit Report System built with Streamlit.
 - `data/`
 
 Do not upload real Supabase keys into GitHub. Store live credentials only in Streamlit Cloud Secrets.
+
+
+## Generate Extraction protection
+
+The unchanged IARS parser runs in an isolated extraction worker. Native PDF/OCR failures cannot terminate the main Streamlit service.

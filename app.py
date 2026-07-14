@@ -4,6 +4,10 @@ from io import BytesIO
 from datetime import date
 import base64
 import hashlib
+import pickle
+import subprocess
+import sys
+import tempfile
 import re
 import time
 
@@ -171,6 +175,89 @@ def _force_sidebar_expanded_once(token: str) -> None:
     """
     components.html(html, width=1, height=1, scrolling=False)
 
+
+
+EXTRACTION_WORKER_PATH = Path(__file__).with_name("iars_extract_worker.py")
+
+
+def _build_records_isolated(
+    pdf_bytes: bytes,
+    filename: str,
+    master_df,
+    auditors_df,
+    master_sheets,
+    *,
+    timeout_seconds: int = 240,
+    worker_path: Path | None = None,
+):
+    """Run the unchanged IARS parser in a separate Python process.
+
+    PDF and OCR libraries contain native code. A malformed PDF or a native
+    library crash must not terminate the Streamlit application. The worker
+    process returns the same ``(result_df, header, items)`` tuple produced by
+    ``iars_parser.build_records``. If the worker stops unexpectedly, the main
+    application stays online and reports a processing error for that PDF.
+    """
+    worker = Path(worker_path or EXTRACTION_WORKER_PATH)
+    if not worker.exists():
+        raise RuntimeError(f"Extraction worker is missing: {worker.name}")
+
+    payload = {
+        "pdf_bytes": bytes(pdf_bytes or b""),
+        "filename": str(filename or "uploaded_report.pdf"),
+        "master_df": master_df,
+        "auditors_df": auditors_df,
+        "master_sheets": master_sheets,
+    }
+
+    with tempfile.TemporaryDirectory(prefix="iars_extract_") as temp_dir:
+        temp_root = Path(temp_dir)
+        input_path = temp_root / "input.pkl"
+        output_path = temp_root / "output.pkl"
+        with input_path.open("wb") as handle:
+            pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        try:
+            completed = subprocess.run(
+                [sys.executable, str(worker), str(input_path), str(output_path)],
+                cwd=str(Path(__file__).resolve().parent),
+                capture_output=True,
+                text=True,
+                timeout=max(30, int(timeout_seconds)),
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"PDF extraction exceeded {timeout_seconds} seconds for {filename}."
+            ) from exc
+
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()[-1600:]
+            if completed.returncode < 0:
+                signal_number = abs(completed.returncode)
+                message = (
+                    f"The PDF extraction engine stopped unexpectedly (signal {signal_number}) "
+                    f"while processing {filename}. The IARS application remained online."
+                )
+            else:
+                message = f"PDF extraction failed for {filename}."
+            if detail:
+                message += f" Details: {detail}"
+            raise RuntimeError(message)
+
+        if not output_path.exists():
+            raise RuntimeError(f"The extraction worker returned no result for {filename}.")
+
+        with output_path.open("rb") as handle:
+            response = pickle.load(handle)
+
+        if not isinstance(response, dict) or not response.get("ok"):
+            error = "Unknown extraction worker error."
+            if isinstance(response, dict):
+                error = str(response.get("error") or error)
+            raise RuntimeError(f"PDF extraction failed for {filename}: {error}")
+
+        return response["result_df"], response["header"], response["items"]
 
 st.set_page_config(
     page_title="Internal Audit Report System | EDL GROUP OF COMPANIES",
@@ -1251,7 +1338,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.61", page_title=page_key)
+render_app_header(auth_user, version="4.4.62", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -1930,12 +2017,12 @@ if page_key == "Generate Extraction":
                             )
                         )
                     else:
-                        pdf_file.seek(0)
-                        result_df, header, items = build_records(
-                            pdf_file,
+                        result_df, header, items = _build_records_isolated(
+                            pdf_data,
+                            pdf_file.name,
                             master_df,
-                            auditors_df=auditors_df,
-                            master_sheets=master_sheets,
+                            auditors_df,
+                            master_sheets,
                         )
                         all_results.append(result_df)
 

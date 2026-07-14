@@ -1,4 +1,4 @@
-# Deploy IARS V4.4.61
+# Deploy IARS V4.4.62
 
 1. Extract the ZIP.
 2. Upload the contents of the extracted folder to the existing IARS GitHub repository.
@@ -25,3 +25,8 @@ The PDF Tagging implementation remains unchanged from the approved V4.4.57 build
 ## Important upload instruction
 
 Delete or overwrite the existing repository files using the complete contents of this extracted folder. Do not upload only `app.py`; upload all files together so GitHub does not retain mixed versions.
+
+
+## Generate Extraction check
+
+After deployment, upload one searchable PDF and click Generate Extraction. The app must remain online and show either generated records or a PDF-specific processing message.
