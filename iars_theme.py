@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import base64
 import html
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 EDL_NAVY = "#061A36"
@@ -1019,80 +1017,6 @@ a.iars-verify-action:focus-visible {{
 
 
 
-def force_sidebar_expanded_once(token: str) -> None:
-    """Clear Streamlit's saved collapsed state and expand the sidebar once.
-
-    Streamlit 1.47 stores the user's collapsed state in browser localStorage
-    using keys that start with ``stSidebarCollapsed-``. This helper runs only
-    after a successful manual sign-in. It clears those remembered values and
-    clicks Streamlit's native ``stExpandSidebarButton`` if the sidebar is still
-    collapsed. Later manual hide/show actions remain fully under the user's
-    control because the helper is not rendered again.
-    """
-    safe_token = json.dumps(str(token or ""))
-    html = f"""
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          html, body {{ margin:0; padding:0; width:1px; height:1px; overflow:hidden; background:transparent; }}
-        </style>
-      </head>
-      <body>
-        <script>
-          (() => {{
-            const resetToken = {safe_token};
-            const hostWindow = window.parent;
-            const hostDocument = hostWindow.document;
-            let attempts = 0;
-            let stopped = false;
-
-            function clearSavedSidebarState() {{
-              try {{
-                const keys = [];
-                for (let index = 0; index < hostWindow.localStorage.length; index += 1) {{
-                  const key = hostWindow.localStorage.key(index);
-                  if (key && key.startsWith("stSidebarCollapsed-")) keys.push(key);
-                }}
-                for (const key of keys) hostWindow.localStorage.setItem(key, "false");
-                hostWindow.localStorage.setItem("iarsSidebarResetToken", resetToken);
-              }} catch (_) {{
-                // Storage can be blocked; the native button click remains the fallback.
-              }}
-            }}
-
-            function expandSidebar() {{
-              if (stopped) return;
-              clearSavedSidebarState();
-
-              const sidebar = hostDocument.querySelector('section[data-testid="stSidebar"]');
-              if (sidebar && sidebar.getAttribute("aria-expanded") === "true") {{
-                clearSavedSidebarState();
-                stopped = true;
-                return;
-              }}
-
-              const expandButton = hostDocument.querySelector('[data-testid="stExpandSidebarButton"]');
-              if (expandButton) {{
-                expandButton.click();
-                hostWindow.setTimeout(clearSavedSidebarState, 120);
-                stopped = true;
-                return;
-              }}
-
-              attempts += 1;
-              if (attempts < 100) hostWindow.setTimeout(expandSidebar, 50);
-            }}
-
-            clearSavedSidebarState();
-            expandSidebar();
-          }})();
-        </script>
-      </body>
-    </html>
-    """
-    components.html(html, width=1, height=1, scrolling=False)
 
 def render_brand_stripe() -> None:
     _render_html('<div class="edl-brand-stripe"></div>')

@@ -1,4 +1,4 @@
-# Deploy IARS V4.4.60
+# Deploy IARS V4.4.61
 
 1. Extract the ZIP.
 2. Upload the contents of the extracted folder to the existing IARS GitHub repository.
@@ -20,3 +20,8 @@
 - Confirm the EDL logo remains centered and the sidebar items are positioned slightly higher.
 
 The PDF Tagging implementation remains unchanged from the approved V4.4.57 build.
+
+
+## Important upload instruction
+
+Delete or overwrite the existing repository files using the complete contents of this extracted folder. Do not upload only `app.py`; upload all files together so GitHub does not retain mixed versions.

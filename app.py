@@ -23,7 +23,6 @@ from iars_theme import (
     render_library_note,
     render_stepper,
     render_activity_list,
-    force_sidebar_expanded_once,
     # render_transition_guard intentionally not imported in V4.4.19 - sidebar navigation should not show a loading veil.
 )
 from iars_auth import (
@@ -33,7 +32,6 @@ from iars_auth import (
     render_account_admin_page,
     render_profile_menu,
     is_admin_user,
-    FORCE_SIDEBAR_EXPAND_ONCE,
 )
 
 from iars_archive import (
@@ -84,6 +82,96 @@ from iars_parser import (
     excel_bytes,
 )
 
+
+SIDEBAR_EXPAND_ONCE_KEY = "iars_force_sidebar_expand_once"
+
+
+def _force_sidebar_expanded_once(token: str) -> None:
+    """Open the Streamlit 1.47 sidebar once after a successful sign-in.
+
+    This helper intentionally lives in app.py so deployment cannot fail from
+    a mismatched iars_theme.py file. It clears Streamlit's remembered collapsed
+    state and clicks the native restore control only when the sidebar is closed.
+    """
+    import json
+    import streamlit.components.v1 as components
+
+    safe_token = json.dumps(str(token or ""))
+    html = f"""
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          html, body {{
+            margin: 0;
+            padding: 0;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            background: transparent;
+          }}
+        </style>
+      </head>
+      <body>
+        <script>
+          (() => {{
+            const resetToken = {safe_token};
+            const hostWindow = window.parent;
+            const hostDocument = hostWindow.document;
+            let attempts = 0;
+            let stopped = false;
+
+            function clearSavedSidebarState() {{
+              try {{
+                const keys = [];
+                for (let index = 0; index < hostWindow.localStorage.length; index += 1) {{
+                  const key = hostWindow.localStorage.key(index);
+                  if (key && key.startsWith("stSidebarCollapsed-")) keys.push(key);
+                }}
+                for (const key of keys) hostWindow.localStorage.setItem(key, "false");
+                hostWindow.localStorage.setItem("iarsSidebarResetToken", resetToken);
+              }} catch (_) {{
+                // Browser storage may be blocked. The native button remains the fallback.
+              }}
+            }}
+
+            function expandSidebar() {{
+              if (stopped) return;
+              clearSavedSidebarState();
+
+              const sidebar = hostDocument.querySelector(
+                'section[data-testid="stSidebar"]'
+              );
+              if (sidebar && sidebar.getAttribute("aria-expanded") === "true") {{
+                stopped = true;
+                return;
+              }}
+
+              const expandButton = hostDocument.querySelector(
+                '[data-testid="stExpandSidebarButton"]'
+              );
+              if (expandButton) {{
+                expandButton.click();
+                hostWindow.setTimeout(clearSavedSidebarState, 120);
+                stopped = true;
+                return;
+              }}
+
+              attempts += 1;
+              if (attempts < 100) hostWindow.setTimeout(expandSidebar, 50);
+            }}
+
+            clearSavedSidebarState();
+            expandSidebar();
+          }})();
+        </script>
+      </body>
+    </html>
+    """
+    components.html(html, width=1, height=1, scrolling=False)
+
+
 st.set_page_config(
     page_title="Internal Audit Report System | EDL GROUP OF COMPANIES",
     page_icon="🛡️",
@@ -98,9 +186,9 @@ apply_iars_theme()
 auth_config = read_auth_config(st.secrets)
 auth_client, auth_user = render_auth_gate(auth_config)
 
-_sidebar_expand_token = st.session_state.pop(FORCE_SIDEBAR_EXPAND_ONCE, "")
+_sidebar_expand_token = st.session_state.pop(SIDEBAR_EXPAND_ONCE_KEY, "")
 if _sidebar_expand_token:
-    force_sidebar_expanded_once(str(_sidebar_expand_token))
+    _force_sidebar_expanded_once(str(_sidebar_expand_token))
 
 MASTER_DATA_PATH = Path("data/Master_Data.xlsx")
 
@@ -1163,7 +1251,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.60", page_title=page_key)
+render_app_header(auth_user, version="4.4.61", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
