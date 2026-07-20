@@ -1,38 +1,22 @@
-# IARS V4.4.67 PDF Tagging Compatibility Patch
+# IARS V4.4.68 Patch Instructions
 
-## Root cause
+## Purpose
 
-The PDF Tagging editor uses `st.components.v2.component`. Custom Components V2
-is not available in Streamlit 1.47.1, so opening PDF Tagging raises:
+This patch corrects the Accounts Confirmation exclusion rule.
 
-`AttributeError: module 'streamlit.components' has no attribute 'v2'`
+The report title must **not** suppress the entire report. The exclusion applies only when:
 
-## Files to replace
+- the audit type is **Operations Audit**, and
+- the individual **issue title/table title** is exactly **Accounts Confirmation**.
 
-After extracting this patch, replace these three files in the current IARS
-GitHub repository:
+## Replace these files
+
+Replace the following files in the current repository using the files in this patch:
 
 1. `requirements.txt`
 2. `iars_pdf_editor.py`
 3. `iars_parser.py`
 
-Do not replace `app.py`, `iars_auth.py`, `iars_theme.py`, `iars_archive.py`, or
-any other file.
+The first two files retain the PDF Tagging Components V2 fix from V4.4.67. The updated `iars_parser.py` removes only the report-title-level suppression.
 
-## What this preserves
-
-- Streamlit is upgraded to `1.58.0`, which supports Components V2.
-- `pyarrow==24.0.0` remains pinned to avoid the PyArrow 25 crash.
-- Existing PDF/OCR dependency pins remain unchanged.
-- The original PDF Tagging v2.9 editor is retained.
-- The V4.4.66 Operations Audit `Accounts Confirmation` exclusion rule is retained.
-- Current sidebar, duplicate notification, extraction worker, login, avatar, and
-  archive fixes remain untouched.
-
-## Deployment
-
-1. Replace the three files above.
-2. Commit and push to GitHub.
-3. In Streamlit Cloud, reboot the app.
-4. Wait for dependencies to reinstall.
-5. Refresh the browser using `Ctrl + F5`.
+After replacing the files, reboot the Streamlit app and perform a hard refresh (`Ctrl + F5`).

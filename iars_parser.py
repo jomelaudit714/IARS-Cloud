@@ -3077,11 +3077,10 @@ def build_records(
     emp_id, emp_name = match_employee(master_df, header["auditee_name"])
     auditor_default = prepared_by_auditor(text, auditors_df)
     audit_type = classify_audit_type(text)
-    report_is_accounts_confirmation = (
-        audit_type == "Operations Audit"
-        and _is_accounts_confirmation_title(header.get("audit_title", ""))
-    )
-    items = [] if report_is_accounts_confirmation else extract_finding_rows_from_pdf(
+    # Do not suppress the whole report based on its report title.
+    # Only an individual Operations Audit issue/table whose exact issue title is
+    # "Accounts Confirmation" is excluded by the table-level and row-level filters.
+    items = extract_finding_rows_from_pdf(
         pdf_file,
         text,
         master_df,
