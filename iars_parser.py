@@ -877,6 +877,49 @@ def find_issue_title_entries(lines):
     return entries
 
 
+def _normalize_exact_report_title(value):
+    """Normalize a report/table/issue title for exact rule matching."""
+    value = clean_text(value).upper().strip().strip(":")
+    value = re.sub(r"^(?:RE|TITLE|ISSUE(?:\s+TITLE)?)\s*[:\-]\s*", "", value)
+    value = re.sub(r"[^A-Z0-9]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _is_accounts_confirmation_title(value):
+    """Return True only for the exact Accounts Confirmation title."""
+    return _normalize_exact_report_title(value) == "ACCOUNTS CONFIRMATION"
+
+
+def _table_has_accounts_confirmation_title(table):
+    """Detect an Accounts Confirmation table from its first title-like lines.
+
+    The check is intentionally exact. Narrative phrases such as
+    ``during accounts confirmation`` do not match this rule.
+    """
+    ignored = {
+        "ISSUE", "NO", "NO.", "AUDIT FINDINGS", "RECOMMENDATION",
+    }
+    for row in table or []:
+        for cell in row or []:
+            lines = [
+                clean_text(line)
+                for line in str(cell or "").replace("\r", "\n").split("\n")
+                if clean_text(line)
+            ]
+            checked = 0
+            for line in lines:
+                normalized = clean_text(line).upper().strip().rstrip(":")
+                if normalized in ignored or re.fullmatch(r"\d{1,2}\.?", normalized):
+                    continue
+                checked += 1
+                if _is_accounts_confirmation_title(line):
+                    return True
+                # Only the first two substantive lines of a cell can be its title.
+                if checked >= 2:
+                    break
+    return False
+
+
 def _normalize_activity_heading(value):
     """Normalize an audit activity/category heading for exact comparison."""
     value = clean_text(value).upper().replace("&", " AND ")
@@ -2859,6 +2902,8 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
       Auditee:, Auditor:, Task ID:, Frequency Rate:, Reaction:
     """
     rows = []
+    report_text = full_text if full_text is not None else extract_all_text(pdf_file)
+    is_operations_audit = classify_audit_type(report_text) == "Operations Audit"
     pdf_file.seek(0)
 
     # Primary table extraction for searchable PDFs.
@@ -2869,6 +2914,11 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
                 is_exhibit_page = page_text.upper().startswith("EXHIBIT")
 
                 for table in page.extract_tables() or []:
+                    # Accounts Confirmation is a validation procedure/table, not
+                    # an audit issue, when the report is classified as Operations Audit.
+                    if is_operations_audit and _table_has_accounts_confirmation_title(table):
+                        continue
+
                     for row_index, row in enumerate(table):
                         if not row:
                             continue
@@ -2953,11 +3003,16 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
 
     # OCR/text fallback if table extraction failed.
     if not rows:
-        text = full_text if full_text is not None else extract_all_text(pdf_file)
-        rows = extract_rows_from_text_fallback(text, master_df, auditors_df)
+        rows = extract_rows_from_text_fallback(report_text, master_df, auditors_df)
 
-    text = full_text if full_text is not None else extract_all_text(pdf_file)
-    rows = apply_carry_forward_context(rows, text, master_df, auditors_df)
+    rows = apply_carry_forward_context(rows, report_text, master_df, auditors_df)
+
+    # Final safety filter for OCR/plain-text extraction paths.
+    if is_operations_audit:
+        rows = [
+            row for row in rows
+            if not _is_accounts_confirmation_title(row.get("issue", ""))
+        ]
 
     return rows
 
@@ -3022,7 +3077,16 @@ def build_records(
     emp_id, emp_name = match_employee(master_df, header["auditee_name"])
     auditor_default = prepared_by_auditor(text, auditors_df)
     audit_type = classify_audit_type(text)
-    items = extract_finding_rows_from_pdf(pdf_file, text, master_df, auditors_df)
+    report_is_accounts_confirmation = (
+        audit_type == "Operations Audit"
+        and _is_accounts_confirmation_title(header.get("audit_title", ""))
+    )
+    items = [] if report_is_accounts_confirmation else extract_finding_rows_from_pdf(
+        pdf_file,
+        text,
+        master_df,
+        auditors_df,
+    )
 
     classification_df = (master_sheets or {}).get("Classification_Matrix", pd.DataFrame())
     response_df = (master_sheets or {}).get("Response_Master", pd.DataFrame())
@@ -3060,6 +3124,11 @@ def build_records(
         issue_title = infer_issue_title_from_narrative(item["issue"], item["narrative"])
         issue_title = enhance_issue_title_details(issue_title, item["narrative"])
         item["issue"] = issue_title
+
+        # Defensive row-level rule in case a manually tagged or OCR-derived row
+        # bypasses the table-level filter.
+        if audit_type == "Operations Audit" and _is_accounts_confirmation_title(issue_title):
+            continue
 
         recommendation1 = concise_text(item.get("recommendation1", "None"), 24, "recommendation1")
         recommendation2 = concise_text(item.get("recommendation2", "None"), 24, "recommendation2")
