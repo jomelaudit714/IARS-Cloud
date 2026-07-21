@@ -1,41 +1,26 @@
-# IARS V4.4.69 — Policies & Memoranda Company Folders
+# IARS V4.4.70 — Operations Audit Rules Patch
 
-## Required deployment order
+## Replace only these files
 
-1. In the existing Supabase project, open **SQL Editor**.
-2. Run `SUPABASE_DOCUMENT_FOLDER_MIGRATION.sql` once.
-3. Replace these repository files:
-   - `app.py`
-   - `iars_document_library.py`
-   - `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql`
-4. Commit the changes and reboot the Streamlit app.
-5. Refresh the browser using **Ctrl + F5**.
+1. `app.py`
+2. `iars_parser.py`
 
-## New workflow
+Upload both files to the root of the current GitHub repository and overwrite the existing copies. Do not delete or replace the other current IARS files.
 
-1. Open **Policies & Memoranda**.
-2. Click **Create Folder**.
-3. Enter the official company/group name, such as:
-   - Estancia De Lorenzo
-   - EDL Group of Companies
-4. Open **Upload Policy or Memorandum**.
-5. Select the company/group folder before uploading.
-6. Click a company folder to open its popup.
-7. Select a document, click **Open / Read Document**, then read or download it.
+After committing the changes:
 
-## Preview support
+1. Reboot the Streamlit app.
+2. Wait for deployment to finish.
+3. Use `Ctrl + F5` in the browser.
 
-- PDF: page-by-page readable preview
-- DOCX: readable text preview
-- XLSX: worksheet table preview
-- DOC/XLS: download available; browser preview is not supported
+## Operations Audit-only rules
 
-## Existing records
+1. Cash Count and Stock Count or location/place reports are classified as Operations Audit when the personnel position is one of the approved operations roles.
+2. `No Cash Collections during Audit` is ignored as an issue/table.
+3. Stock overage/shortage uses the P3,000 threshold.
+4. Cash and stock no-variance titles are combined into one `No Findings` row.
+5. `Date_End` retains the date range through the comma and excludes the year. Example: `January 1 to June 30,`.
+6. `No Collections Shortage or Overage` is tagged `No Findings`.
+7. `By01` comes from `Prepared by`, `Prepared/Audited by`, or `Audited by`.
 
-Policies and memoranda uploaded before this migration remain available under
-**Unfiled / General**. New uploads must be assigned to a company/group folder.
-
-## Files intentionally not included
-
-The patch does not replace the parser, PDF Tagging editor, authentication,
-archive, extraction worker, theme, or Master Data files.
+Financial Audit behavior is unchanged.

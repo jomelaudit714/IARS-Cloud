@@ -250,6 +250,16 @@ NO_FINDING_PATTERNS = [
 ]
 
 
+OPERATIONS_PERSONNEL_POSITIONS = [
+    "Area Sales Representative",
+    "Territory Sales Specialist",
+    "Area Technical Coordinator",
+    "Technical Sales Specialist",
+    "Gamefowl Specialist",
+]
+
+
+
 def clean_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
@@ -529,6 +539,37 @@ def extract_header(text):
     }
 
 
+def operations_scope_date(period):
+    """Return the Operations Audit date range through the comma, excluding year.
+
+    Example: ``January 1 to June 30, 2026`` becomes
+    ``January 1 to June 30,``.
+    """
+    source = clean_text(period)
+    if not source or source.casefold() == "none":
+        return "None"
+
+    month = (
+        r"(?:January|February|March|April|May|June|July|August|September|"
+        r"October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+    )
+    range_match = re.search(
+        rf"\b({month}\s+\d{{1,2}})(?:,\s*\d{{4}})?\s+"
+        rf"(?:to|through|until|-)\s+({month}\s+\d{{1,2}})\s*,",
+        source,
+        re.I,
+    )
+    if range_match:
+        return f"{clean_text(range_match.group(1))} to {clean_text(range_match.group(2))},"
+
+    # Preserve a single month/day through its comma when no range is present.
+    single_match = re.search(rf"\b({month}\s+\d{{1,2}})\s*,", source, re.I)
+    if single_match:
+        return f"{clean_text(single_match.group(1))},"
+
+    return source
+
+
 def normalize_for_match(value):
     """Normalize names for robust matching."""
     return re.sub(r"[^A-Z0-9 ]", " ", clean_text(value).upper()).strip()
@@ -574,7 +615,8 @@ def prepared_by_auditor(text, auditors_df=None):
     """Detect Prepared/Audited By name from PDF and return canonical Auditor name from Master Data."""
     # Do not stop at Noted by because PDF table extraction can place "Noted by:" beside Prepared by.
     m = re.search(
-        r"Prepared(?:/Audited)? by\s*:\s*(.+?)(?:Reviewed by|cc:|Audit/file|$)",
+        r"(?:Prepared(?:/Audited)?|Audited)\s+by\s*:\s*(.+?)"
+        r"(?:Reviewed by|Noted by|Approved by|cc:|Audit/file|$)",
         text,
         re.I | re.S,
     )
@@ -890,12 +932,47 @@ def _is_accounts_confirmation_title(value):
     return _normalize_exact_report_title(value) == "ACCOUNTS CONFIRMATION"
 
 
-def _table_has_accounts_confirmation_title(table):
-    """Detect an Accounts Confirmation table from its first title-like lines.
+def _is_no_cash_collections_during_audit_title(value):
+    """Return True only for the ignored Operations Audit issue title."""
+    return _normalize_exact_report_title(value) == "NO CASH COLLECTIONS DURING AUDIT"
 
-    The check is intentionally exact. Narrative phrases such as
-    ``during accounts confirmation`` do not match this rule.
-    """
+
+def _is_no_collections_variance_title(value):
+    normalized = _normalize_exact_report_title(value)
+    return normalized in {
+        "NO COLLECTIONS SHORTAGE OR OVERAGE",
+        "NO COLLECTIONS OVERAGE OR SHORTAGE",
+        "NO COLLECTIONS SHORTAGE OVERAGE",
+        "NO COLLECTIONS OVERAGE SHORTAGE",
+    }
+
+
+def _is_no_cash_collection_variance_title(value):
+    normalized = _normalize_exact_report_title(value)
+    return normalized in {
+        "NO CASH COLLECTION SHORTAGE OR OVERAGE",
+        "NO CASH COLLECTION OVERAGE OR SHORTAGE",
+        "NO CASH COLLECTION SHORTAGE OVERAGE",
+        "NO CASH COLLECTION OVERAGE SHORTAGE",
+        "NO CASH COLLECTIONS SHORTAGE OR OVERAGE",
+        "NO CASH COLLECTIONS OVERAGE OR SHORTAGE",
+        "NO CASH COLLECTIONS SHORTAGE OVERAGE",
+        "NO CASH COLLECTIONS OVERAGE SHORTAGE",
+    }
+
+
+def _is_no_stock_variance_title(value):
+    normalized = _normalize_exact_report_title(value)
+    return normalized in {
+        "NO STOCK SHORTAGE OR OVERAGE",
+        "NO STOCK OVERAGE OR SHORTAGE",
+        "NO STOCK SHORTAGE OVERAGE",
+        "NO STOCK OVERAGE SHORTAGE",
+    }
+
+
+def _table_has_exact_title(table, predicate):
+    """Return True when a table's first substantive title lines match predicate."""
     ignored = {
         "ISSUE", "NO", "NO.", "AUDIT FINDINGS", "RECOMMENDATION",
     }
@@ -912,12 +989,21 @@ def _table_has_accounts_confirmation_title(table):
                 if normalized in ignored or re.fullmatch(r"\d{1,2}\.?", normalized):
                     continue
                 checked += 1
-                if _is_accounts_confirmation_title(line):
+                if predicate(line):
                     return True
-                # Only the first two substantive lines of a cell can be its title.
                 if checked >= 2:
                     break
     return False
+
+
+def _table_has_accounts_confirmation_title(table):
+    """Detect an exact Accounts Confirmation table title."""
+    return _table_has_exact_title(table, _is_accounts_confirmation_title)
+
+
+def _table_has_no_cash_collections_during_audit_title(table):
+    """Detect the exact ignored Operations Audit table title."""
+    return _table_has_exact_title(table, _is_no_cash_collections_during_audit_title)
 
 
 def _normalize_activity_heading(value):
@@ -2916,7 +3002,10 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
                 for table in page.extract_tables() or []:
                     # Accounts Confirmation is a validation procedure/table, not
                     # an audit issue, when the report is classified as Operations Audit.
-                    if is_operations_audit and _table_has_accounts_confirmation_title(table):
+                    if is_operations_audit and (
+                        _table_has_accounts_confirmation_title(table)
+                        or _table_has_no_cash_collections_during_audit_title(table)
+                    ):
                         continue
 
                     for row_index, row in enumerate(table):
@@ -3012,6 +3101,7 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
         rows = [
             row for row in rows
             if not _is_accounts_confirmation_title(row.get("issue", ""))
+            and not _is_no_cash_collections_during_audit_title(row.get("issue", ""))
         ]
 
     return rows
@@ -3023,9 +3113,59 @@ def filter_no_findings_when_other_issues(items):
 
 
 
+def _operations_personnel_position(text):
+    """Return an approved Operations Audit personnel position when present."""
+    labeled = find_after_label(text, ["POSITION", "DESIGNATION", "JOB TITLE"])
+    searchable = normalize_for_match(f"{labeled} {text}")
+    for position in OPERATIONS_PERSONNEL_POSITIONS:
+        if normalize_for_match(position) in searchable:
+            return position
+    return ""
+
+
+def _is_cash_and_stock_count_subject(value):
+    normalized = _normalize_exact_report_title(value)
+    return "CASH COUNT" in normalized and "STOCK COUNT" in normalized
+
+
+def _looks_like_operations_location_subject(value):
+    """Recognize short location/place subjects such as DAVAO ORIENTAL 1."""
+    normalized = _normalize_exact_report_title(value)
+    if not normalized or normalized == "NONE":
+        return False
+    if len(normalized.split()) > 7:
+        return False
+    blocked = {
+        "AUDIT REPORT", "REVOLVING FUND", "PETTY CASH", "CASH ADVANCE",
+        "PAYROLL", "PROCESS AUDIT", "DISBURSEMENT", "FINANCIAL",
+        "INVENTORY COUNT", "ASSET COUNT",
+    }
+    if any(term in normalized for term in blocked):
+        return False
+    # Location titles are commonly a place/territory name, optionally ending in a number.
+    return bool(re.fullmatch(r"[A-Z0-9]+(?: [A-Z0-9]+){0,6}", normalized))
+
+
 def classify_audit_type(text):
-    sales_terms = ["area sales representative", "district sales supervisor", "regional sales supervisor", "technical sales supervisor", "sales personnel"]
-    return "Operations Audit" if any(t in text.lower() for t in sales_terms) else "Financial"
+    source = text or ""
+    audit_title = find_after_label(source, "RE")
+    personnel_position = _operations_personnel_position(source)
+
+    if personnel_position and (
+        _is_cash_and_stock_count_subject(audit_title)
+        or _looks_like_operations_location_subject(audit_title)
+    ):
+        return "Operations Audit"
+
+    # Preserve established Operations Audit recognition for legacy reports.
+    sales_terms = [
+        "area sales representative", "territory sales specialist",
+        "area technical coordinator", "technical sales specialist",
+        "gamefowl specialist", "district sales supervisor",
+        "regional sales supervisor", "technical sales supervisor",
+        "sales personnel",
+    ]
+    return "Operations Audit" if any(term in source.lower() for term in sales_terms) else "Financial"
 
 
 
@@ -3065,6 +3205,90 @@ def infer_row_auditee_from_context(master_df, header_auditee, issue_title, narra
 
     return match_employee(master_df, header_auditee)
 
+def _combine_operations_no_variance_items(items):
+    """Merge cash and stock no-variance issue titles into one No Findings row."""
+    cash_indexes = [
+        index for index, item in enumerate(items or [])
+        if _is_no_cash_collection_variance_title(item.get("issue", ""))
+    ]
+    stock_indexes = [
+        index for index, item in enumerate(items or [])
+        if _is_no_stock_variance_title(item.get("issue", ""))
+    ]
+    if not cash_indexes or not stock_indexes:
+        return list(items or [])
+
+    first_index = min(cash_indexes[0], stock_indexes[0])
+    cash_item = dict((items or [])[cash_indexes[0]])
+    stock_item = dict((items or [])[stock_indexes[0]])
+    combined = dict(cash_item)
+    combined["issue"] = (
+        "No Cash Collection Overage/Shortage and "
+        "No Stock Overage/Shortage"
+    )
+    combined["narrative"] = clean_text(
+        f"{cash_item.get('narrative', '')} {stock_item.get('narrative', '')}"
+    )
+    combined["recommendation1"] = clean_text(
+        cash_item.get("recommendation1", "")
+        or stock_item.get("recommendation1", "")
+        or "None"
+    )
+    combined["recommendation2"] = clean_text(
+        cash_item.get("recommendation2", "")
+        or stock_item.get("recommendation2", "")
+        or "None"
+    )
+    combined["explanation"] = clean_text(
+        cash_item.get("explanation", "")
+        or stock_item.get("explanation", "")
+        or "None"
+    )
+    combined["correction"] = clean_text(
+        cash_item.get("correction", "")
+        or stock_item.get("correction", "")
+        or "None"
+    )
+
+    remove_indexes = set(cash_indexes + stock_indexes)
+    result = []
+    for index, item in enumerate(items or []):
+        if index == first_index:
+            result.append(combined)
+        if index not in remove_indexes:
+            result.append(item)
+    return result
+
+
+def _operations_finding_override(issue_title, narrative=""):
+    """Return an Operations-only controlled category, or an empty string."""
+    if (
+        _is_no_collections_variance_title(issue_title)
+        or _is_no_cash_collection_variance_title(issue_title)
+        or _is_no_stock_variance_title(issue_title)
+    ):
+        return "No Findings 10"
+
+    normalized = _normalize_exact_report_title(issue_title)
+    if normalized.startswith("NO CASH COLLECTION OVERAGE SHORTAGE AND NO STOCK OVERAGE SHORTAGE"):
+        return "No Findings 10"
+
+    # Evaluate actual stock variance before the generic cash/fund variance logic.
+    if "STOCK" in normalized and "NO STOCK" not in normalized:
+        amounts = extract_money_amounts(issue_title) or extract_money_amounts(narrative)
+        amount = max(amounts) if amounts else None
+        if "SHORTAGE" in normalized:
+            if amount is not None and amount < 3000:
+                return "Stock Shortage (below ₱3,000.00) -4"
+            return "Stock Shortage (₱3,000.00 and above) -8"
+        if "OVERAGE" in normalized:
+            if amount is not None and amount < 3000:
+                return "Stock Overage (below ₱3,000.00) -2"
+            return "Stock Overage (₱3,000.00 and above) -4"
+
+    return ""
+
+
 def build_records(
     pdf_file,
     master_df=None,
@@ -3077,6 +3301,8 @@ def build_records(
     emp_id, emp_name = match_employee(master_df, header["auditee_name"])
     auditor_default = prepared_by_auditor(text, auditors_df)
     audit_type = classify_audit_type(text)
+    if audit_type == "Operations Audit":
+        header["scope_date"] = operations_scope_date(header.get("period", ""))
     # Do not suppress the whole report based on its report title.
     # Only an individual Operations Audit issue/table whose exact issue title is
     # "Accounts Confirmation" is excluded by the table-level and row-level filters.
@@ -3086,6 +3312,8 @@ def build_records(
         master_df,
         auditors_df,
     )
+    if audit_type == "Operations Audit":
+        items = _combine_operations_no_variance_items(items)
 
     classification_df = (master_sheets or {}).get("Classification_Matrix", pd.DataFrame())
     response_df = (master_sheets or {}).get("Response_Master", pd.DataFrame())
@@ -3126,7 +3354,10 @@ def build_records(
 
         # Defensive row-level rule in case a manually tagged or OCR-derived row
         # bypasses the table-level filter.
-        if audit_type == "Operations Audit" and _is_accounts_confirmation_title(issue_title):
+        if audit_type == "Operations Audit" and (
+            _is_accounts_confirmation_title(issue_title)
+            or _is_no_cash_collections_during_audit_title(issue_title)
+        ):
             continue
 
         recommendation1 = concise_text(item.get("recommendation1", "None"), 24, "recommendation1")
@@ -3148,6 +3379,10 @@ def build_records(
             reaction_raw = master_display_text(manual.get("Reaction", "")) or reaction_raw
             frequency_raw = master_display_text(manual.get("Frequency", "")) or frequency_raw
 
+        # For Operations Audit, By01 must come from Prepared by/Audited by.
+        if audit_type == "Operations Audit" and auditor_default != "None":
+            auditor_raw = auditor_default
+
         auditor = exact_auditor(auditor_raw)
         reaction = canonical_response_label(reaction_raw, response_df, response_default)
         frequency = normalize_frequency_label(frequency_raw, frequency_df) or frequency_first
@@ -3163,13 +3398,20 @@ def build_records(
                 item.get("narrative", ""),
             )
 
-        classified_value = classify_finding(
-            issue_title,
-            recommendation1,
-            item["narrative"],
-            header.get("company", ""),
-            header.get("audit_title", ""),
-        )
+        classified_value = ""
+        if audit_type == "Operations Audit":
+            classified_value = _operations_finding_override(
+                issue_title,
+                item.get("narrative", ""),
+            )
+        if not classified_value:
+            classified_value = classify_finding(
+                issue_title,
+                recommendation1,
+                item["narrative"],
+                header.get("company", ""),
+                header.get("audit_title", ""),
+            )
         findings, score = resolve_finding_category(classified_value, classification_df)
 
         if is_repeat_frequency(frequency, frequency_df):
