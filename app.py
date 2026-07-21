@@ -69,12 +69,15 @@ from iars_document_library import (
     DocumentLibraryError,
     DocumentLibraryNotConfiguredError,
     DuplicateDocumentError,
+    DuplicateFolderError,
+    create_document_folder,
     create_document_library_client,
     delete_document,
     document_library_is_configured,
     download_document,
     filter_documents,
     human_file_size as document_file_size,
+    list_document_folders,
     list_documents,
     read_document_library_config,
     upload_document,
@@ -859,13 +862,20 @@ def archive_client_or_none(config: ArchiveConfig):
 
 
 @st.cache_resource(show_spinner=False)
-def cached_document_library_client(url: str, service_role_key: str, bucket: str, table: str):
+def cached_document_library_client(
+    url: str,
+    service_role_key: str,
+    bucket: str,
+    table: str,
+    folders_table: str,
+):
     return create_document_library_client(
         DocumentLibraryConfig(
             url=url,
             service_role_key=service_role_key,
             bucket=bucket,
             table=table,
+            folders_table=folders_table,
         )
     )
 
@@ -879,6 +889,7 @@ def document_library_client_or_none(config: DocumentLibraryConfig):
             config.service_role_key,
             config.bucket,
             config.table,
+            config.folders_table,
         )
     except Exception:
         return None
@@ -985,6 +996,603 @@ def archive_pdf_with_feedback(
         return {"Status": "Archive failed", "File": filename, "Details": str(exc)}
 
 
+
+def _safe_library_key(value: object) -> str:
+    """Return a stable Streamlit key segment for folders and documents."""
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(value or "")).strip("_")
+    return cleaned[:90] or "item"
+
+
+def _docx_preview_text(file_bytes: bytes, *, max_characters: int = 30000) -> str:
+    """Extract readable paragraph text from a DOCX without extra dependencies."""
+    import zipfile
+    import xml.etree.ElementTree as ET
+
+    with zipfile.ZipFile(BytesIO(file_bytes)) as archive:
+        document_xml = archive.read("word/document.xml")
+    root = ET.fromstring(document_xml)
+    paragraphs: list[str] = []
+    for paragraph in root.iter():
+        if not str(paragraph.tag).endswith("}p"):
+            continue
+        parts = [
+            str(node.text or "")
+            for node in paragraph.iter()
+            if str(node.tag).endswith("}t") and node.text
+        ]
+        line = "".join(parts).strip()
+        if line:
+            paragraphs.append(line)
+        if sum(len(item) for item in paragraphs) >= max_characters:
+            break
+    return "\n\n".join(paragraphs)[:max_characters]
+
+
+def _render_policy_document_preview(
+    selected_bytes: bytes,
+    selected_record: dict,
+    *,
+    key_prefix: str,
+) -> None:
+    """Render a readable preview for supported company-folder documents."""
+    extension = str(selected_record.get("file_extension", "") or "").lower()
+
+    if extension == "pdf":
+        try:
+            import fitz
+
+            pdf_document = fitz.open(stream=selected_bytes, filetype="pdf")
+            page_count = len(pdf_document)
+            if page_count <= 0:
+                st.warning("The selected PDF contains no readable pages.")
+                return
+            preview_page = st.number_input(
+                "Page to read",
+                min_value=1,
+                max_value=page_count,
+                value=1,
+                step=1,
+                key=f"{key_prefix}_pdf_page",
+            )
+            preview_image, _, _ = render_pdf_page(
+                selected_bytes,
+                int(preview_page) - 1,
+                zoom=1.35,
+            )
+            if preview_image is not None:
+                st.image(
+                    preview_image,
+                    caption=f"Page {int(preview_page)} of {page_count}",
+                    use_container_width=True,
+                )
+            else:
+                st.warning("The selected PDF page could not be rendered.")
+        except Exception as exc:
+            st.warning(f"PDF preview is unavailable: {exc}")
+        return
+
+    if extension == "docx":
+        try:
+            preview_text = _docx_preview_text(selected_bytes)
+            if preview_text:
+                st.text_area(
+                    "Document preview",
+                    value=preview_text,
+                    height=520,
+                    disabled=True,
+                    key=f"{key_prefix}_docx_preview",
+                )
+            else:
+                st.info("No readable paragraph text was found in this Word document.")
+        except Exception as exc:
+            st.warning(f"Word preview is unavailable: {exc}")
+        return
+
+    if extension == "xlsx":
+        try:
+            workbook = pd.ExcelFile(BytesIO(selected_bytes))
+            selected_sheet = st.selectbox(
+                "Worksheet to read",
+                workbook.sheet_names,
+                key=f"{key_prefix}_xlsx_sheet",
+            )
+            worksheet = pd.read_excel(
+                BytesIO(selected_bytes),
+                sheet_name=selected_sheet,
+            )
+            st.dataframe(
+                worksheet.head(300),
+                use_container_width=True,
+                hide_index=True,
+            )
+            if len(worksheet) > 300:
+                st.caption("Preview is limited to the first 300 rows.")
+        except Exception as exc:
+            st.warning(f"Excel preview is unavailable: {exc}")
+        return
+
+    st.info(
+        "This older file format cannot be previewed safely inside IARS. "
+        "Use the download button to open it in its original application."
+    )
+
+
+@st.dialog("Create Company Folder", width="medium")
+def render_create_policy_folder_dialog(
+    client,
+    config: DocumentLibraryConfig,
+    current_user: dict,
+    *,
+    folders_cache_key: str,
+) -> None:
+    """Create a company/group folder for Policies & Memoranda."""
+    st.caption(
+        "Use the official company or group name, such as Estancia De Lorenzo "
+        "or EDL Group of Companies."
+    )
+    folder_name = st.text_input(
+        "Company / Folder Name",
+        placeholder="Example: Estancia De Lorenzo",
+        key="policy_folder_create_name_v4_4_69",
+    )
+    folder_description = st.text_area(
+        "Description (optional)",
+        placeholder="Example: Policies and memoranda applicable to Estancia De Lorenzo.",
+        key="policy_folder_create_description_v4_4_69",
+    )
+    if st.button(
+        "Create Folder",
+        type="primary",
+        use_container_width=True,
+        key="policy_folder_create_submit_v4_4_69",
+    ):
+        creator = str(
+            current_user.get("full_name")
+            or current_user.get("username")
+            or "IARS User"
+        )
+        try:
+            folder = create_document_folder(
+                client,
+                config,
+                folder_name=folder_name,
+                description=folder_description,
+                created_by=creator,
+                collection=COLLECTION_POLICIES,
+            )
+            _invalidate_session_cache(folders_cache_key)
+            st.session_state["iars_policy_folder_success_v4_4_69"] = (
+                f'Folder "{folder.get("folder_name", folder_name)}" was created successfully.'
+            )
+            st.rerun()
+        except DuplicateFolderError as exc:
+            st.warning(str(exc))
+        except Exception as exc:
+            st.error(str(exc))
+
+
+@st.dialog("Policies & Memoranda Folder", width="large")
+def render_policy_folder_documents_dialog(
+    folder: dict,
+    folder_records: list[dict],
+    client,
+    config: DocumentLibraryConfig,
+    *,
+    admin: bool,
+    records_cache_key: str,
+) -> None:
+    """Show a company folder's documents in a readable/downloadable popup."""
+    folder_name = str(folder.get("folder_name", "") or "Unfiled / General")
+    folder_description = str(folder.get("description", "") or "").strip()
+    st.markdown(f"### 📁 {folder_name}")
+    if folder_description:
+        st.caption(folder_description)
+
+    if not folder_records:
+        st.info("No policies or memoranda have been uploaded to this folder yet.")
+        return
+
+    display_rows = []
+    for record in folder_records:
+        display_rows.append(
+            {
+                "Title": record.get("title", ""),
+                "Category": record.get("category", ""),
+                "Version": record.get("version_label", ""),
+                "Effective Date": record.get("effective_date", ""),
+                "File Type": str(record.get("file_extension", "") or "").upper(),
+                "Uploaded By": record.get("uploaded_by", ""),
+                "Date Uploaded": str(record.get("uploaded_at", "") or "")[:10],
+            }
+        )
+    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
+
+    labels: list[str] = []
+    records_by_label: dict[str, dict] = {}
+    for index, record in enumerate(folder_records, start=1):
+        label = (
+            f"{record.get('title') or record.get('original_filename')} | "
+            f"{record.get('category', '')} | "
+            f"{str(record.get('file_extension', '') or '').upper()} | {index}"
+        )
+        labels.append(label)
+        records_by_label[label] = record
+
+    selected_label = st.selectbox(
+        "Select a policy or memorandum to read",
+        labels,
+        key=f"policy_folder_document_select_{_safe_library_key(folder.get('id') or folder_name)}",
+    )
+    selected_record = records_by_label[selected_label]
+    record_id = str(selected_record.get("id", "") or selected_record.get("storage_path", ""))
+    record_key = _safe_library_key(record_id)
+    bytes_key = f"policy_folder_document_bytes_{record_key}"
+    loaded_id_key = f"policy_folder_document_loaded_id_{_safe_library_key(folder.get('id') or folder_name)}"
+
+    metadata_left, metadata_right = st.columns(2)
+    with metadata_left:
+        st.markdown(f"**Category:** {selected_record.get('category', '') or 'General'}")
+        st.markdown(f"**Version:** {selected_record.get('version_label', '') or 'Not specified'}")
+    with metadata_right:
+        st.markdown(f"**Effective Date:** {selected_record.get('effective_date', '') or 'Not specified'}")
+        st.markdown(f"**File Size:** {document_file_size(selected_record.get('file_size'))}")
+
+    description = str(selected_record.get("description", "") or "").strip()
+    if description:
+        st.caption(description)
+
+    action_left, action_right = st.columns(2)
+    with action_left:
+        if st.button(
+            "Open / Read Document",
+            type="primary",
+            use_container_width=True,
+            key=f"policy_folder_open_{record_key}",
+        ):
+            try:
+                selected_bytes = download_document(
+                    client,
+                    config,
+                    str(selected_record.get("storage_path", "") or ""),
+                )
+                st.session_state[bytes_key] = selected_bytes
+                st.session_state[loaded_id_key] = record_id
+            except Exception as exc:
+                st.error(str(exc))
+    with action_right:
+        st.caption("Open the document first to enable reading and downloading.")
+
+    selected_bytes = None
+    if st.session_state.get(loaded_id_key) == record_id:
+        selected_bytes = st.session_state.get(bytes_key)
+
+    if selected_bytes:
+        st.download_button(
+            "Download Selected Document",
+            data=selected_bytes,
+            file_name=str(selected_record.get("original_filename", "document")),
+            mime=str(selected_record.get("mime_type", "application/octet-stream")),
+            use_container_width=True,
+            key=f"policy_folder_download_{record_key}",
+        )
+        st.divider()
+        _render_policy_document_preview(
+            selected_bytes,
+            selected_record,
+            key_prefix=f"policy_folder_preview_{record_key}",
+        )
+
+    if admin:
+        with st.expander("Delete Selected Document — Administrator Only", expanded=False):
+            st.warning("Deletion permanently removes the file and its library record.")
+            confirmation = st.text_input(
+                "Type DELETE to confirm",
+                key=f"policy_folder_delete_confirm_{record_key}",
+            )
+            if st.button(
+                "Delete Document",
+                disabled=confirmation.strip().upper() != "DELETE",
+                use_container_width=True,
+                key=f"policy_folder_delete_{record_key}",
+            ):
+                try:
+                    delete_document(client, config, selected_record)
+                    _invalidate_session_cache(records_cache_key)
+                    st.session_state.pop(bytes_key, None)
+                    st.session_state.pop(loaded_id_key, None)
+                    st.session_state["iars_policy_folder_success_v4_4_69"] = (
+                        "The selected document was deleted successfully."
+                    )
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
+
+def render_policy_folder_library_page(
+    *,
+    client,
+    config: DocumentLibraryConfig,
+    ready: bool,
+    current_user: dict,
+    admin: bool,
+) -> None:
+    """Render Policies & Memoranda as company/group folders."""
+    render_section_header(
+        "Policies & Memoranda Archive",
+        "Create company folders, upload controlled documents, and open each folder to read or download its contents.",
+        badge="Company-Based Document Library",
+    )
+    render_library_note(
+        "Company and group folders",
+        "Create a folder for each company, such as Estancia De Lorenzo, or use EDL Group of Companies for group-wide policies and memoranda.",
+        icon="📁",
+    )
+
+    if not ready or client is None:
+        st.warning("The document library has not been configured in Supabase yet.")
+        st.markdown(
+            "Run `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql` for a new setup, or "
+            "`SUPABASE_DOCUMENT_FOLDER_MIGRATION.sql` for an existing library."
+        )
+        return
+
+    records_cache_key = "iars_doc_library_records_Policies_Memoranda_cache_v4_4_69"
+    folders_cache_key = "iars_policy_company_folders_cache_v4_4_69"
+
+    try:
+        records = _session_ttl_cache(
+            records_cache_key,
+            120,
+            lambda: list_documents(
+                client,
+                config,
+                collection=COLLECTION_POLICIES,
+                limit=3000,
+            ),
+        )
+        folders = _session_ttl_cache(
+            folders_cache_key,
+            120,
+            lambda: list_document_folders(
+                client,
+                config,
+                collection=COLLECTION_POLICIES,
+                active_only=True,
+                limit=500,
+            ),
+        )
+    except Exception as exc:
+        st.error(
+            "The company-folder feature is not ready in Supabase. Run "
+            "`SUPABASE_DOCUMENT_FOLDER_MIGRATION.sql`, then refresh the app. "
+            f"Details: {exc}"
+        )
+        return
+
+    folder_name_by_id = {
+        str(folder.get("id", "") or ""): str(folder.get("folder_name", "") or "")
+        for folder in folders
+        if str(folder.get("id", "") or "")
+    }
+    for record in records:
+        record["folder_name"] = folder_name_by_id.get(
+            str(record.get("folder_id", "") or ""),
+            "Unfiled / General",
+        )
+
+    success_message = st.session_state.pop("iars_policy_folder_success_v4_4_69", "")
+    if success_message:
+        st.success(success_message)
+
+    policy_count = sum(
+        str(record.get("category", "") or "").casefold() == "policy"
+        for record in records
+    )
+    memorandum_count = sum(
+        str(record.get("category", "") or "").casefold() == "memorandum"
+        for record in records
+    )
+    render_metric_cards(
+        [
+            {"label": "Company Folders", "value": f"{len(folders):,}", "note": "Active folders", "icon": "📁", "accent": "#C78B12"},
+            {"label": "Total Documents", "value": f"{len(records):,}", "note": "Policies and memoranda", "icon": "📄", "accent": "#175CD3"},
+            {"label": "Policies", "value": f"{policy_count:,}", "note": "Policy documents", "icon": "📘", "accent": "#148A4B"},
+            {"label": "Memoranda", "value": f"{memorandum_count:,}", "note": "Memorandum documents", "icon": "📜", "accent": "#6938EF"},
+        ]
+    )
+
+    action_left, action_right = st.columns([1, 4])
+    with action_left:
+        if st.button(
+            "➕ Create Folder",
+            type="primary",
+            use_container_width=True,
+            key="policy_create_folder_button_v4_4_69",
+        ):
+            render_create_policy_folder_dialog(
+                client,
+                config,
+                current_user,
+                folders_cache_key=folders_cache_key,
+            )
+    with action_right:
+        st.caption(
+            "Folders are shared with all signed-in IARS users. Use the official company or group name."
+        )
+
+    with st.expander("Upload Policy or Memorandum", expanded=False):
+        if not folders:
+            st.warning("Create at least one company/group folder before uploading a document.")
+
+        uploaded_document = st.file_uploader(
+            "Select Excel, Word or PDF file",
+            type=["xlsx", "xls", "docx", "doc", "pdf"],
+            key="document_upload_Policies_Memoranda_v4_4_69",
+        )
+        folder_options = [str(folder.get("folder_name", "") or "") for folder in folders]
+        folder_by_name = {
+            str(folder.get("folder_name", "") or ""): folder
+            for folder in folders
+        }
+        selected_folder_name = st.selectbox(
+            "Company / Group Folder",
+            folder_options if folder_options else ["Create a folder first"],
+            disabled=not bool(folder_options),
+            key="policy_upload_folder_v4_4_69",
+        )
+
+        left, right = st.columns(2)
+        with left:
+            document_title = st.text_input(
+                "Document Title",
+                placeholder="Example: Revolving Fund Policy",
+                key="document_title_Policies_Memoranda_v4_4_69",
+            )
+            document_category = st.selectbox(
+                "Document Type",
+                ["Policy", "Memorandum", "Procedure", "Guidelines", "Manual", "Circular", "Other"],
+                key="document_category_Policies_Memoranda_v4_4_69",
+            )
+        with right:
+            version_label = st.text_input(
+                "Version / Revision",
+                placeholder="Example: Rev. 02 or 2026 Edition",
+                key="document_version_Policies_Memoranda_v4_4_69",
+            )
+            use_effective_date = st.checkbox(
+                "Include effective/issuance date",
+                key="document_use_date_Policies_Memoranda_v4_4_69",
+            )
+            effective_date = (
+                st.date_input(
+                    "Effective / Issuance Date",
+                    key="document_effective_date_Policies_Memoranda_v4_4_69",
+                )
+                if use_effective_date
+                else None
+            )
+
+        description = st.text_area(
+            "Description / Purpose",
+            placeholder="Briefly describe the scope or purpose of the document.",
+            key="document_description_Policies_Memoranda_v4_4_69",
+        )
+        if st.button(
+            "Upload to Selected Folder",
+            type="primary",
+            use_container_width=True,
+            disabled=not bool(folder_options),
+            key="document_upload_button_Policies_Memoranda_v4_4_69",
+        ):
+            if uploaded_document is None:
+                st.error("Select a file before uploading.")
+            else:
+                selected_folder = folder_by_name.get(selected_folder_name, {})
+                try:
+                    uploader_name = str(
+                        current_user.get("full_name")
+                        or current_user.get("username")
+                        or "IARS User"
+                    )
+                    record = upload_document(
+                        client,
+                        config,
+                        collection=COLLECTION_POLICIES,
+                        file_bytes=uploaded_document.getvalue(),
+                        original_filename=uploaded_document.name,
+                        title=document_title,
+                        category=document_category,
+                        description=description,
+                        version_label=version_label,
+                        effective_date=effective_date,
+                        uploaded_by=uploader_name,
+                        folder_id=str(selected_folder.get("id", "") or ""),
+                        folder_name=selected_folder_name,
+                    )
+                    _invalidate_session_cache(records_cache_key)
+                    st.session_state["iars_policy_folder_success_v4_4_69"] = (
+                        f'{record.get("original_filename", uploaded_document.name)} was uploaded to "{selected_folder_name}".'
+                    )
+                    st.rerun()
+                except DuplicateDocumentError as exc:
+                    st.warning(str(exc))
+                except Exception as exc:
+                    st.error(str(exc))
+
+    st.divider()
+    render_section_header(
+        "Company Folders",
+        "Click a folder to view all documents assigned to that company or group.",
+    )
+    folder_search = st.text_input(
+        "Search company folder",
+        placeholder="Example: Estancia or EDL Group",
+        key="policy_folder_search_v4_4_69",
+    ).strip().casefold()
+
+    folder_cards = list(folders)
+    unfiled_records = [
+        record for record in records
+        if not str(record.get("folder_id", "") or "").strip()
+    ]
+    if unfiled_records:
+        folder_cards.append(
+            {
+                "id": "",
+                "folder_name": "Unfiled / General",
+                "description": "Documents uploaded before company folders were enabled.",
+                "_system_folder": True,
+            }
+        )
+
+    if folder_search:
+        folder_cards = [
+            folder for folder in folder_cards
+            if folder_search in str(folder.get("folder_name", "") or "").casefold()
+        ]
+
+    if not folder_cards:
+        st.info("No company folders match the current search.")
+        return
+
+    columns = st.columns(3, gap="large")
+    for index, folder in enumerate(folder_cards):
+        folder_id = str(folder.get("id", "") or "")
+        if folder_id:
+            company_records = [
+                record for record in records
+                if str(record.get("folder_id", "") or "") == folder_id
+            ]
+        else:
+            company_records = unfiled_records
+
+        folder_name = str(folder.get("folder_name", "") or "Unfiled / General")
+        folder_description = str(folder.get("description", "") or "").strip()
+        with columns[index % 3]:
+            with st.container(border=True):
+                st.markdown(f"### 📁 {folder_name}")
+                st.caption(
+                    folder_description
+                    or "Company-specific policies and memoranda."
+                )
+                st.markdown(
+                    f"**{len(company_records):,} document(s)**"
+                )
+                if st.button(
+                    "Open Folder",
+                    use_container_width=True,
+                    key=f"policy_folder_open_button_{index}_{_safe_library_key(folder_id or folder_name)}",
+                ):
+                    render_policy_folder_documents_dialog(
+                        folder,
+                        company_records,
+                        client,
+                        config,
+                        admin=admin,
+                        records_cache_key=records_cache_key,
+                    )
+
+
 def render_document_library_page(
     *,
     collection: str,
@@ -995,12 +1603,18 @@ def render_document_library_page(
     admin: bool,
 ) -> None:
     is_templates = collection == COLLECTION_TEMPLATES
-    page_title = "Audit Workpapers Library" if is_templates else "Policies & Memoranda Archive"
-    page_subtitle = (
-        "Upload, organize and download reusable count sheets, inventory forms, working papers and audit workpapers."
-        if is_templates
-        else "Maintain a controlled reference library for policies, memoranda, procedures, manuals and guidelines."
-    )
+    if not is_templates:
+        render_policy_folder_library_page(
+            client=client,
+            config=config,
+            ready=ready,
+            current_user=current_user,
+            admin=admin,
+        )
+        return
+
+    page_title = "Audit Workpapers Library"
+    page_subtitle = "Upload, organize and download reusable count sheets, inventory forms, working papers and audit workpapers."
     render_section_header(
         page_title,
         page_subtitle,
@@ -1454,7 +2068,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.65", page_title=page_key)
+render_app_header(auth_user, version="4.4.69", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -2379,7 +2993,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.1", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.69", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

@@ -1,22 +1,41 @@
-# IARS V4.4.68 Patch Instructions
+# IARS V4.4.69 — Policies & Memoranda Company Folders
 
-## Purpose
+## Required deployment order
 
-This patch corrects the Accounts Confirmation exclusion rule.
+1. In the existing Supabase project, open **SQL Editor**.
+2. Run `SUPABASE_DOCUMENT_FOLDER_MIGRATION.sql` once.
+3. Replace these repository files:
+   - `app.py`
+   - `iars_document_library.py`
+   - `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql`
+4. Commit the changes and reboot the Streamlit app.
+5. Refresh the browser using **Ctrl + F5**.
 
-The report title must **not** suppress the entire report. The exclusion applies only when:
+## New workflow
 
-- the audit type is **Operations Audit**, and
-- the individual **issue title/table title** is exactly **Accounts Confirmation**.
+1. Open **Policies & Memoranda**.
+2. Click **Create Folder**.
+3. Enter the official company/group name, such as:
+   - Estancia De Lorenzo
+   - EDL Group of Companies
+4. Open **Upload Policy or Memorandum**.
+5. Select the company/group folder before uploading.
+6. Click a company folder to open its popup.
+7. Select a document, click **Open / Read Document**, then read or download it.
 
-## Replace these files
+## Preview support
 
-Replace the following files in the current repository using the files in this patch:
+- PDF: page-by-page readable preview
+- DOCX: readable text preview
+- XLSX: worksheet table preview
+- DOC/XLS: download available; browser preview is not supported
 
-1. `requirements.txt`
-2. `iars_pdf_editor.py`
-3. `iars_parser.py`
+## Existing records
 
-The first two files retain the PDF Tagging Components V2 fix from V4.4.67. The updated `iars_parser.py` removes only the report-title-level suppression.
+Policies and memoranda uploaded before this migration remain available under
+**Unfiled / General**. New uploads must be assigned to a company/group folder.
 
-After replacing the files, reboot the Streamlit app and perform a hard refresh (`Ctrl + F5`).
+## Files intentionally not included
+
+The patch does not replace the parser, PDF Tagging editor, authentication,
+archive, extraction worker, theme, or Master Data files.

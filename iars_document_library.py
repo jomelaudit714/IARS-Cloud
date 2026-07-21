@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 DEFAULT_BUCKET = "iars-document-library"
 DEFAULT_TABLE = "document_library"
+DEFAULT_FOLDERS_TABLE = "document_library_folders"
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx"}
 COLLECTION_TEMPLATES = "Report Templates"
 COLLECTION_POLICIES = "Policies & Memoranda"
@@ -21,6 +22,14 @@ class DocumentLibraryError(RuntimeError):
 
 class DocumentLibraryNotConfiguredError(DocumentLibraryError):
     """Raised when Supabase settings are missing."""
+
+
+class DuplicateFolderError(DocumentLibraryError):
+    """Raised when a company/group folder already exists."""
+
+    def __init__(self, message: str, existing: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.existing = existing or {}
 
 
 class DuplicateDocumentError(DocumentLibraryError):
@@ -37,6 +46,7 @@ class DocumentLibraryConfig:
     service_role_key: str
     bucket: str = DEFAULT_BUCKET
     table: str = DEFAULT_TABLE
+    folders_table: str = DEFAULT_FOLDERS_TABLE
 
 
 def _secret_value(container: Any, key: str, default: str = "") -> str:
@@ -75,6 +85,11 @@ def read_document_library_config(secrets: Any) -> DocumentLibraryConfig:
             _secret_value(supabase_section, "documents_table")
             or _secret_value(secrets, "SUPABASE_DOCUMENTS_TABLE")
             or DEFAULT_TABLE
+        ),
+        folders_table=(
+            _secret_value(supabase_section, "documents_folders_table")
+            or _secret_value(secrets, "SUPABASE_DOCUMENTS_FOLDERS_TABLE")
+            or DEFAULT_FOLDERS_TABLE
         ),
     )
 
@@ -126,6 +141,101 @@ def normalize_collection(value: str) -> str:
     return COLLECTION_TEMPLATES
 
 
+def normalize_folder_name(value: str) -> str:
+    """Return a clean display name for a company/group folder."""
+    return _clean_text(value, 120)
+
+
+def list_document_folders(
+    client: Any,
+    config: DocumentLibraryConfig,
+    *,
+    collection: str = COLLECTION_POLICIES,
+    active_only: bool = True,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """List company/group folders used by a document collection."""
+    query = (
+        client.table(config.folders_table)
+        .select("*")
+        .eq("collection", normalize_collection(collection))
+        .order("folder_name")
+        .limit(limit)
+    )
+    if active_only:
+        query = query.eq("status", "Active")
+    return _response_data(query.execute())
+
+
+def find_folder_by_name(
+    client: Any,
+    config: DocumentLibraryConfig,
+    *,
+    collection: str,
+    folder_name: str,
+) -> dict[str, Any] | None:
+    """Find an existing folder using a case-insensitive exact name."""
+    clean_name = normalize_folder_name(folder_name)
+    if not clean_name:
+        return None
+    response = (
+        client.table(config.folders_table)
+        .select("*")
+        .eq("collection", normalize_collection(collection))
+        .ilike("folder_name", clean_name)
+        .limit(1)
+        .execute()
+    )
+    rows = _response_data(response)
+    return rows[0] if rows else None
+
+
+def create_document_folder(
+    client: Any,
+    config: DocumentLibraryConfig,
+    *,
+    folder_name: str,
+    description: str = "",
+    created_by: str = "",
+    collection: str = COLLECTION_POLICIES,
+) -> dict[str, Any]:
+    """Create a company/group folder for policies and memoranda."""
+    clean_name = normalize_folder_name(folder_name)
+    if not clean_name:
+        raise DocumentLibraryError("Folder name is required.")
+
+    existing = find_folder_by_name(
+        client,
+        config,
+        collection=collection,
+        folder_name=clean_name,
+    )
+    if existing:
+        raise DuplicateFolderError(
+            f'A folder named "{existing.get("folder_name", clean_name)}" already exists.',
+            existing,
+        )
+
+    metadata = {
+        "collection": normalize_collection(collection),
+        "folder_name": clean_name,
+        "description": _clean_text(description, 1000),
+        "created_by": _clean_text(created_by, 150),
+        "status": "Active",
+    }
+    try:
+        response = client.table(config.folders_table).insert(metadata).execute()
+        rows = _response_data(response)
+        return rows[0] if rows else metadata
+    except Exception as exc:
+        message = str(exc)
+        if "duplicate" in message.casefold() or "unique" in message.casefold():
+            raise DuplicateFolderError(
+                f'A folder named "{clean_name}" already exists.'
+            ) from exc
+        raise DocumentLibraryError(f"Unable to create the company folder: {exc}") from exc
+
+
 def validate_filename(filename: str) -> tuple[str, str, str]:
     safe_name = Path(str(filename or "")).name
     extension = Path(safe_name).suffix.lower()
@@ -141,12 +251,16 @@ def make_storage_path(
     category: str,
     original_filename: str,
     now: datetime | None = None,
+    folder_name: str = "",
 ) -> str:
     now = now or datetime.now(timezone.utc)
     collection_slug = "report-templates" if normalize_collection(collection) == COLLECTION_TEMPLATES else "policies-memoranda"
     category_slug = sanitize_segment(category, "general")
     filename = sanitize_segment(Path(original_filename).name, "document")
     timestamp = now.strftime("%Y%m%dT%H%M%S%fZ")
+    if normalize_collection(collection) == COLLECTION_POLICIES:
+        folder_slug = sanitize_segment(folder_name, "unfiled")
+        return f"{collection_slug}/{folder_slug}/{now.year}/{category_slug}/{timestamp}_{filename}"
     return f"{collection_slug}/{now.year}/{category_slug}/{timestamp}_{filename}"
 
 
@@ -186,6 +300,8 @@ def upload_document(
     version_label: str,
     effective_date: date | None,
     uploaded_by: str,
+    folder_id: str = "",
+    folder_name: str = "",
     prevent_duplicate: bool = True,
 ) -> dict[str, Any]:
     if not file_bytes:
@@ -210,10 +326,18 @@ def upload_document(
 
     title_value = _clean_text(title, 220) or Path(safe_name).stem
     category_value = _clean_text(category, 100) or "General"
+    folder_id_value = _clean_text(folder_id, 80)
+    folder_name_value = normalize_folder_name(folder_name)
+    if collection_value == COLLECTION_POLICIES and not folder_id_value:
+        raise DocumentLibraryError(
+            "Select a company/group folder before uploading a policy or memorandum."
+        )
+
     storage_path = make_storage_path(
         collection=collection_value,
         category=category_value,
         original_filename=safe_name,
+        folder_name=folder_name_value,
     )
 
     bucket = client.storage.from_(config.bucket)
@@ -247,6 +371,8 @@ def upload_document(
         "sha256": digest,
         "status": "Active",
     }
+    if collection_value == COLLECTION_POLICIES:
+        metadata["folder_id"] = folder_id_value
 
     try:
         response = client.table(config.table).insert(metadata).execute()
@@ -297,6 +423,7 @@ def filter_documents(
             str(record.get(key, "") or "")
             for key in (
                 "title",
+                "folder_name",
                 "category",
                 "description",
                 "version_label",
