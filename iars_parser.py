@@ -948,27 +948,37 @@ def _is_no_collections_variance_title(value):
 
 
 def _is_no_cash_collection_variance_title(value):
+    """Recognize equivalent Operations Audit cash no-variance issue titles.
+
+    Examples intentionally supported:
+    - NO CASH COLLECTION SHORTAGE/OVERAGE
+    - NO SHORTAGE/OVERAGE ON CASH COLLECTION COUNT
+    - NO OVERAGE OR SHORTAGE IN CASH COLLECTIONS
+    """
     normalized = _normalize_exact_report_title(value)
-    return normalized in {
-        "NO CASH COLLECTION SHORTAGE OR OVERAGE",
-        "NO CASH COLLECTION OVERAGE OR SHORTAGE",
-        "NO CASH COLLECTION SHORTAGE OVERAGE",
-        "NO CASH COLLECTION OVERAGE SHORTAGE",
-        "NO CASH COLLECTIONS SHORTAGE OR OVERAGE",
-        "NO CASH COLLECTIONS OVERAGE OR SHORTAGE",
-        "NO CASH COLLECTIONS SHORTAGE OVERAGE",
-        "NO CASH COLLECTIONS OVERAGE SHORTAGE",
-    }
+    tokens = set(normalized.split())
+    if not normalized.startswith("NO "):
+        return False
+    if not {"SHORTAGE", "OVERAGE"}.issubset(tokens):
+        return False
+    return "CASH" in tokens and bool(tokens & {"COLLECTION", "COLLECTIONS"})
 
 
 def _is_no_stock_variance_title(value):
+    """Recognize equivalent Operations Audit stock/inventory no-variance titles.
+
+    Examples intentionally supported:
+    - NO STOCK SHORTAGE/OVERAGE
+    - NO SHORTAGE/OVERAGE ON STOCK INVENTORY
+    - NO OVERAGE OR SHORTAGE IN INVENTORY COUNT
+    """
     normalized = _normalize_exact_report_title(value)
-    return normalized in {
-        "NO STOCK SHORTAGE OR OVERAGE",
-        "NO STOCK OVERAGE OR SHORTAGE",
-        "NO STOCK SHORTAGE OVERAGE",
-        "NO STOCK OVERAGE SHORTAGE",
-    }
+    tokens = set(normalized.split())
+    if not normalized.startswith("NO "):
+        return False
+    if not {"SHORTAGE", "OVERAGE"}.issubset(tokens):
+        return False
+    return bool(tokens & {"STOCK", "INVENTORY"})
 
 
 def _table_has_exact_title(table, predicate):
