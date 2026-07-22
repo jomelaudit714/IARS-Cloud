@@ -679,10 +679,26 @@ def auditor_user(auditor, auditors_df=None):
 
 
 def extract_money_amounts(value):
+    """Extract monetary values without treating ordinary dates/counts as money.
+
+    Currency-marked whole amounts such as ``P1,500`` and ``₱ 1500`` are valid.
+    Unmarked values are accepted only when they include decimal cents, preserving
+    the previous protection against interpreting dates and quantities as amounts.
+    """
     amounts = []
-    for m in re.finditer(r"(?:₱|P)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})|[0-9]+(?:\.[0-9]{1,2}))", value or "", re.I):
+    pattern = re.compile(
+        r"(?:"
+        r"(?:₱|PHP|P)\s*"
+        r"([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)"
+        r"|"
+        r"([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{1,2}|[0-9]+\.[0-9]{1,2})"
+        r")",
+        re.I,
+    )
+    for match in pattern.finditer(value or ""):
+        raw_amount = match.group(1) or match.group(2)
         try:
-            amounts.append(float(m.group(1).replace(",", "")))
+            amounts.append(float(raw_amount.replace(",", "")))
         except Exception:
             pass
     return amounts
@@ -3010,14 +3026,11 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
                 is_exhibit_page = page_text.upper().startswith("EXHIBIT")
 
                 for table in page.extract_tables() or []:
-                    # Accounts Confirmation is a validation procedure/table, not
-                    # an audit issue, when the report is classified as Operations Audit.
-                    if is_operations_audit and (
-                        _table_has_accounts_confirmation_title(table)
-                        or _table_has_no_cash_collections_during_audit_title(table)
-                    ):
-                        continue
-
+                    # Do not skip an entire multi-issue table just because one row
+                    # is an ignored Operations Audit issue. The page may contain a
+                    # valid next issue (for example, Stock Overage) in the same
+                    # extracted table. Exact ignored titles are filtered per issue
+                    # later in build_records().
                     for row_index, row in enumerate(table):
                         if not row:
                             continue
