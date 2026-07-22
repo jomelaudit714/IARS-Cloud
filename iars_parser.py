@@ -1325,6 +1325,10 @@ def _safe_sentence_split(text):
             .replace("Mrs.", "Mrs<prd>")
             .replace("Dr.", "Dr<prd>")
             .replace("Jr.", "Jr<prd>")
+            .replace("No.", "No<prd>")
+            .replace("no.", "no<prd>")
+            .replace("Nos.", "Nos<prd>")
+            .replace("nos.", "nos<prd>")
     )
     parts = re.split(r"(?<=[.!?])\s+", protected)
     parts = [p.replace("<prd>", ".") for p in parts]
@@ -1385,7 +1389,7 @@ def make_sentence(text):
     if not text:
         return "None"
     text = text[0].upper() + text[1:]
-    if text[-1] not in ".!?":
+    if not re.search(r"[.!?](?:[\"'’”])?$", text):
         text += "."
     return text
 
@@ -1401,6 +1405,10 @@ def _safe_sentence_split(text):
             .replace("Mrs.", "Mrs<prd>")
             .replace("Dr.", "Dr<prd>")
             .replace("Jr.", "Jr<prd>")
+            .replace("No.", "No<prd>")
+            .replace("no.", "no<prd>")
+            .replace("Nos.", "Nos<prd>")
+            .replace("nos.", "nos<prd>")
             .replace("Art.", "Art<prd>")
     )
     parts = re.split(r"(?<=[.!?])\s+", protected)
@@ -2011,8 +2019,11 @@ def concise_text(text, max_words=25, field="general"):
     if field.startswith("recommendation"):
         text = normalize_recommendation(text)
 
-    # Do not truncate named policy recommendations; these are intentionally specific.
-    if field.startswith("recommendation") and "Policy No. 3 of Policies and Procedures on Revolving Fund" in text:
+    # Do not truncate named policy/circular recommendations; these are intentionally specific.
+    if field.startswith("recommendation") and (
+        "Policy No. 3 of Policies and Procedures on Revolving Fund" in text
+        or re.search(r"\bCircular\s+\d{4}\s*-\s*\d+\s+no\.\s*\d+", text, re.I)
+    ):
         return make_sentence(text)
 
     words = text.split()
@@ -2026,7 +2037,7 @@ def concise_text(text, max_words=25, field="general"):
             return make_sentence(sentences[0].strip())
         return make_sentence(" ".join(words[:max_words]).rstrip(",;") + "...")
 
-    sentences = re.split(r"(?<=[.!?])\s+", text)
+    sentences = _safe_sentence_split(text)
     if sentences and len(sentences[0].split()) <= max_words:
         return make_sentence(sentences[0].strip())
 

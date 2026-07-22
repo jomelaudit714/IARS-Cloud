@@ -520,15 +520,17 @@ def render_weekly_itinerary_page(
                     value=default_end,
                     key="weekly_itinerary_week_end_v4_4_73",
                 )
+            weekly_form_reset_key = "weekly_itinerary_form_reset_v4_4_78"
+            weekly_form_version = int(st.session_state.get(weekly_form_reset_key, 0) or 0)
             itinerary_image = st.file_uploader(
                 "Weekly itinerary image",
                 type=["jpg", "jpeg", "png"],
-                key="weekly_itinerary_upload_v4_4_73",
+                key=f"weekly_itinerary_upload_v4_4_78_{weekly_form_version}",
                 help="Maximum size: 10 MB.",
             )
             submitter_remarks = st.text_area(
                 "Remarks (optional)",
-                key="weekly_itinerary_submitter_remarks_v4_4_73",
+                key=f"weekly_itinerary_submitter_remarks_v4_4_78_{weekly_form_version}",
                 placeholder="Example: Field itinerary for July 20–24, 2026",
             )
             if st.button(
@@ -556,6 +558,7 @@ def render_weekly_itinerary_page(
                             f"Weekly itinerary for {format_week(record)} was submitted for administrator approval."
                         )
                         st.session_state.pop("weekly_itinerary_my_records_v4_4_73", None)
+                        st.session_state[weekly_form_reset_key] = weekly_form_version + 1
                         st.rerun()
                     except DuplicateWeeklyItineraryError as exc:
                         st.warning(str(exc))

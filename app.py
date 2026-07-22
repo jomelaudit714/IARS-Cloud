@@ -225,7 +225,7 @@ def _apply_v4477_layout_refinements() -> None:
             display: block !important;
             margin: 0 auto !important;
             /* The supplied EDL PNG has asymmetric transparent padding. */
-            transform: translateX(22px) !important;
+            transform: translateX(28px) !important;
         }
         section[data-testid="stSidebar"] .edl-sidebar-brand {
             margin-top: -.30rem !important;
@@ -462,6 +462,123 @@ def _build_records_isolated(
             raise RuntimeError(f"PDF extraction failed for {filename}: {error}")
 
         return response["result_df"], response["header"], response["items"]
+
+
+def _uploader_widget_key(base_key: str) -> str:
+    """Return a versioned widget key so successful actions clear file uploaders."""
+    reset_key = f"{base_key}__reset_counter"
+    reset_version = int(st.session_state.get(reset_key, 0) or 0)
+    return f"{base_key}__v{reset_version}"
+
+
+def _reset_file_uploader(base_key: str, *state_keys_to_clear: str) -> None:
+    """Advance an uploader key after success; preserve uploads when an action fails."""
+    reset_key = f"{base_key}__reset_counter"
+    st.session_state[reset_key] = int(st.session_state.get(reset_key, 0) or 0) + 1
+    for state_key in state_keys_to_clear:
+        st.session_state.pop(state_key, None)
+
+
+def _archive_results_completed(results) -> bool:
+    """Return True when every requested archive action completed or was a duplicate."""
+    if not results:
+        return True
+    for row in results:
+        status = str((row or {}).get("Status", "") or "").strip().casefold()
+        if "failed" in status or status == "skipped":
+            return False
+    return True
+
+
+def _finish_pdf_tagging_download(
+    uploader_base_key: str,
+    component_key: str,
+    tagged_state_key: str,
+) -> None:
+    """Clear the completed PDF Tagging upload after its tagged PDF is downloaded."""
+    _reset_file_uploader(uploader_base_key, component_key, tagged_state_key)
+
+
+def _render_saved_extraction_output(
+    *,
+    finding_options,
+    auditor_options,
+    response_options,
+    frequency_options,
+    master_sheets,
+    auditors_df,
+) -> None:
+    payload = st.session_state.get("iars_last_extraction_payload_v4_4_78")
+    if not isinstance(payload, dict):
+        return
+
+    final_df = payload.get("final_df")
+    archive_results = payload.get("archive_results") or []
+    processing_errors = payload.get("processing_errors") or []
+    processed_pdf_count = int(payload.get("processed_pdf_count") or 0)
+    result_version = int(payload.get("result_version") or 0)
+
+    if isinstance(final_df, pd.DataFrame):
+        st.subheader("Generated Records")
+        st.caption(
+            f"Generated {len(final_df)} finding row(s) from "
+            f"{processed_pdf_count} processed PDF file(s)."
+        )
+        edited_result = st.data_editor(
+            final_df,
+            use_container_width=True,
+            num_rows="fixed",
+            key=f"iars_extraction_result_editor_v4_4_78_{result_version}",
+            column_config={
+                "Findings": st.column_config.SelectboxColumn(
+                    "Findings",
+                    options=finding_options,
+                ),
+                "Audited By1": st.column_config.SelectboxColumn(
+                    "Audited By1",
+                    options=[""] + auditor_options,
+                ),
+                "Reaction": st.column_config.SelectboxColumn(
+                    "Reaction",
+                    options=response_options,
+                ),
+                "Frequency": st.column_config.SelectboxColumn(
+                    "Frequency",
+                    options=frequency_options,
+                ),
+            },
+        )
+        edited_result = normalize_output_with_master(
+            edited_result,
+            master_sheets=master_sheets,
+            auditors_df=auditors_df,
+        )
+        st.download_button(
+            "Download Consolidated Excel Output",
+            data=excel_bytes(edited_result),
+            file_name="audit_extraction_consolidated.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=f"iars_extraction_download_v4_4_78_{result_version}",
+        )
+
+    if archive_results:
+        st.subheader("Archive Results")
+        st.dataframe(
+            pd.DataFrame(archive_results),
+            use_container_width=True,
+            hide_index=True,
+            key=f"iars_extraction_archive_results_v4_4_78_{result_version}",
+        )
+
+    if processing_errors:
+        st.warning("Some PDF files were not processed. Uploaded PDFs were retained so they can be retried.")
+        st.dataframe(
+            pd.DataFrame(processing_errors),
+            use_container_width=True,
+            hide_index=True,
+            key=f"iars_extraction_errors_v4_4_78_{result_version}",
+        )
+
 
 st.set_page_config(
     page_title="Internal Audit Report System | EDL GROUP OF COMPANIES",
@@ -1622,10 +1739,11 @@ def render_policy_folder_library_page(
         if not folders:
             st.warning("Create at least one company/group folder before uploading a document.")
 
+        policy_uploader_base = "document_upload_Policies_Memoranda_v4_4_78"
         uploaded_document = st.file_uploader(
             "Select Excel, Word or PDF file",
             type=["xlsx", "xls", "docx", "doc", "pdf"],
-            key="document_upload_Policies_Memoranda_v4_4_69",
+            key=_uploader_widget_key(policy_uploader_base),
         )
         folder_options = [str(folder.get("folder_name", "") or "") for folder in folders]
         folder_by_name = {
@@ -1711,6 +1829,7 @@ def render_policy_folder_library_page(
                     st.session_state["iars_policy_folder_success_v4_4_69"] = (
                         f'{record.get("original_filename", uploaded_document.name)} was uploaded to "{selected_folder_name}".'
                     )
+                    _reset_file_uploader(policy_uploader_base)
                     st.rerun()
                 except DuplicateDocumentError as exc:
                     st.warning(str(exc))
@@ -1838,6 +1957,10 @@ def render_document_library_page(
         return
 
     records_cache_key = f"iars_doc_library_records_{collection}_cache_v4_4_19"
+    library_success_key = f"iars_doc_library_upload_success_{collection}_v4_4_78"
+    library_success_message = st.session_state.pop(library_success_key, "")
+    if library_success_message:
+        st.success(library_success_message)
     try:
         records = _session_ttl_cache(
             records_cache_key,
@@ -1885,10 +2008,11 @@ def render_document_library_page(
                 "Other",
             ]
         )
+        library_uploader_base = f"document_upload_{collection}_v4_4_78"
         uploaded_document = st.file_uploader(
             "Select Excel, Word or PDF file",
             type=["xlsx", "xls", "docx", "doc", "pdf"],
-            key=f"document_upload_{collection}",
+            key=_uploader_widget_key(library_uploader_base),
         )
         left, right = st.columns(2)
         with left:
@@ -1954,7 +2078,10 @@ def render_document_library_page(
                         uploaded_by=uploader_name,
                     )
                     _invalidate_session_cache(f"iars_doc_library_records_{collection}_cache_v4_4_19")
-                    st.success(f"{record.get('original_filename', uploaded_document.name)} was added to the shared library.")
+                    st.session_state[library_success_key] = (
+                        f"{record.get('original_filename', uploaded_document.name)} was added to the shared library."
+                    )
+                    _reset_file_uploader(library_uploader_base)
                     st.rerun()
                 except DuplicateDocumentError as exc:
                     st.warning(str(exc))
@@ -2271,7 +2398,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.77", page_title=page_key)
+render_app_header(auth_user, version="4.4.78", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -2395,10 +2522,18 @@ if page_key == "PDF Tagging":
         "Use Font size for the exact text size. Changes save automatically after you pause or move to another control."
     )
 
+    tag_uploader_base = "tag_pdf_upload_v4_4_78"
+    tag_archive_flash = st.session_state.pop("iars_tag_archive_flash_v4_4_78", "")
+    tag_archive_last_results = st.session_state.pop("iars_tag_archive_last_results_v4_4_78", None)
+    if tag_archive_flash:
+        st.success(tag_archive_flash)
+    if tag_archive_last_results:
+        st.dataframe(pd.DataFrame(tag_archive_last_results), use_container_width=True, hide_index=True)
+
     tag_pdf = st.file_uploader(
         "Upload PDF to tag",
         type=["pdf"],
-        key="tag_pdf_upload",
+        key=_uploader_widget_key(tag_uploader_base),
     )
 
     if tag_pdf is not None:
@@ -2520,6 +2655,12 @@ if page_key == "PDF Tagging":
                         data=tagged_pdf,
                         file_name=f"tagged_{tag_pdf.name}",
                         mime="application/pdf",
+                        on_click=_finish_pdf_tagging_download,
+                        args=(
+                            tag_uploader_base,
+                            component_key,
+                            f"tagged_pdf_{file_id}",
+                        ),
                     )
 
             with action_right:
@@ -2599,6 +2740,17 @@ if page_key == "PDF Tagging":
                                     )
                                 else:
                                     archive_results.append({"Status": "Skipped", "File": f"tagged_{tag_pdf.name}", "Details": "Generate the tagged PDF first."})
+                            if _archive_results_completed(archive_results):
+                                st.session_state["iars_tag_archive_flash_v4_4_78"] = (
+                                    "Selected PDF version(s) were processed successfully. The upload field was cleared."
+                                )
+                                st.session_state["iars_tag_archive_last_results_v4_4_78"] = archive_results
+                                _reset_file_uploader(
+                                    tag_uploader_base,
+                                    component_key,
+                                    f"tagged_pdf_{file_id}",
+                                )
+                                st.rerun()
                             st.dataframe(pd.DataFrame(archive_results), use_container_width=True, hide_index=True)
     else:
         st.info("Upload a PDF only when tags are needed. Otherwise, use Generate Extraction directly.")
@@ -2653,11 +2805,19 @@ if page_key == "Shared PDF Archive":
 
             st.markdown("### Upload PDFs Directly to Archive")
             st.caption("This is available to all signed-in auditors. Uploaded PDFs become visible in the shared archive.")
+            direct_archive_flash = st.session_state.pop("iars_direct_archive_flash_v4_4_78", "")
+            if direct_archive_flash:
+                st.success(direct_archive_flash)
+            direct_archive_last_results = st.session_state.pop("iars_direct_archive_last_results_v4_4_78", None)
+            if direct_archive_last_results:
+                st.dataframe(pd.DataFrame(direct_archive_last_results), use_container_width=True, hide_index=True)
+
+            direct_archive_uploader_base = "archive_direct_upload_v4_4_78"
             saved_uploads = st.file_uploader(
                 "Select one or multiple PDF files",
                 type=["pdf"],
                 accept_multiple_files=True,
-                key="archive_direct_upload",
+                key=_uploader_widget_key(direct_archive_uploader_base),
             )
             direct_uploaded_by = render_auditor_selector(
                 "Uploaded By",
@@ -2712,6 +2872,13 @@ if page_key == "Shared PDF Archive":
                                 )
                             )
                         _invalidate_session_cache("iars_archive_records_cache_v4_4_19")
+                        if _archive_results_completed(results):
+                            st.session_state["iars_direct_archive_flash_v4_4_78"] = (
+                                "Selected PDFs were processed successfully. The upload field was cleared."
+                            )
+                            st.session_state["iars_direct_archive_last_results_v4_4_78"] = results
+                            _reset_file_uploader(direct_archive_uploader_base)
+                            st.rerun()
                         st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
 
             st.divider()
@@ -2879,14 +3046,21 @@ if page_key == "Generate Extraction":
         )
         st.markdown('<div class="iars-app-ready-marker"></div>', unsafe_allow_html=True)
         st.stop()
+
+    extraction_flash = st.session_state.pop("iars_extraction_flash_v4_4_78", "")
+    if extraction_flash:
+        st.success(extraction_flash)
+
     render_stepper(["Upload PDFs", "Choose Action", "Process Reports", "Review & Export"], active_index=0)
     st.markdown("### Upload Audit Reports")
     st.caption("Drag and drop one or multiple searchable PDF reports.")
+
+    extraction_uploader_base = "extract_pdf_upload_v4_4_78"
     pdf_files = st.file_uploader(
         "Upload one or multiple audit report PDFs",
         type=["pdf"],
         accept_multiple_files=True,
-        key="extract_pdf_upload",
+        key=_uploader_widget_key(extraction_uploader_base),
     )
 
     if pdf_files:
@@ -2898,9 +3072,6 @@ if page_key == "Generate Extraction":
 
         if archive_ready and archive_client is not None:
             try:
-                # Always request the current Archive records when a report is
-                # uploaded. The previous 180-second cache could hide a report
-                # that had just been saved by this or another signed-in user.
                 archive_records_for_check = list_archive_records(
                     archive_client,
                     archive_config,
@@ -2958,6 +3129,7 @@ if page_key == "Generate Extraction":
             all_results = []
             processing_errors = []
             archive_results = []
+            processed_pdf_count = 0
 
             if archive_requested and not extraction_uploaded_by.strip():
                 st.error("Uploaded By is required when saving PDFs to the archive.")
@@ -3016,77 +3188,64 @@ if page_key == "Generate Extraction":
                                     uploaded_by=extraction_uploaded_by,
                                 )
                             )
-
-                except Exception as e:
+                    processed_pdf_count += 1
+                except Exception as exc:
                     processing_errors.append({
                         "Source PDF": pdf_file.name,
-                        "Error": str(e),
+                        "Error": str(exc),
                     })
-
                 progress.progress(idx / len(pdf_files))
 
             status.empty()
 
-            if archive_only and archive_results:
-                st.success(f"Processed {len(archive_results)} PDF file(s) for the shared archive.")
-
+            final_df = None
             if all_results:
                 final_df = pd.concat(all_results, ignore_index=True)
 
-                st.subheader("Generated Records")
-                st.caption(f"Generated {len(final_df)} finding row(s) from {len(all_results)} processed PDF file(s).")
-
-                edited_result = st.data_editor(
-                    final_df,
-                    use_container_width=True,
-                    num_rows="fixed",
-                    column_config={
-                        "Findings": st.column_config.SelectboxColumn(
-                            "Findings",
-                            options=finding_options,
-                        ),
-                        "Audited By1": st.column_config.SelectboxColumn(
-                            "Audited By1",
-                            options=[""] + auditor_options,
-                        ),
-                        "Reaction": st.column_config.SelectboxColumn(
-                            "Reaction",
-                            options=response_options,
-                        ),
-                        "Frequency": st.column_config.SelectboxColumn(
-                            "Frequency",
-                            options=frequency_options,
-                        ),
-                    },
-                )
-
-                edited_result = normalize_output_with_master(
-                    edited_result,
-                    master_sheets=master_sheets,
-                    auditors_df=auditors_df,
-                )
-
-                st.download_button(
-                    "Download Consolidated Excel Output",
-                    data=excel_bytes(edited_result),
-                    file_name="audit_extraction_consolidated.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+            result_version = int(st.session_state.get("iars_extraction_result_version_v4_4_78", 0) or 0) + 1
+            st.session_state["iars_extraction_result_version_v4_4_78"] = result_version
+            st.session_state["iars_last_extraction_payload_v4_4_78"] = {
+                "final_df": final_df,
+                "archive_results": archive_results,
+                "processing_errors": processing_errors,
+                "processed_pdf_count": processed_pdf_count,
+                "result_version": result_version,
+            }
 
             if archive_results:
                 _invalidate_session_cache(
                     "iars_archive_records_cache_v4_4_19",
                     "iars_archive_duplicate_check_cache_v4_4_19",
                 )
-                st.subheader("Archive Results")
-                st.dataframe(pd.DataFrame(archive_results), use_container_width=True, hide_index=True)
 
-            if processing_errors:
-                st.warning("Some PDF files were not processed.")
-                st.dataframe(pd.DataFrame(processing_errors), use_container_width=True)
-
+            completed_without_errors = (
+                processed_pdf_count == len(pdf_files)
+                and not processing_errors
+                and _archive_results_completed(archive_results)
+            )
+            if completed_without_errors:
+                if archive_only:
+                    completion_text = "Original PDFs were processed successfully."
+                elif archive_requested:
+                    completion_text = "Extraction and original-PDF archiving completed successfully."
+                else:
+                    completion_text = "Extraction completed successfully."
+                st.session_state["iars_extraction_flash_v4_4_78"] = (
+                    completion_text + " The upload field was cleared for the next batch."
+                )
+                _reset_file_uploader(extraction_uploader_base)
+                st.rerun()
     else:
         st.info("Upload one or multiple audit report PDFs to start.")
+
+    _render_saved_extraction_output(
+        finding_options=finding_options,
+        auditor_options=auditor_options,
+        response_options=response_options,
+        frequency_options=frequency_options,
+        master_sheets=master_sheets,
+        auditors_df=auditors_df,
+    )
 
 
 if page_key == "Audit Workpapers":
@@ -3146,15 +3305,20 @@ if page_key == "Master Data" and is_admin_user(auth_user):
         ]
     )
 
+    master_data_flash = st.session_state.pop("iars_master_data_flash_v4_4_78", "")
+    if master_data_flash:
+        st.success(master_data_flash)
+
     with st.container(border=True):
         st.markdown("### Upload Updated Master Data")
         st.caption(
             "The workbook is checked first. The existing active file is replaced only after the new workbook passes validation."
         )
+        master_data_uploader_base = "master_data_page_upload_v4_4_78"
         uploaded_master = st.file_uploader(
             "Select Master_Data.xlsx",
             type=["xlsx"],
-            key="master_data_page_upload",
+            key=_uploader_widget_key(master_data_uploader_base),
         )
         if uploaded_master is not None:
             validation_errors: list[str] = []
@@ -3204,7 +3368,10 @@ if page_key == "Master Data" and is_admin_user(auth_user):
                 ):
                     save_uploaded_master(uploaded_master)
                     st.cache_data.clear()
-                    st.success("Master Data updated successfully. The app will now reload it.")
+                    st.session_state["iars_master_data_flash_v4_4_78"] = (
+                        "Master Data updated successfully. The upload field was cleared."
+                    )
+                    _reset_file_uploader(master_data_uploader_base)
                     st.rerun()
 
     if current_sheets:
@@ -3233,7 +3400,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.77", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.78", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
