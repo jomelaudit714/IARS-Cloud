@@ -191,7 +191,7 @@ def _force_sidebar_expanded_once(token: str) -> None:
 
 
 
-def _apply_v4475_layout_refinements() -> None:
+def _apply_v4477_layout_refinements() -> None:
     """Compact the main Dashboard and align the sidebar branding."""
     st.markdown(
         """
@@ -246,91 +246,132 @@ def _apply_v4475_layout_refinements() -> None:
         }
 
         /* Dashboard top-space recovery */
-        .iars-dashboard-v4475-marker {display:none !important;}
-        .stApp:has(.iars-dashboard-v4475-marker) .block-container {
+        .iars-dashboard-v4477-marker {display:none !important;}
+        .stApp:has(.iars-dashboard-v4477-marker) .block-container {
             padding-top: 0 !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-topbar {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-topbar {
             margin-top: -25px !important;
             margin-bottom: .22rem !important;
             padding-top: .48rem !important;
             padding-bottom: .48rem !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-section-head {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-section-head {
             margin-top: .04rem !important;
             margin-bottom: .42rem !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .iars-dashboard-welcome {
+        .stApp:has(.iars-dashboard-v4477-marker) .iars-dashboard-welcome {
             margin-top: -.05rem !important;
             margin-bottom: .38rem !important;
             align-items: flex-end !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .iars-dashboard-welcome h2 {
+        .stApp:has(.iars-dashboard-v4477-marker) .iars-dashboard-welcome h2 {
             font-size: 1.72rem !important;
             line-height: 1.08 !important;
             font-weight: 850 !important;
             letter-spacing: -.025em !important;
             margin: 0 0 .18rem !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .iars-dashboard-welcome p {
+        .stApp:has(.iars-dashboard-v4477-marker) .iars-dashboard-welcome p {
             font-size: .90rem !important;
             line-height: 1.25 !important;
             margin: 0 !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker)
+        .stApp:has(.iars-dashboard-v4477-marker)
         .block-container > div[data-testid="stVerticalBlock"] {
             gap: .48rem !important;
         }
 
         /* Dashboard metric cards */
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-grid {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-grid {
             grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
             gap: .82rem !important;
             margin-top: .02rem !important;
             margin-bottom: .72rem !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-card {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-card {
             min-height: 152px !important;
             padding: 1.28rem 1.12rem 1.08rem !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-icon {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-icon {
             width: 44px !important;
             height: 44px !important;
             right: .88rem !important;
             top: .82rem !important;
             font-size: 1.30rem !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-label {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-label {
             font-size: .92rem !important;
             line-height: 1.18 !important;
             padding-right: 3.4rem !important;
             margin-top: .35rem !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-value,
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-value.long {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-value,
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-value.long {
             font-size: 2.02rem !important;
             line-height: 1.04 !important;
             margin: .62rem 0 .30rem !important;
             padding-right: 3.4rem !important;
         }
-        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-note {
+        .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-note {
             font-size: .82rem !important;
             line-height: 1.28 !important;
             padding-right: 2.9rem !important;
         }
+
+        /* Dashboard lower row: 3-card width for itinerary, 2-card width for archive. */
+        .stApp:has(.iars-dashboard-v4477-marker)
+        [data-testid="stColumn"]:has(.iars-dashboard-weekly-panel-marker) {
+            min-width: 0 !important;
+            overflow: hidden !important;
+        }
+        .stApp:has(.iars-dashboard-v4477-marker)
+        [data-testid="stColumn"]:has(.iars-dashboard-weekly-panel-marker)
+        [data-testid="stVerticalBlockBorderWrapper"],
+        .stApp:has(.iars-dashboard-v4477-marker)
+        [data-testid="stColumn"]:has(.iars-dashboard-weekly-panel-marker)
+        [data-testid="stVerticalBlock"] {
+            min-width: 0 !important;
+            max-width: 100% !important;
+        }
+        .stApp:has(.iars-dashboard-v4477-marker)
+        [data-testid="stColumn"]:has(.iars-dashboard-weekly-panel-marker)
+        [data-testid="stImage"],
+        .stApp:has(.iars-dashboard-v4477-marker)
+        [data-testid="stColumn"]:has(.iars-dashboard-weekly-panel-marker)
+        [data-testid="stImage"] figure,
+        .stApp:has(.iars-dashboard-v4477-marker)
+        [data-testid="stColumn"]:has(.iars-dashboard-weekly-panel-marker)
+        [data-testid="stImage"] > div {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+        }
+        .stApp:has(.iars-dashboard-v4477-marker)
+        [data-testid="stColumn"]:has(.iars-dashboard-weekly-panel-marker)
+        [data-testid="stImage"] img {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            object-fit: contain !important;
+            margin: 0 auto !important;
+        }
         @media (max-width: 1200px) {
-            .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-grid {
+            .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
             }
         }
         @media (max-width: 760px) {
-            .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-grid {
+            .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
-            .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-card {
+            .stApp:has(.iars-dashboard-v4477-marker) .edl-metric-card {
                 min-height: 138px !important;
             }
         }
@@ -430,7 +471,7 @@ st.set_page_config(
 )
 
 apply_iars_theme()
-_apply_v4475_layout_refinements()
+_apply_v4477_layout_refinements()
 # V4.4.19: do not install the navigation loading veil. Streamlit will still rerun on clicks,
 # but users will no longer see the "Loading / Please wait" card on every module switch.
 
@@ -2230,13 +2271,13 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.76", page_title=page_key)
+render_app_header(auth_user, version="4.4.77", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
 
 if page_key == "Dashboard":
-    st.markdown('<span class="iars-dashboard-v4475-marker"></span>', unsafe_allow_html=True)
+    st.markdown('<span class="iars-dashboard-v4477-marker"></span>', unsafe_allow_html=True)
     display_name = str(auth_user.get("full_name") or auth_user.get("username") or "Auditor")
     role_label = "Administrator" if is_admin_user(auth_user) else "Auditor"
 
@@ -2291,11 +2332,15 @@ if page_key == "Dashboard":
         ]
     )
 
-    itinerary_col, activity_col = st.columns([1.45, 1.0], gap="large")
+    itinerary_col, activity_col = st.columns([3, 2], gap="medium")
 
     # Left: the approved itinerary is immediately visible and occupies the main
     # Dashboard workspace. Right: recent archive activity remains easy to scan.
     with itinerary_col:
+        st.markdown(
+            '<span class="iars-dashboard-weekly-panel-marker"></span>',
+            unsafe_allow_html=True,
+        )
         render_dashboard_weekly_itinerary(
             client=archive_client,
             current_user=auth_user,
@@ -3188,7 +3233,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.76", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.77", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

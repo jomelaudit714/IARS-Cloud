@@ -964,7 +964,7 @@ def render_dashboard_weekly_itinerary(
             if st.button(
                 "Open Weekly Itinerary Module",
                 use_container_width=True,
-                key="dashboard_open_weekly_itinerary_admin_v4_4_76",
+                key="dashboard_open_weekly_itinerary_admin_v4_4_77",
             ):
                 st.session_state["main_navigation"] = navigation_label
                 st.rerun()
@@ -990,7 +990,7 @@ def render_dashboard_weekly_itinerary(
                         _clean(approved_record.get("original_filename"))
                         or "Approved current weekly itinerary"
                     ),
-                    width="stretch",
+                    use_container_width=True,
                 )
                 st.download_button(
                     "Download Approved Itinerary",
@@ -1038,7 +1038,7 @@ def render_dashboard_weekly_itinerary(
             if st.button(
                 "Open Weekly Itinerary Module",
                 use_container_width=True,
-                key="dashboard_open_weekly_itinerary_user_v4_4_76",
+                key="dashboard_open_weekly_itinerary_user_v4_4_77",
             ):
                 st.session_state["main_navigation"] = navigation_label
                 st.rerun()

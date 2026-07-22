@@ -1,14 +1,10 @@
-# V4.4.76 Deployment Instructions
+# V4.4.77 Deployment Instructions
 
-Replace only these two files in the current GitHub repository:
+Replace only these files in the current GitHub repository:
 
 1. `app.py`
 2. `iars_weekly_itinerary.py`
 
-Then:
+Then commit the changes, reboot the Streamlit application, and perform a hard refresh (`Ctrl + F5`).
 
-1. Commit the changes.
-2. Reboot the Streamlit application.
-3. Refresh the browser using `Ctrl + F5`.
-
-No Supabase SQL migration is required for this Dashboard/UI correction.
+No Supabase SQL or database migration is required for this layout-only update.
