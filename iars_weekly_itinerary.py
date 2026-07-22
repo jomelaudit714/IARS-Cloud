@@ -743,6 +743,54 @@ def render_weekly_itinerary_page(
                                 st.error(str(exc))
 
 
+def _record_date(value: Any) -> date | None:
+    """Parse a Supabase date value without raising."""
+    if isinstance(value, date):
+        return value
+    text = _clean(value)
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _current_approved_itinerary(
+    records: Iterable[dict[str, Any]],
+    *,
+    today: date | None = None,
+) -> dict[str, Any] | None:
+    """Return the approved itinerary covering today, newest revision first."""
+    current_date = today or date.today()
+    current_week_start = current_date - timedelta(days=current_date.weekday())
+    current_week_end = current_week_start + timedelta(days=6)
+
+    approved: list[dict[str, Any]] = []
+    for record in records or []:
+        if _clean(record.get("status")).casefold() != "approved":
+            continue
+        week_start = _record_date(record.get("week_start"))
+        week_end = _record_date(record.get("week_end"))
+        if (
+            week_start
+            and week_end
+            and week_start <= current_week_end
+            and week_end >= current_week_start
+        ):
+            approved.append(record)
+
+    approved.sort(
+        key=lambda record: (
+            _record_date(record.get("week_start")) or date.min,
+            int(record.get("revision_no") or 1),
+            _clean(record.get("approved_at")),
+        ),
+        reverse=True,
+    )
+    return approved[0] if approved else None
+
+
 def render_dashboard_weekly_itinerary(
     *,
     client: Any,
@@ -752,81 +800,124 @@ def render_dashboard_weekly_itinerary(
     config: WeeklyItineraryConfig = WeeklyItineraryConfig(),
     navigation_label: str = "🗓️ Weekly Itinerary",
 ) -> None:
-    """Render the auditor's latest approved itinerary or the admin pending summary."""
+    """Render the signed-in user's approved current itinerary on the Dashboard.
+
+    Administrators also receive a pending-approval summary, but their personal
+    approved itinerary is still shown below it. Other auditors' images are never
+    displayed in the personal Dashboard panel.
+    """
     with st.container(border=True):
-        st.markdown("### 🗓️ Weekly Itinerary")
+        st.markdown("### 🗓️ Current Weekly Itinerary")
         if not ready or client is None:
             st.caption("Weekly Itinerary storage requires setup.")
             return
 
         try:
-            if admin:
-                records = list_all_itineraries(client, config, limit=500)
-                pending = [record for record in records if _clean(record.get("status")).casefold() == "pending"]
-                st.metric("Pending Approval", len(pending))
-                st.caption("Review all auditor submissions in the Weekly Itinerary module.")
-                if st.button(
-                    "Open Weekly Itinerary Module",
-                    use_container_width=True,
-                    key="dashboard_open_weekly_itinerary_admin_v4_4_73",
-                ):
-                    st.session_state["main_navigation"] = navigation_label
-                    st.rerun()
-                return
-
-            records = list_user_itineraries(client, current_user, config, limit=100)
+            user_records = list_user_itineraries(
+                client,
+                current_user,
+                config,
+                limit=150,
+            )
+            all_records = (
+                list_all_itineraries(client, config, limit=500)
+                if admin
+                else []
+            )
         except Exception as exc:
             st.caption(f"Weekly Itinerary could not be loaded: {exc}")
             return
 
-        approved = [record for record in records if _clean(record.get("status")).casefold() == "approved"]
-        latest = records[0] if records else None
-        approved_record = approved[0] if approved else None
+        if admin:
+            pending = [
+                record
+                for record in all_records
+                if _clean(record.get("status")).casefold() == "pending"
+            ]
+            if pending:
+                st.info(
+                    f"Administrator review: {len(pending)} weekly "
+                    f"itinerary submission(s) pending approval."
+                )
+            else:
+                st.success("Administrator review: No pending itinerary approvals.")
+
+        approved_record = _current_approved_itinerary(user_records)
+        latest_user_record = user_records[0] if user_records else None
 
         if approved_record:
             st.success(f"Approved · {format_week(approved_record)}")
             try:
-                image_bytes = download_itinerary_image(client, approved_record, config)
-                dashboard_width = _itinerary_image_width(
-                    image_bytes,
-                    max_width=900,
-                    max_height=620,
+                image_bytes = download_itinerary_image(
+                    client,
+                    approved_record,
+                    config,
                 )
-                # The approved itinerary is intentionally shown immediately on
-                # the Dashboard. No extra View button is required.
                 st.image(
                     image_bytes,
-                    caption=_clean(approved_record.get("original_filename")) or "Approved weekly itinerary",
-                    width=dashboard_width,
+                    caption=(
+                        _clean(approved_record.get("original_filename"))
+                        or "Approved current weekly itinerary"
+                    ),
+                    width="stretch",
                 )
                 st.download_button(
                     "Download Approved Itinerary",
                     data=image_bytes,
-                    file_name=_clean(approved_record.get("original_filename")) or "weekly_itinerary.png",
-                    mime=_clean(approved_record.get("mime_type")) or "image/png",
+                    file_name=(
+                        _clean(approved_record.get("original_filename"))
+                        or "weekly_itinerary.png"
+                    ),
+                    mime=(
+                        _clean(approved_record.get("mime_type"))
+                        or "image/png"
+                    ),
                     use_container_width=True,
-                    key=f"dashboard_download_weekly_itinerary_{approved_record.get('id')}",
+                    key=(
+                        "dashboard_download_weekly_itinerary_"
+                        f"{approved_record.get('id')}"
+                    ),
                 )
             except Exception as exc:
                 st.warning(str(exc))
-            return
-
-        if latest:
-            status = _clean(latest.get("status")).casefold()
-            if status == "pending":
-                st.info(f"Your itinerary for {format_week(latest)} is awaiting administrator approval.")
-            elif status == "returned":
+        elif latest_user_record:
+            latest_status = _clean(
+                latest_user_record.get("status")
+            ).casefold()
+            if latest_status == "pending":
+                st.info(
+                    f"Your itinerary for {format_week(latest_user_record)} "
+                    "is awaiting administrator approval."
+                )
+            elif latest_status == "returned":
                 st.warning(
-                    f"Your itinerary for {format_week(latest)} was returned for revision. "
-                    f"{_clean(latest.get('admin_remarks'))}"
+                    f"Your itinerary for {format_week(latest_user_record)} "
+                    "was returned for revision. "
+                    f"{_clean(latest_user_record.get('admin_remarks'))}"
+                )
+            else:
+                st.caption(
+                    "No approved itinerary is available for the current week."
                 )
         else:
-            st.caption("No weekly itinerary has been submitted yet.")
+            st.caption(
+                "No approved itinerary is available for the current week."
+            )
 
-        if st.button(
-            "Open Weekly Itinerary Module",
-            use_container_width=True,
-            key="dashboard_open_weekly_itinerary_user_v4_4_73",
-        ):
-            st.session_state["main_navigation"] = navigation_label
-            st.rerun()
+        if admin:
+            if st.button(
+                "Open Weekly Itinerary Approvals",
+                use_container_width=True,
+                key="dashboard_open_weekly_itinerary_admin_v4_4_75",
+            ):
+                st.session_state["main_navigation"] = navigation_label
+                st.rerun()
+        elif not approved_record:
+            if st.button(
+                "Open Weekly Itinerary Module",
+                use_container_width=True,
+                key="dashboard_open_weekly_itinerary_user_v4_4_75",
+            ):
+                st.session_state["main_navigation"] = navigation_label
+                st.rerun()
+

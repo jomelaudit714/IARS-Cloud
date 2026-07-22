@@ -190,6 +190,130 @@ def _force_sidebar_expanded_once(token: str) -> None:
 
 
 
+def _apply_v4475_layout_refinements() -> None:
+    """Compact the main Dashboard and align the sidebar branding."""
+    st.markdown(
+        """
+        <style>
+        /* Sidebar branding and vertical spacing */
+        section[data-testid="stSidebar"] > div:first-child {
+            padding-top: 3px !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stImage"] {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: -2px auto 0 !important;
+            text-align: center !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stImage"] > div,
+        section[data-testid="stSidebar"] [data-testid="stImage"] figure {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            margin: 0 auto !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stImage"] img {
+            display: block !important;
+            margin: 0 auto !important;
+        }
+        section[data-testid="stSidebar"] .edl-sidebar-brand {
+            margin-top: -.30rem !important;
+            padding-top: 0 !important;
+            padding-bottom: .22rem !important;
+            text-align: center !important;
+        }
+        section[data-testid="stSidebar"] .edl-sidebar-brand h3 {
+            margin-top: .35rem !important;
+            margin-bottom: .03rem !important;
+        }
+        section[data-testid="stSidebar"] .edl-sidebar-section {
+            margin-top: .02rem !important;
+            margin-bottom: .18rem !important;
+        }
+        section[data-testid="stSidebar"] hr {
+            margin: .42rem 0 !important;
+        }
+
+        /* Dashboard top-space recovery */
+        .iars-dashboard-v4475-marker {display:none !important;}
+        .stApp:has(.iars-dashboard-v4475-marker) .block-container {
+            padding-top: 0 !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-topbar {
+            margin-top: -25px !important;
+            margin-bottom: .22rem !important;
+            padding-top: .48rem !important;
+            padding-bottom: .48rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-section-head {
+            margin-top: .04rem !important;
+            margin-bottom: .42rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker)
+        .block-container > div[data-testid="stVerticalBlock"] {
+            gap: .48rem !important;
+        }
+
+        /* Dashboard metric cards */
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            gap: .82rem !important;
+            margin-top: .02rem !important;
+            margin-bottom: .72rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-card {
+            min-height: 152px !important;
+            padding: 1.28rem 1.12rem 1.08rem !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-icon {
+            width: 44px !important;
+            height: 44px !important;
+            right: .88rem !important;
+            top: .82rem !important;
+            font-size: 1.30rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-label {
+            font-size: .92rem !important;
+            line-height: 1.18 !important;
+            padding-right: 3.4rem !important;
+            margin-top: .35rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-value,
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-value.long {
+            font-size: 2.02rem !important;
+            line-height: 1.04 !important;
+            margin: .62rem 0 .30rem !important;
+            padding-right: 3.4rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-note {
+            font-size: .82rem !important;
+            line-height: 1.28 !important;
+            padding-right: 2.9rem !important;
+        }
+        @media (max-width: 1200px) {
+            .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+        }
+        @media (max-width: 760px) {
+            .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            .stApp:has(.iars-dashboard-v4475-marker) .edl-metric-card {
+                min-height: 138px !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 EXTRACTION_WORKER_PATH = Path(__file__).with_name("iars_extract_worker.py")
 
 
@@ -280,6 +404,7 @@ st.set_page_config(
 )
 
 apply_iars_theme()
+_apply_v4475_layout_refinements()
 # V4.4.19: do not install the navigation loading veil. Streamlit will still rerun on clicks,
 # but users will no longer see the "Loading / Please wait" card on every module switch.
 
@@ -2079,12 +2204,13 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.74", page_title=page_key)
+render_app_header(auth_user, version="4.4.75", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
 
 if page_key == "Dashboard":
+    st.markdown('<span class="iars-dashboard-v4475-marker"></span>', unsafe_allow_html=True)
     display_name = str(auth_user.get("full_name") or auth_user.get("username") or "Auditor")
     role_label = "Administrator" if is_admin_user(auth_user) else "Auditor"
 
@@ -2126,36 +2252,6 @@ if page_key == "Dashboard":
         f"Welcome back, {display_name}",
         "Here is what is happening across the Internal Audit Report System.",
         badge=role_label,
-    )
-    # Dashboard-only metric sizing: five equal cards use the complete horizontal
-    # space instead of leaving an unused sixth grid column.
-    st.markdown(
-        """
-        <style>
-        .edl-metric-grid {
-            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-            gap: .78rem !important;
-            margin-bottom: 1.15rem !important;
-        }
-        .edl-metric-card {
-            min-height: 132px !important;
-            padding: 1rem 1.05rem .95rem !important;
-        }
-        .edl-metric-value {
-            font-size: 1.52rem !important;
-            margin-top: .52rem !important;
-        }
-        .edl-metric-label {font-size: .79rem !important;}
-        .edl-metric-note {font-size: .75rem !important;}
-        @media (max-width: 1200px) {
-            .edl-metric-grid {grid-template-columns: repeat(3, minmax(0, 1fr)) !important;}
-        }
-        @media (max-width: 760px) {
-            .edl-metric-grid {grid-template-columns: repeat(2, minmax(0, 1fr)) !important;}
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
     )
     render_metric_cards(
         [

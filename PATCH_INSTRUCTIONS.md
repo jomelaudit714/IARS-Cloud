@@ -1,24 +1,24 @@
-# IARS Weekly Itinerary Dashboard Layout Patch — V4.4.74
+# IARS V4.4.75 Dashboard and Weekly Itinerary Layout Patch
 
-## Replace in GitHub
-
-Replace only:
+Replace these files in the current GitHub repository:
 
 1. `app.py`
 2. `iars_weekly_itinerary.py`
 
-Commit the changes, reboot the Streamlit app, and press `Ctrl + F5`.
+Then:
 
-## Supabase SQL
+1. Commit the changes.
+2. Reboot the Streamlit application.
+3. Refresh the browser with `Ctrl + F5`.
 
-No new database migration is required for this layout update.
+No Supabase SQL or database migration is required for this update.
 
-The ZIP includes the corrected full setup SQL and the prior permission hotfix for reference. Run `RUN_THIS_NOW_SUPABASE_PERMISSION_FIX.sql` only when the app still reports PostgreSQL error `42501` for `weekly_itineraries`.
+## Expected Dashboard
 
-## Result
-
-- Weekly Itinerary popup fits the screen.
-- Approved itinerary is automatically visible on the Dashboard.
-- Weekly Itinerary is on the left.
-- Recent Archive Activity is on the right.
-- Dashboard metric cards occupy the full horizontal width.
+- The EDL logo is horizontally centered in the sidebar.
+- Sidebar navigation begins closer to the logo.
+- The application header, Welcome Back section, and cards are raised.
+- Metric card text and values are larger and vertically balanced.
+- The left Dashboard panel automatically shows the signed-in user's approved current itinerary image.
+- The right Dashboard panel shows Recent Archive Activity.
+- Administrators see pending approvals above their own approved current itinerary.
