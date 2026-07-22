@@ -2079,7 +2079,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.73", page_title=page_key)
+render_app_header(auth_user, version="4.4.74", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -2127,6 +2127,36 @@ if page_key == "Dashboard":
         "Here is what is happening across the Internal Audit Report System.",
         badge=role_label,
     )
+    # Dashboard-only metric sizing: five equal cards use the complete horizontal
+    # space instead of leaving an unused sixth grid column.
+    st.markdown(
+        """
+        <style>
+        .edl-metric-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            gap: .78rem !important;
+            margin-bottom: 1.15rem !important;
+        }
+        .edl-metric-card {
+            min-height: 132px !important;
+            padding: 1rem 1.05rem .95rem !important;
+        }
+        .edl-metric-value {
+            font-size: 1.52rem !important;
+            margin-top: .52rem !important;
+        }
+        .edl-metric-label {font-size: .79rem !important;}
+        .edl-metric-note {font-size: .75rem !important;}
+        @media (max-width: 1200px) {
+            .edl-metric-grid {grid-template-columns: repeat(3, minmax(0, 1fr)) !important;}
+        }
+        @media (max-width: 760px) {
+            .edl-metric-grid {grid-template-columns: repeat(2, minmax(0, 1fr)) !important;}
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     render_metric_cards(
         [
             {"label": "Employees", "value": f"{len(master_df):,}", "note": "Master Data records", "icon": "👥", "accent": "#175CD3"},
@@ -2137,33 +2167,40 @@ if page_key == "Dashboard":
         ]
     )
 
-    activity_col, _, _ = st.columns([1.55, 0.9, 0.78], gap="large")
-    with activity_col:
-        render_section_header("Recent Archive Activity", "Latest reports saved by authorized auditors.")
-        activity_rows = []
-        for record in home_archive_records[:7]:
-            activity_rows.append(
-                {
-                    "icon": "📄",
-                    "title": str(record.get("original_filename", "") or "Archived PDF"),
-                    "subtitle": f"{record.get('audit_reference', '') or 'No reference'} · Uploaded by {record.get('uploaded_by', '') or 'Unknown'}",
-                    "meta": str(record.get("uploaded_at", ""))[:16].replace("T", " "),
-                }
-            )
-        render_activity_list(activity_rows)
-        if home_archive_error:
-            st.warning(f"Archive activity could not be loaded: {home_archive_error}")
-        if home_library_error:
-            st.warning(f"Document-library activity could not be loaded: {home_library_error}")
+    itinerary_col, activity_col = st.columns([1.45, 1.0], gap="large")
 
-    st.divider()
-    render_dashboard_weekly_itinerary(
-        client=archive_client,
-        current_user=auth_user,
-        admin=is_admin_user(auth_user),
-        ready=weekly_itinerary_ready,
-        config=weekly_itinerary_config,
-    )
+    # Left: the approved itinerary is immediately visible and occupies the main
+    # Dashboard workspace. Right: recent archive activity remains easy to scan.
+    with itinerary_col:
+        render_dashboard_weekly_itinerary(
+            client=archive_client,
+            current_user=auth_user,
+            admin=is_admin_user(auth_user),
+            ready=weekly_itinerary_ready,
+            config=weekly_itinerary_config,
+        )
+
+    with activity_col:
+        with st.container(border=True):
+            render_section_header(
+                "Recent Archive Activity",
+                "Latest reports saved by authorized auditors.",
+            )
+            activity_rows = []
+            for record in home_archive_records[:7]:
+                activity_rows.append(
+                    {
+                        "icon": "📄",
+                        "title": str(record.get("original_filename", "") or "Archived PDF"),
+                        "subtitle": f"{record.get('audit_reference', '') or 'No reference'} · Uploaded by {record.get('uploaded_by', '') or 'Unknown'}",
+                        "meta": str(record.get("uploaded_at", ""))[:16].replace("T", " "),
+                    }
+                )
+            render_activity_list(activity_rows)
+            if home_archive_error:
+                st.warning(f"Archive activity could not be loaded: {home_archive_error}")
+            if home_library_error:
+                st.warning(f"Document-library activity could not be loaded: {home_library_error}")
 
 
 if page_key == "Weekly Itinerary":

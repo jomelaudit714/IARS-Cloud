@@ -1,4 +1,4 @@
--- IARS Weekly Itinerary setup — V4.4.73
+-- IARS Weekly Itinerary setup — V4.4.73A
 -- Run this once in the Supabase SQL Editor used by the IARS application.
 
 create extension if not exists pgcrypto;
@@ -59,6 +59,20 @@ create index if not exists weekly_itineraries_auditor_idx
     on public.weekly_itineraries (lower(auditor_name), week_start desc);
 
 alter table public.weekly_itineraries enable row level security;
+
+-- The IARS Streamlit app connects with the Supabase service-role key.
+-- RLS bypass does not automatically grant PostgREST table privileges.
+grant usage on schema public to service_role;
+grant select, insert, update, delete
+    on table public.weekly_itineraries
+    to service_role;
+
+-- Explicit permissions for private itinerary image storage.
+grant usage on schema storage to service_role;
+grant select on table storage.buckets to service_role;
+grant select, insert, update, delete
+    on table storage.objects
+    to service_role;
 
 -- IARS uses the Supabase service-role key from Streamlit Secrets.
 -- No public/authenticated policies are created. The service role bypasses RLS,

@@ -366,9 +366,32 @@ def _record_label(record: dict[str, Any], index: int = 1, *, include_auditor: bo
     )
 
 
+def _itinerary_image_width(
+    image_bytes: bytes,
+    *,
+    max_width: int,
+    max_height: int,
+) -> int:
+    """Return a readable width that keeps the image inside the viewport."""
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(image_bytes)) as image:
+            source_width, source_height = image.size
+        if source_width <= 0 or source_height <= 0:
+            return max_width
+        scale = min(max_width / source_width, max_height / source_height)
+        # A small upscale is useful for screenshot-style itineraries, but avoid
+        # excessive enlargement that would make text blurry.
+        scale = min(scale, 1.35)
+        return max(260, min(max_width, int(round(source_width * scale))))
+    except Exception:
+        return max_width
+
+
 def _dialog_decorator(title: str):
     if hasattr(st, "dialog"):
-        return st.dialog(title, width="large")
+        return st.dialog(title, width="medium")
     return lambda function: function
 
 
@@ -396,10 +419,15 @@ def render_itinerary_preview_dialog(
         st.error(str(exc))
         return
 
+    popup_width = _itinerary_image_width(
+        image_bytes,
+        max_width=650,
+        max_height=460,
+    )
     st.image(
         image_bytes,
         caption=_clean(record.get("original_filename")) or "Weekly itinerary",
-        use_container_width=True,
+        width=popup_width,
     )
     st.download_button(
         "Download Original Image",
@@ -759,24 +787,26 @@ def render_dashboard_weekly_itinerary(
             st.success(f"Approved · {format_week(approved_record)}")
             try:
                 image_bytes = download_itinerary_image(client, approved_record, config)
-                st.image(image_bytes, use_container_width=True)
-                view_col, download_col = st.columns(2)
-                with view_col:
-                    if st.button(
-                        "View Itinerary",
-                        use_container_width=True,
-                        key=f"dashboard_view_weekly_itinerary_{approved_record.get('id')}",
-                    ):
-                        render_itinerary_preview_dialog(client, approved_record, config)
-                with download_col:
-                    st.download_button(
-                        "Download",
-                        data=image_bytes,
-                        file_name=_clean(approved_record.get("original_filename")) or "weekly_itinerary.png",
-                        mime=_clean(approved_record.get("mime_type")) or "image/png",
-                        use_container_width=True,
-                        key=f"dashboard_download_weekly_itinerary_{approved_record.get('id')}",
-                    )
+                dashboard_width = _itinerary_image_width(
+                    image_bytes,
+                    max_width=900,
+                    max_height=620,
+                )
+                # The approved itinerary is intentionally shown immediately on
+                # the Dashboard. No extra View button is required.
+                st.image(
+                    image_bytes,
+                    caption=_clean(approved_record.get("original_filename")) or "Approved weekly itinerary",
+                    width=dashboard_width,
+                )
+                st.download_button(
+                    "Download Approved Itinerary",
+                    data=image_bytes,
+                    file_name=_clean(approved_record.get("original_filename")) or "weekly_itinerary.png",
+                    mime=_clean(approved_record.get("mime_type")) or "image/png",
+                    use_container_width=True,
+                    key=f"dashboard_download_weekly_itinerary_{approved_record.get('id')}",
+                )
             except Exception as exc:
                 st.warning(str(exc))
             return
