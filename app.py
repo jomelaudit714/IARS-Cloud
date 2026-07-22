@@ -93,6 +93,12 @@ from iars_parser import (
     excel_bytes,
 )
 
+from iars_weekly_itinerary import (
+    WeeklyItineraryConfig,
+    render_dashboard_weekly_itinerary,
+    render_weekly_itinerary_page,
+)
+
 
 SIDEBAR_EXPAND_ONCE_KEY = "iars_force_sidebar_expand_once"
 
@@ -1942,6 +1948,9 @@ document_library_ready = (
     document_library_is_configured(document_config) and document_client is not None
 )
 
+weekly_itinerary_config = WeeklyItineraryConfig()
+weekly_itinerary_ready = archive_ready and archive_client is not None
+
 if MASTER_DATA_PATH.exists():
     master_df, master_sheets = load_master_data(str(MASTER_DATA_PATH))
 else:
@@ -1986,6 +1995,7 @@ def _clear_avatar_dialog_state_on_navigation() -> None:
 
 nav_options = [
     "🏠 Dashboard",
+    "🗓️ Weekly Itinerary",
     "📄 Generate Extraction",
     "🏷️ PDF Tagging",
     "🗂️ Shared PDF Archive",
@@ -1999,6 +2009,7 @@ audit_report_nav = [
 ]
 standalone_nav = [
     "🏠 Dashboard",
+    "🗓️ Weekly Itinerary",
     "📚 Audit Workpapers",
     "📜 Policies & Memoranda",
 ]
@@ -2068,7 +2079,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.72", page_title=page_key)
+render_app_header(auth_user, version="4.4.73", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -2145,6 +2156,29 @@ if page_key == "Dashboard":
         if home_library_error:
             st.warning(f"Document-library activity could not be loaded: {home_library_error}")
 
+    st.divider()
+    render_dashboard_weekly_itinerary(
+        client=archive_client,
+        current_user=auth_user,
+        admin=is_admin_user(auth_user),
+        ready=weekly_itinerary_ready,
+        config=weekly_itinerary_config,
+    )
+
+
+if page_key == "Weekly Itinerary":
+    render_section_header(
+        "Weekly Itinerary",
+        "Upload your weekly itinerary image for administrator approval and review your submission history.",
+        badge="Private Auditor Submission",
+    )
+    render_weekly_itinerary_page(
+        client=archive_client,
+        current_user=auth_user,
+        admin=is_admin_user(auth_user),
+        ready=weekly_itinerary_ready,
+        config=weekly_itinerary_config,
+    )
 
 
 if page_key == "PDF Tagging":
@@ -2993,7 +3027,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.69", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.73", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
