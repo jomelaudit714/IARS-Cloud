@@ -8,6 +8,7 @@ from io import BytesIO
 from datetime import date
 import base64
 import hashlib
+import html
 import pickle
 import subprocess
 import sys
@@ -214,9 +215,17 @@ def _apply_v4475_layout_refinements() -> None:
             justify-content: center !important;
             margin: 0 auto !important;
         }
+        section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([data-testid="stImage"]) {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
         section[data-testid="stSidebar"] [data-testid="stImage"] img {
             display: block !important;
             margin: 0 auto !important;
+            /* The supplied EDL PNG has asymmetric transparent padding. */
+            transform: translateX(22px) !important;
         }
         section[data-testid="stSidebar"] .edl-sidebar-brand {
             margin-top: -.30rem !important;
@@ -250,6 +259,23 @@ def _apply_v4475_layout_refinements() -> None:
         .stApp:has(.iars-dashboard-v4475-marker) .edl-section-head {
             margin-top: .04rem !important;
             margin-bottom: .42rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .iars-dashboard-welcome {
+            margin-top: -.05rem !important;
+            margin-bottom: .38rem !important;
+            align-items: flex-end !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .iars-dashboard-welcome h2 {
+            font-size: 1.72rem !important;
+            line-height: 1.08 !important;
+            font-weight: 850 !important;
+            letter-spacing: -.025em !important;
+            margin: 0 0 .18rem !important;
+        }
+        .stApp:has(.iars-dashboard-v4475-marker) .iars-dashboard-welcome p {
+            font-size: .90rem !important;
+            line-height: 1.25 !important;
+            margin: 0 !important;
         }
         .stApp:has(.iars-dashboard-v4475-marker)
         .block-container > div[data-testid="stVerticalBlock"] {
@@ -2204,7 +2230,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.75", page_title=page_key)
+render_app_header(auth_user, version="4.4.76", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -2248,10 +2274,12 @@ if page_key == "Dashboard":
         except Exception as exc:
             home_library_error = str(exc)
 
-    render_section_header(
-        f"Welcome back, {display_name}",
-        "Here is what is happening across the Internal Audit Report System.",
-        badge=role_label,
+    st.markdown(
+        '<div class="edl-section-head iars-dashboard-welcome"><div>'
+        f'<h2>Welcome back, {html.escape(display_name)}!</h2>'
+        '<p>Here is what is happening across the Internal Audit Report System.</p>'
+        f'</div><div class="edl-section-badge">{html.escape(role_label)}</div></div>',
+        unsafe_allow_html=True,
     )
     render_metric_cards(
         [
@@ -3160,7 +3188,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.73", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.76", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
