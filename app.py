@@ -581,6 +581,38 @@ def _apply_v4481_full_document_refinements() -> None:
             border: 0 !important;
             border-top: 1px solid rgba(15, 42, 76, .18) !important;
         }
+
+        /* V4.4.82: compact grid tables with visible row and column separators. */
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"],
+        .st-key-archive_records_grid_v4_4_82 [data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"],
+        .st-key-archive_records_grid_v4_4_82 [data-testid="stColumn"] {
+            min-width: 0 !important;
+            padding: .42rem .48rem !important;
+            border-color: #D0D5DD !important;
+            border-radius: 0 !important;
+            background: #FFFFFF !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"],
+        .st-key-archive_records_grid_v4_4_82 [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"] {
+            background: #F2F4F7 !important;
+            font-weight: 800 !important;
+            color: #344054 !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"] p,
+        .st-key-archive_records_grid_v4_4_82 [data-testid="stColumn"] p {
+            margin: 0 !important;
+            line-height: 1.28 !important;
+            overflow-wrap: anywhere !important;
+        }
+        [class*="st-key-policy_folder_grid_"] button,
+        .st-key-archive_records_grid_v4_4_82 button {
+            min-height: 2.15rem !important;
+            padding: .28rem .38rem !important;
+            white-space: nowrap !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -2115,77 +2147,95 @@ def render_policy_folder_documents_dialog(
         st.info("No policy or memorandum title matched the search.")
         return
 
-    header_cols = st.columns([3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .78])
-    for column, label in zip(
-        header_cols,
-        [
-            "Title",
-            "Type",
-            "Subject / Process",
-            "Version",
-            "Effective Date",
-            "Uploaded By",
-            "View",
-            "⬇️",
-        ],
-    ):
-        column.markdown(f"**{label}**")
-
-    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_80"
-    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_80"
+    policy_column_widths = [2.85, .9, 1.28, .62, .9, .86, .48, .72]
+    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_82"
+    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_82"
     records_by_id: dict[str, dict] = {}
 
-    for row_index, record in enumerate(visible_records):
-        record_id = str(record.get("id", "") or record.get("storage_path", ""))
-        record_key = _safe_library_key(record_id or f"row_{row_index}")
-        records_by_id[record_id] = record
-        row_cols = st.columns(
-            [3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .78],
+    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_82"):
+        header_cols = st.columns(
+            policy_column_widths,
+            gap=None,
             vertical_alignment="center",
+            border=True,
         )
-        title = str(record.get("title") or record.get("original_filename") or "Untitled")
-        row_cols[0].markdown(title)
-        row_cols[1].write(str(record.get("category", "") or "General"))
-        row_cols[2].write(str(record.get("subject_category", "") or "Uncategorized"))
-        row_cols[3].write(str(record.get("version_label", "") or "—"))
-        row_cols[4].write(str(record.get("effective_date", "") or "—"))
-        row_cols[5].write(str(record.get("uploaded_by", "") or "—"))
-        with row_cols[6]:
-            if st.button(
-                "👁️",
-                help=f"Read {title}",
-                use_container_width=True,
-                key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_80",
-            ):
-                try:
-                    document_bytes = download_document(
-                        client,
-                        config,
-                        str(record.get("storage_path", "") or ""),
-                    )
-                    st.session_state[POLICY_PREVIEW_RECORD_ID_KEY] = record_id
-                    st.session_state[POLICY_PREVIEW_BYTES_KEY] = document_bytes
-                    st.session_state[POLICY_DIALOG_MODE_KEY] = "preview"
-                    st.rerun()
-                except Exception as exc:
-                    st.error(str(exc))
-        with row_cols[7]:
-            if st.button(
-                "⬇️",
-                help=f"Prepare download for {title}",
-                use_container_width=True,
-                key=f"policy_folder_prepare_download_{folder_key}_{record_key}_v4_4_80",
-            ):
-                try:
-                    st.session_state[download_id_key] = record_id
-                    st.session_state[download_bytes_key] = download_document(
-                        client,
-                        config,
-                        str(record.get("storage_path", "") or ""),
-                    )
-                    st.rerun()
-                except Exception as exc:
-                    st.error(str(exc))
+        for column, label in zip(
+            header_cols,
+            [
+                "Title",
+                "Type",
+                "Subject / Process",
+                "Version",
+                "Effective Date",
+                "Uploaded By",
+                "View",
+                "Download",
+            ],
+        ):
+            column.markdown(f"**{label}**")
+
+        for row_index, record in enumerate(visible_records):
+            record_id = str(record.get("id", "") or record.get("storage_path", ""))
+            record_key = _safe_library_key(record_id or f"row_{row_index}")
+            records_by_id[record_id] = record
+            row_cols = st.columns(
+                policy_column_widths,
+                gap=None,
+                vertical_alignment="center",
+                border=True,
+            )
+            title = str(
+                record.get("title")
+                or record.get("original_filename")
+                or "Untitled"
+            )
+            row_cols[0].write(title)
+            row_cols[1].write(str(record.get("category", "") or "General"))
+            row_cols[2].write(
+                str(record.get("subject_category", "") or "Uncategorized")
+            )
+            row_cols[3].write(str(record.get("version_label", "") or "—"))
+            row_cols[4].write(str(record.get("effective_date", "") or "—"))
+            row_cols[5].write(str(record.get("uploaded_by", "") or "—"))
+            with row_cols[6]:
+                if st.button(
+                    "👁️",
+                    help=f"Read {title}",
+                    use_container_width=True,
+                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_82",
+                ):
+                    try:
+                        document_bytes = download_document(
+                            client,
+                            config,
+                            str(record.get("storage_path", "") or ""),
+                        )
+                        st.session_state[POLICY_PREVIEW_RECORD_ID_KEY] = record_id
+                        st.session_state[POLICY_PREVIEW_BYTES_KEY] = document_bytes
+                        st.session_state[POLICY_DIALOG_MODE_KEY] = "preview"
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
+            with row_cols[7]:
+                if st.button(
+                    "⬇️",
+                    help=f"Prepare download for {title}",
+                    use_container_width=True,
+                    key=(
+                        f"policy_folder_prepare_download_{folder_key}_"
+                        f"{record_key}_v4_4_82"
+                    ),
+                ):
+                    try:
+                        st.session_state[download_id_key] = record_id
+                        st.session_state[download_bytes_key] = download_document(
+                            client,
+                            config,
+                            str(record.get("storage_path", "") or ""),
+                        )
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
 
     prepared_download_id = str(st.session_state.get(download_id_key, "") or "")
     prepared_download_record = records_by_id.get(prepared_download_id)
@@ -2206,9 +2256,10 @@ def render_policy_folder_documents_dialog(
             use_container_width=True,
             key=(
                 "policy_folder_download_ready_"
-                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_80"
+                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_82"
             ),
         )
+
 
 
 def render_policy_folder_library_page(
@@ -3484,7 +3535,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.81", page_title=page_key)
+render_app_header(auth_user, version="4.4.82", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -3875,69 +3926,157 @@ if page_key == "Shared PDF Archive":
                     end_date=end_filter if isinstance(end_filter, date) else None,
                 )
 
-                display_rows = []
-                for record in filtered:
-                    display_rows.append(
-                        {
-                            "Audit Reference": record.get("audit_reference", ""),
-                            "Auditee Name": record.get("auditee_name", ""),
-                            "Filename": record.get("original_filename", ""),
-                            "Type": record.get("document_type", ""),
-                            "Uploaded Date": str(record.get("uploaded_at", ""))[:10],
-                            "Uploaded By": record.get("uploaded_by", ""),
-                            "File Size": human_file_size(record.get("file_size")),
-                        }
+                st.caption(
+                    f"Showing {len(filtered)} of {len(records)} archived PDF "
+                    "record(s) from all auditors."
+                )
+                if filtered:
+                    archive_column_widths = [1.0, 1.55, 2.15, .9, 1.15, .48, .72]
+                    archive_download_id_key = (
+                        "archive_table_download_record_id_v4_4_82"
                     )
+                    archive_download_bytes_key = (
+                        "archive_table_download_bytes_v4_4_82"
+                    )
+                    archive_records_by_id: dict[str, dict] = {}
 
-                st.caption(f"Showing {len(filtered)} of {len(records)} archived PDF record(s) from all auditors.")
-                if display_rows:
-                    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
-
-                    labels = []
-                    record_by_label = {}
-                    for idx, record in enumerate(filtered, start=1):
-                        label = (
-                            f"{record.get('audit_reference') or 'No Ref'} | "
-                            f"{record.get('auditee_name') or 'No Auditee'} | "
-                            f"{record.get('document_type', '')} | "
-                            f"{record.get('original_filename', '')} | {idx}"
+                    with st.container(key="archive_records_grid_v4_4_82"):
+                        header_cols = st.columns(
+                            archive_column_widths,
+                            gap=None,
+                            vertical_alignment="center",
+                            border=True,
                         )
-                        labels.append(label)
-                        record_by_label[label] = record
+                        for column, label in zip(
+                            header_cols,
+                            [
+                                "Audit Reference",
+                                "Auditee Name",
+                                "Filename",
+                                "Uploaded Date",
+                                "Uploaded By",
+                                "View",
+                                "Download",
+                            ],
+                        ):
+                            column.markdown(f"**{label}**")
 
-                    selected_label = st.selectbox(
-                        "Select a PDF to preview or download",
-                        labels,
+                        for row_index, record in enumerate(filtered):
+                            record_id = str(
+                                record.get("id", "")
+                                or record.get("storage_path", "")
+                            )
+                            record_key = _safe_library_key(
+                                record_id or f"archive_{row_index}"
+                            )
+                            archive_records_by_id[record_id] = record
+                            row_cols = st.columns(
+                                archive_column_widths,
+                                gap=None,
+                                vertical_alignment="center",
+                                border=True,
+                            )
+                            filename = str(
+                                record.get("original_filename", "")
+                                or "archived.pdf"
+                            )
+                            row_cols[0].write(
+                                str(record.get("audit_reference", "") or "—")
+                            )
+                            row_cols[1].write(
+                                str(record.get("auditee_name", "") or "—")
+                            )
+                            row_cols[2].write(filename)
+                            row_cols[3].write(
+                                str(record.get("uploaded_at", ""))[:10] or "—"
+                            )
+                            row_cols[4].write(
+                                str(record.get("uploaded_by", "") or "—")
+                            )
+                            with row_cols[5]:
+                                if st.button(
+                                    "👁️",
+                                    help=f"View {filename}",
+                                    use_container_width=True,
+                                    key=(
+                                        f"archive_table_view_{record_key}_v4_4_82"
+                                    ),
+                                ):
+                                    try:
+                                        selected_bytes = download_archived_pdf(
+                                            archive_client,
+                                            archive_config,
+                                            record.get("storage_path", ""),
+                                        )
+                                        st.session_state[
+                                            ARCHIVE_PREVIEW_RECORD_ID_KEY
+                                        ] = record.get("id")
+                                        st.session_state[
+                                            ARCHIVE_PREVIEW_BYTES_KEY
+                                        ] = selected_bytes
+                                        st.session_state[
+                                            ARCHIVE_PREVIEW_OPEN_KEY
+                                        ] = True
+                                        st.rerun()
+                                    except Exception as exc:
+                                        st.error(str(exc))
+                            with row_cols[6]:
+                                if st.button(
+                                    "⬇️",
+                                    help=f"Prepare download for {filename}",
+                                    use_container_width=True,
+                                    key=(
+                                        f"archive_table_prepare_download_"
+                                        f"{record_key}_v4_4_82"
+                                    ),
+                                ):
+                                    try:
+                                        st.session_state[
+                                            archive_download_id_key
+                                        ] = record_id
+                                        st.session_state[
+                                            archive_download_bytes_key
+                                        ] = download_archived_pdf(
+                                            archive_client,
+                                            archive_config,
+                                            record.get("storage_path", ""),
+                                        )
+                                        st.rerun()
+                                    except Exception as exc:
+                                        st.error(str(exc))
+
+                    prepared_archive_id = str(
+                        st.session_state.get(archive_download_id_key, "") or ""
                     )
-                    selected_record = record_by_label[selected_label]
-
-                    if st.button(
-                        "View Full Archived PDF",
-                        type="primary",
-                        use_container_width=True,
-                        key=(
-                            "archive_open_full_preview_v4_4_81_"
-                            f"{_safe_library_key(selected_record.get('id'))}"
-                        ),
-                    ):
-                        try:
-                            selected_bytes = download_archived_pdf(
-                                archive_client,
-                                archive_config,
-                                selected_record.get("storage_path", ""),
-                            )
-                            st.session_state[ARCHIVE_PREVIEW_RECORD_ID_KEY] = (
-                                selected_record.get("id")
-                            )
-                            st.session_state[ARCHIVE_PREVIEW_BYTES_KEY] = selected_bytes
-                            st.session_state[ARCHIVE_PREVIEW_OPEN_KEY] = True
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(str(exc))
+                    prepared_archive_record = archive_records_by_id.get(
+                        prepared_archive_id
+                    )
+                    prepared_archive_bytes = st.session_state.get(
+                        archive_download_bytes_key
+                    )
+                    if prepared_archive_record and prepared_archive_bytes:
+                        st.download_button(
+                            "Download Selected PDF",
+                            data=prepared_archive_bytes,
+                            file_name=str(
+                                prepared_archive_record.get(
+                                    "original_filename", "archived.pdf"
+                                )
+                            ),
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True,
+                            key=(
+                                "archive_table_download_ready_"
+                                f"{_safe_library_key(prepared_archive_id)}_v4_4_82"
+                            ),
+                        )
 
                     if st.session_state.get(ARCHIVE_PREVIEW_OPEN_KEY):
                         preview_record_id = str(
-                            st.session_state.get(ARCHIVE_PREVIEW_RECORD_ID_KEY, "")
+                            st.session_state.get(
+                                ARCHIVE_PREVIEW_RECORD_ID_KEY, ""
+                            )
                             or ""
                         )
                         preview_record = next(
@@ -3962,7 +4101,6 @@ if page_key == "Shared PDF Archive":
                             )
                         else:
                             _dismiss_archive_preview_dialog()
-
                 else:
                     st.info("No archived PDFs match the selected filters.")
 
@@ -4329,7 +4467,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.81", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.82", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
