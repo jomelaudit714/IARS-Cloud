@@ -300,6 +300,7 @@ def upload_document(
     version_label: str,
     effective_date: date | None,
     uploaded_by: str,
+    subject_category: str = "",
     folder_id: str = "",
     folder_name: str = "",
     prevent_duplicate: bool = True,
@@ -326,6 +327,9 @@ def upload_document(
 
     title_value = _clean_text(title, 220) or Path(safe_name).stem
     category_value = _clean_text(category, 100) or "General"
+    subject_category_value = _clean_text(subject_category, 120)
+    if collection_value == COLLECTION_POLICIES and not subject_category_value:
+        subject_category_value = "Other"
     folder_id_value = _clean_text(folder_id, 80)
     folder_name_value = normalize_folder_name(folder_name)
     if collection_value == COLLECTION_POLICIES and not folder_id_value:
@@ -358,6 +362,7 @@ def upload_document(
         "collection": collection_value,
         "title": title_value,
         "category": category_value,
+        "subject_category": subject_category_value or None,
         "description": _clean_text(description, 2000),
         "version_label": _clean_text(version_label, 60),
         "effective_date": effective_date.isoformat() if isinstance(effective_date, date) else None,
@@ -425,6 +430,7 @@ def filter_documents(
                 "title",
                 "folder_name",
                 "category",
+                "subject_category",
                 "description",
                 "version_label",
                 "original_filename",

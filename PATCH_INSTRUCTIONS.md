@@ -1,25 +1,28 @@
-# V4.4.78 Patch Instructions
+# Deployment Instructions — V4.4.79
 
-Replace these files in the current GitHub repository:
+## 1. Run the database migration first
 
-1. `app.py`
-2. `iars_parser.py`
-3. `iars_weekly_itinerary.py`
+Open the same Supabase project used by IARS, open **SQL Editor**, and run:
 
-No Supabase SQL or dependency change is required.
+`SUPABASE_POLICY_SUBJECT_CATEGORY_MIGRATION.sql`
 
-After committing the files:
+The final query should show the `subject_category` column.
 
-1. Reboot the Streamlit application.
-2. Perform a hard refresh using `Ctrl + F5`.
-3. Test Generate Extraction using `2026IAD269_Eldia_Marvihills.pdf`.
+## 2. Replace or add these GitHub files
 
-Expected recommendation for Issue 2:
+- `app.py`
+- `iars_document_library.py`
+- `assets/login_left_panel.png`
 
-`Review Circular 2020- 001 no. 4 stating “Each disbursement must be supported by original copies of valid supporting documents and must be stamped “PAID” after payment to avoid re-use or double payment.”`
+The ZIP also includes the unchanged current `iars_parser.py` and
+`iars_weekly_itinerary.py` so the patch remains aligned with V4.4.78.
 
-Expected upload behavior:
+For a new document-library installation, use the included corrected:
 
-- Successful action: uploader clears automatically.
-- Failed action: uploader retains the selected file for retry.
-- Generate Extraction results remain displayed after the input PDF list clears.
+- `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql`
+
+## 3. Deploy
+
+Commit the files, reboot the Streamlit app, then use **Ctrl + F5**.
+
+No requirements update is needed.

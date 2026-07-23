@@ -1,6 +1,6 @@
--- IARS v4.4.69 - Document Library with Company Folders
+-- IARS v4.4.79 - Document Library with Company Folders and Subject Categories
 -- Use this script for a NEW Supabase document-library setup.
--- Existing installations should run SUPABASE_DOCUMENT_FOLDER_MIGRATION.sql.
+-- Existing installations should run SUPABASE_POLICY_SUBJECT_CATEGORY_MIGRATION.sql after the earlier folder migration.
 
 create extension if not exists pgcrypto;
 
@@ -34,6 +34,7 @@ create table if not exists public.document_library (
     folder_id uuid references public.document_library_folders(id) on delete set null,
     title text not null,
     category text not null default 'General',
+    subject_category text,
     description text not null default '',
     version_label text not null default '',
     effective_date date,
@@ -51,6 +52,9 @@ create table if not exists public.document_library (
 
 alter table public.document_library
     add column if not exists folder_id uuid;
+
+alter table public.document_library
+    add column if not exists subject_category text;
 
 do $$
 begin
@@ -74,6 +78,8 @@ create index if not exists document_library_folder_id_idx
     on public.document_library (folder_id);
 create index if not exists document_library_category_idx
     on public.document_library (category);
+create index if not exists document_library_subject_category_idx
+    on public.document_library (subject_category);
 create index if not exists document_library_uploaded_at_idx
     on public.document_library (uploaded_at desc);
 create index if not exists document_library_sha256_idx

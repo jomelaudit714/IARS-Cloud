@@ -381,6 +381,56 @@ def _apply_v4477_layout_refinements() -> None:
     )
 
 
+def _apply_v4479_readability_and_library_refinements() -> None:
+    """Improve process-step readability, login artwork, and Policies layout."""
+    st.markdown(
+        """
+        <style>
+        /* Larger but more compact process stepper text. */
+        .edl-stepper {
+            padding: .46rem .58rem !important;
+            gap: .12rem !important;
+            margin-top: .04rem !important;
+            margin-bottom: .56rem !important;
+        }
+        .edl-step {
+            gap: .34rem !important;
+            font-size: .82rem !important;
+            line-height: 1.15 !important;
+            font-weight: 780 !important;
+        }
+        .edl-step-number {
+            width: 25px !important;
+            height: 25px !important;
+            font-size: .72rem !important;
+        }
+        .edl-step:not(:last-child):after {
+            margin-left: .12rem !important;
+        }
+
+        /* Recover unused top space on Policies & Memoranda. */
+        .iars-policies-v4479-marker {display:none !important;}
+        .stApp:has(.iars-policies-v4479-marker) .block-container {
+            padding-top: 0 !important;
+        }
+        .stApp:has(.iars-policies-v4479-marker) .edl-topbar {
+            margin-top: -25px !important;
+            margin-bottom: .30rem !important;
+        }
+        .stApp:has(.iars-policies-v4479-marker) .edl-section-head {
+            margin-top: .04rem !important;
+            margin-bottom: .48rem !important;
+        }
+        .stApp:has(.iars-policies-v4479-marker)
+        .block-container > div[data-testid="stVerticalBlock"] {
+            gap: .52rem !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 EXTRACTION_WORKER_PATH = Path(__file__).with_name("iars_extract_worker.py")
 
 
@@ -589,6 +639,7 @@ st.set_page_config(
 
 apply_iars_theme()
 _apply_v4477_layout_refinements()
+_apply_v4479_readability_and_library_refinements()
 # V4.4.19: do not install the navigation loading veil. Streamlit will still rerun on clicks,
 # but users will no longer see the "Loading / Please wait" card on every module switch.
 
@@ -1496,9 +1547,11 @@ def render_policy_folder_documents_dialog(
     admin: bool,
     records_cache_key: str,
 ) -> None:
-    """Show a company folder's documents in a readable/downloadable popup."""
+    """Show a searchable company-folder table with view and download actions."""
     folder_name = str(folder.get("folder_name", "") or "Unfiled / General")
     folder_description = str(folder.get("description", "") or "").strip()
+    folder_key = _safe_library_key(folder.get("id") or folder_name)
+
     st.markdown(f"### 📁 {folder_name}")
     if folder_description:
         st.caption(folder_description)
@@ -1507,120 +1560,189 @@ def render_policy_folder_documents_dialog(
         st.info("No policies or memoranda have been uploaded to this folder yet.")
         return
 
-    display_rows = []
-    for record in folder_records:
-        display_rows.append(
-            {
-                "Title": record.get("title", ""),
-                "Category": record.get("category", ""),
-                "Version": record.get("version_label", ""),
-                "Effective Date": record.get("effective_date", ""),
-                "File Type": str(record.get("file_extension", "") or "").upper(),
-                "Uploaded By": record.get("uploaded_by", ""),
-                "Date Uploaded": str(record.get("uploaded_at", "") or "")[:10],
-            }
-        )
-    st.dataframe(pd.DataFrame(display_rows), use_container_width=True, hide_index=True)
-
-    labels: list[str] = []
-    records_by_label: dict[str, dict] = {}
-    for index, record in enumerate(folder_records, start=1):
-        label = (
-            f"{record.get('title') or record.get('original_filename')} | "
-            f"{record.get('category', '')} | "
-            f"{str(record.get('file_extension', '') or '').upper()} | {index}"
-        )
-        labels.append(label)
-        records_by_label[label] = record
-
-    selected_label = st.selectbox(
-        "Select a policy or memorandum to read",
-        labels,
-        key=f"policy_folder_document_select_{_safe_library_key(folder.get('id') or folder_name)}",
+    search_state_key = f"policy_folder_applied_title_search_{folder_key}_v4_4_79"
+    search_version_key = f"policy_folder_title_search_version_{folder_key}_v4_4_79"
+    search_version = int(st.session_state.get(search_version_key, 0) or 0)
+    search_input_key = (
+        f"policy_folder_title_search_input_{folder_key}_v4_4_79_{search_version}"
     )
-    selected_record = records_by_label[selected_label]
-    record_id = str(selected_record.get("id", "") or selected_record.get("storage_path", ""))
-    record_key = _safe_library_key(record_id)
-    bytes_key = f"policy_folder_document_bytes_{record_key}"
-    loaded_id_key = f"policy_folder_document_loaded_id_{_safe_library_key(folder.get('id') or folder_name)}"
-
-    metadata_left, metadata_right = st.columns(2)
-    with metadata_left:
-        st.markdown(f"**Category:** {selected_record.get('category', '') or 'General'}")
-        st.markdown(f"**Version:** {selected_record.get('version_label', '') or 'Not specified'}")
-    with metadata_right:
-        st.markdown(f"**Effective Date:** {selected_record.get('effective_date', '') or 'Not specified'}")
-        st.markdown(f"**File Size:** {document_file_size(selected_record.get('file_size'))}")
-
-    description = str(selected_record.get("description", "") or "").strip()
-    if description:
-        st.caption(description)
-
-    action_left, action_right = st.columns(2)
-    with action_left:
+    search_col, search_button_col, clear_col = st.columns([5, 1, 1])
+    with search_col:
+        search_text = st.text_input(
+            "Search policy title",
+            placeholder="Enter all or part of the document title",
+            key=search_input_key,
+            label_visibility="collapsed",
+        )
+    with search_button_col:
         if st.button(
-            "Open / Read Document",
-            type="primary",
+            "Search",
             use_container_width=True,
-            key=f"policy_folder_open_{record_key}",
+            key=f"policy_folder_title_search_button_{folder_key}_v4_4_79",
         ):
-            try:
-                selected_bytes = download_document(
-                    client,
-                    config,
-                    str(selected_record.get("storage_path", "") or ""),
-                )
-                st.session_state[bytes_key] = selected_bytes
-                st.session_state[loaded_id_key] = record_id
-            except Exception as exc:
-                st.error(str(exc))
-    with action_right:
-        st.caption("Open the document first to enable reading and downloading.")
-
-    selected_bytes = None
-    if st.session_state.get(loaded_id_key) == record_id:
-        selected_bytes = st.session_state.get(bytes_key)
-
-    if selected_bytes:
-        st.download_button(
-            "Download Selected Document",
-            data=selected_bytes,
-            file_name=str(selected_record.get("original_filename", "document")),
-            mime=str(selected_record.get("mime_type", "application/octet-stream")),
+            st.session_state[search_state_key] = search_text.strip()
+    with clear_col:
+        if st.button(
+            "Clear",
             use_container_width=True,
-            key=f"policy_folder_download_{record_key}",
-        )
-        st.divider()
-        _render_policy_document_preview(
-            selected_bytes,
-            selected_record,
-            key_prefix=f"policy_folder_preview_{record_key}",
-        )
+            key=f"policy_folder_title_search_clear_{folder_key}_v4_4_79",
+        ):
+            st.session_state[search_state_key] = ""
+            st.session_state[search_version_key] = search_version + 1
+            st.rerun()
 
-    if admin:
-        with st.expander("Delete Selected Document — Administrator Only", expanded=False):
-            st.warning("Deletion permanently removes the file and its library record.")
-            confirmation = st.text_input(
-                "Type DELETE to confirm",
-                key=f"policy_folder_delete_confirm_{record_key}",
-            )
+    applied_search = str(st.session_state.get(search_state_key, "") or "").strip().casefold()
+    visible_records = [
+        record
+        for record in folder_records
+        if not applied_search
+        or applied_search in str(
+            record.get("title") or record.get("original_filename") or ""
+        ).casefold()
+    ]
+    if applied_search:
+        st.caption(f'Search results for title: “{st.session_state.get(search_state_key, "")}”')
+
+    if not visible_records:
+        st.info("No policy or memorandum title matched the search.")
+        return
+
+    # Custom table keeps the actions on the same row without using a dropdown.
+    header_cols = st.columns([3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .62])
+    for column, label in zip(
+        header_cols,
+        ["Title", "Type", "Subject / Process", "Version", "Effective Date", "Uploaded By", "View", "Download"],
+    ):
+        column.markdown(f"**{label}**")
+
+    view_id_key = f"policy_folder_view_record_id_{folder_key}_v4_4_79"
+    view_bytes_key = f"policy_folder_view_bytes_{folder_key}_v4_4_79"
+    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_79"
+    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_79"
+
+    records_by_id: dict[str, dict] = {}
+    for row_index, record in enumerate(visible_records):
+        record_id = str(record.get("id", "") or record.get("storage_path", ""))
+        record_key = _safe_library_key(record_id or f"row_{row_index}")
+        records_by_id[record_id] = record
+        row_cols = st.columns([3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .62], vertical_alignment="center")
+        title = str(record.get("title") or record.get("original_filename") or "Untitled")
+        row_cols[0].markdown(title)
+        row_cols[1].write(str(record.get("category", "") or "General"))
+        row_cols[2].write(str(record.get("subject_category", "") or "Uncategorized"))
+        row_cols[3].write(str(record.get("version_label", "") or "—"))
+        row_cols[4].write(str(record.get("effective_date", "") or "—"))
+        row_cols[5].write(str(record.get("uploaded_by", "") or "—"))
+        with row_cols[6]:
             if st.button(
-                "Delete Document",
-                disabled=confirmation.strip().upper() != "DELETE",
+                "👁️",
+                help=f"Read {title}",
                 use_container_width=True,
-                key=f"policy_folder_delete_{record_key}",
+                key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_79",
             ):
                 try:
-                    delete_document(client, config, selected_record)
-                    _invalidate_session_cache(records_cache_key)
-                    st.session_state.pop(bytes_key, None)
-                    st.session_state.pop(loaded_id_key, None)
-                    st.session_state["iars_policy_folder_success_v4_4_69"] = (
-                        "The selected document was deleted successfully."
+                    document_bytes = download_document(
+                        client,
+                        config,
+                        str(record.get("storage_path", "") or ""),
                     )
+                    st.session_state[view_id_key] = record_id
+                    st.session_state[view_bytes_key] = document_bytes
                     st.rerun()
                 except Exception as exc:
                     st.error(str(exc))
+        with row_cols[7]:
+            if st.button(
+                "⬇️",
+                help=f"Prepare download for {title}",
+                use_container_width=True,
+                key=f"policy_folder_prepare_download_{folder_key}_{record_key}_v4_4_79",
+            ):
+                try:
+                    document_bytes = download_document(
+                        client,
+                        config,
+                        str(record.get("storage_path", "") or ""),
+                    )
+                    st.session_state[download_id_key] = record_id
+                    st.session_state[download_bytes_key] = document_bytes
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
+    prepared_download_id = str(st.session_state.get(download_id_key, "") or "")
+    prepared_download_record = records_by_id.get(prepared_download_id)
+    prepared_download_bytes = st.session_state.get(download_bytes_key)
+    if prepared_download_record and prepared_download_bytes:
+        st.download_button(
+            "⬇️ Download " + str(
+                prepared_download_record.get("title")
+                or prepared_download_record.get("original_filename")
+                or "Selected Document"
+            ),
+            data=prepared_download_bytes,
+            file_name=str(prepared_download_record.get("original_filename", "document")),
+            mime=str(prepared_download_record.get("mime_type", "application/octet-stream")),
+            type="primary",
+            use_container_width=True,
+            key=f"policy_folder_download_ready_{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_79",
+        )
+
+    viewed_id = str(st.session_state.get(view_id_key, "") or "")
+    viewed_record = records_by_id.get(viewed_id)
+    viewed_bytes = st.session_state.get(view_bytes_key)
+    if viewed_record and viewed_bytes:
+        st.divider()
+        st.markdown(
+            "### 👁️ "
+            + str(viewed_record.get("title") or viewed_record.get("original_filename") or "Document Preview")
+        )
+        meta_left, meta_middle, meta_right = st.columns(3)
+        meta_left.markdown(f"**Type:** {viewed_record.get('category', '') or 'General'}")
+        meta_middle.markdown(
+            f"**Subject / Process:** {viewed_record.get('subject_category', '') or 'Uncategorized'}"
+        )
+        meta_right.markdown(
+            f"**File Size:** {document_file_size(viewed_record.get('file_size'))}"
+        )
+        description = str(viewed_record.get("description", "") or "").strip()
+        if description:
+            st.caption(description)
+        _render_policy_document_preview(
+            viewed_bytes,
+            viewed_record,
+            key_prefix=f"policy_folder_preview_{folder_key}_{_safe_library_key(viewed_id)}_v4_4_79",
+        )
+
+        if admin:
+            with st.expander("Delete Viewed Document — Administrator Only", expanded=False):
+                st.warning("Deletion permanently removes the file and its library record.")
+                confirmation = st.text_input(
+                    "Type DELETE to confirm",
+                    key=f"policy_folder_delete_confirm_{folder_key}_{_safe_library_key(viewed_id)}_v4_4_79",
+                )
+                if st.button(
+                    "Delete Document",
+                    disabled=confirmation.strip().upper() != "DELETE",
+                    use_container_width=True,
+                    key=f"policy_folder_delete_{folder_key}_{_safe_library_key(viewed_id)}_v4_4_79",
+                ):
+                    try:
+                        delete_document(client, config, viewed_record)
+                        _invalidate_session_cache(records_cache_key)
+                        for state_key in (
+                            view_id_key,
+                            view_bytes_key,
+                            download_id_key,
+                            download_bytes_key,
+                        ):
+                            st.session_state.pop(state_key, None)
+                        st.session_state["iars_policy_folder_success_v4_4_69"] = (
+                            "The selected document was deleted successfully."
+                        )
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
 
 
 def render_policy_folder_library_page(
@@ -1762,27 +1884,61 @@ def render_policy_folder_library_page(
             document_title = st.text_input(
                 "Document Title",
                 placeholder="Example: Revolving Fund Policy",
-                key="document_title_Policies_Memoranda_v4_4_69",
+                key="document_title_Policies_Memoranda_v4_4_79",
             )
             document_category = st.selectbox(
                 "Document Type",
                 ["Policy", "Memorandum", "Procedure", "Guidelines", "Manual", "Circular", "Other"],
-                key="document_category_Policies_Memoranda_v4_4_69",
+                key="document_category_Policies_Memoranda_v4_4_79",
+            )
+            subject_category_choice = st.selectbox(
+                "Subject / Process Category",
+                [
+                    "Cash Advances",
+                    "Revolving Fund",
+                    "Petty Cash Fund",
+                    "Cash Sales and Collections",
+                    "Gamefowl Inventory",
+                    "Warehouse",
+                    "Motorpool",
+                    "Production",
+                    "Payroll",
+                    "Human Resources",
+                    "Information Technology",
+                    "Procurement",
+                    "Sales Operations",
+                    "Other",
+                ],
+                key="document_subject_category_Policies_Memoranda_v4_4_79",
+            )
+            custom_subject_category = (
+                st.text_input(
+                    "Specify Other Subject / Process",
+                    placeholder="Enter the applicable process or subject",
+                    key="document_subject_category_other_Policies_Memoranda_v4_4_79",
+                )
+                if subject_category_choice == "Other"
+                else ""
+            )
+            subject_category = (
+                custom_subject_category.strip()
+                if subject_category_choice == "Other"
+                else subject_category_choice
             )
         with right:
             version_label = st.text_input(
                 "Version / Revision",
                 placeholder="Example: Rev. 02 or 2026 Edition",
-                key="document_version_Policies_Memoranda_v4_4_69",
+                key="document_version_Policies_Memoranda_v4_4_79",
             )
             use_effective_date = st.checkbox(
                 "Include effective/issuance date",
-                key="document_use_date_Policies_Memoranda_v4_4_69",
+                key="document_use_date_Policies_Memoranda_v4_4_79",
             )
             effective_date = (
                 st.date_input(
                     "Effective / Issuance Date",
-                    key="document_effective_date_Policies_Memoranda_v4_4_69",
+                    key="document_effective_date_Policies_Memoranda_v4_4_79",
                 )
                 if use_effective_date
                 else None
@@ -1802,6 +1958,8 @@ def render_policy_folder_library_page(
         ):
             if uploaded_document is None:
                 st.error("Select a file before uploading.")
+            elif not subject_category.strip():
+                st.error("Enter the Subject / Process Category before uploading.")
             else:
                 selected_folder = folder_by_name.get(selected_folder_name, {})
                 try:
@@ -1818,6 +1976,7 @@ def render_policy_folder_library_page(
                         original_filename=uploaded_document.name,
                         title=document_title,
                         category=document_category,
+                        subject_category=subject_category,
                         description=description,
                         version_label=version_label,
                         effective_date=effective_date,
@@ -2398,7 +2557,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.78", page_title=page_key)
+render_app_header(auth_user, version="4.4.79", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -3260,6 +3419,7 @@ if page_key == "Audit Workpapers":
 
 
 if page_key == "Policies & Memoranda":
+    st.markdown('<div class="iars-policies-v4479-marker"></div>', unsafe_allow_html=True)
     render_document_library_page(
         collection=COLLECTION_POLICIES,
         client=document_client,
@@ -3400,7 +3560,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.78", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.79", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
