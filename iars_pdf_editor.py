@@ -455,7 +455,21 @@ export default function(component) {
   }
 
   function snapshot() {
-    pages[pageKey] = normalizedBoxes();
+    // Multiple page editors can be open at the same time. Re-read shared local
+    // storage before every save, preserve other pages, and replace only this
+    // page with its current boxes. This prevents one page from overwriting tags
+    // saved by another page in the continuous full-document editor.
+    const latestLocal = readLocalEditor();
+    const latestPages = latestLocal?.pages && typeof latestLocal.pages === 'object'
+      ? structuredClone(latestLocal.pages)
+      : {};
+    Object.entries(pages).forEach(([key, value]) => {
+      if (!Object.prototype.hasOwnProperty.call(latestPages, key)) {
+        latestPages[key] = structuredClone(value);
+      }
+    });
+    latestPages[pageKey] = normalizedBoxes();
+    pages = latestPages;
     lastSnapshot = {
       pages: structuredClone(pages),
       selected_id: selectedId,
@@ -1266,7 +1280,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v29",
+        name="iars_pdf_textbox_editor_v30",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,

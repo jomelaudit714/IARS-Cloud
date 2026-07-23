@@ -1,11 +1,22 @@
-# IARS V4.4.80 Deployment
+# IARS V4.4.81 Deployment Instructions
 
-Replace these files in the current GitHub repository:
+This patch is based on the deployed V4.4.80 application.
+
+## Replace these files in GitHub
 
 1. `app.py`
-2. `iars_document_library.py`
-3. `assets/login_left_panel.png`
+2. `iars_pdf_editor.py`
 
-Then commit the changes, reboot the Streamlit app, and refresh the browser with Ctrl + F5.
+Commit the changes, reboot the Streamlit application, then press `Ctrl + F5` in the browser.
 
-No Supabase SQL migration and no requirements update are needed. The current document-library setup already grants update and delete privileges to the service role.
+## Database and dependencies
+
+- No Supabase SQL is required.
+- No `requirements.txt` change is required.
+
+## Expected results
+
+- Policies & Memoranda: all PDF pages appear in one clear, scrollable popup.
+- Shared PDF Archive: all PDF pages appear in one clear, scrollable popup.
+- PDF Tagging: all pages appear as continuous tag canvases in one popup.
+- Generate Extraction: Clear Records is beside the Excel download button.

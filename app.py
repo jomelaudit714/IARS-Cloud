@@ -486,6 +486,107 @@ def _apply_v4479_readability_and_library_refinements() -> None:
     )
 
 
+
+def _apply_v4481_full_document_refinements() -> None:
+    """Use clear, centered, continuous-document dialogs and aligned actions."""
+    st.markdown(
+        """
+        <style>
+        .iars-policy-preview-v4481-marker,
+        .iars-archive-preview-v4481-marker,
+        .iars-pdf-tagging-v4481-marker {
+            display: none !important;
+        }
+
+        /* Policies and Shared Archive: large enough for reading, still screen-sized. */
+        div[data-testid="stDialog"]:has(.iars-policy-preview-v4481-marker)
+        div[role="dialog"],
+        div[data-testid="stDialog"]:has(.iars-archive-preview-v4481-marker)
+        div[role="dialog"] {
+            width: min(1080px, calc(100vw - 30px)) !important;
+            max-width: 1080px !important;
+            max-height: 93vh !important;
+            margin: auto !important;
+            border-radius: 18px !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+        }
+
+        /* Full-document PDF Tagging needs a little more horizontal room. */
+        div[data-testid="stDialog"]:has(.iars-pdf-tagging-v4481-marker)
+        div[role="dialog"] {
+            width: min(1180px, calc(100vw - 28px)) !important;
+            max-width: 1180px !important;
+            max-height: 94vh !important;
+            margin: auto !important;
+            border-radius: 18px !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+        }
+
+        div[data-testid="stDialog"]:has(.iars-policy-preview-v4481-marker)
+        [data-testid="stImage"],
+        div[data-testid="stDialog"]:has(.iars-archive-preview-v4481-marker)
+        [data-testid="stImage"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow: hidden !important;
+        }
+        div[data-testid="stDialog"]:has(.iars-policy-preview-v4481-marker)
+        [data-testid="stImage"] img,
+        div[data-testid="stDialog"]:has(.iars-archive-preview-v4481-marker)
+        [data-testid="stImage"] img {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            object-fit: contain !important;
+            margin: 0 auto !important;
+        }
+
+        /* Keep download labels on one line and vertically centered. */
+        div[data-testid="stDialog"]:has(.iars-policy-preview-v4481-marker)
+        [data-testid="stDownloadButton"] button,
+        div[data-testid="stDialog"]:has(.iars-archive-preview-v4481-marker)
+        [data-testid="stDownloadButton"] button,
+        div[data-testid="stDialog"]:has(.iars-pdf-tagging-v4481-marker)
+        [data-testid="stDownloadButton"] button {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            white-space: nowrap !important;
+            line-height: 1.15 !important;
+            min-height: 2.55rem !important;
+            padding: .55rem .85rem !important;
+        }
+        div[data-testid="stDialog"]:has(.iars-policy-preview-v4481-marker)
+        [data-testid="stDownloadButton"] button p,
+        div[data-testid="stDialog"]:has(.iars-archive-preview-v4481-marker)
+        [data-testid="stDownloadButton"] button p,
+        div[data-testid="stDialog"]:has(.iars-pdf-tagging-v4481-marker)
+        [data-testid="stDownloadButton"] button p {
+            margin: 0 !important;
+            line-height: 1.15 !important;
+            white-space: nowrap !important;
+        }
+
+        .iars-continuous-pdf-page-v4481 {
+            margin: .35rem 0 .2rem 0 !important;
+            font-weight: 800 !important;
+            color: #0A2342 !important;
+        }
+        .iars-continuous-pdf-separator-v4481 {
+            margin: 1rem 0 1.2rem 0 !important;
+            border: 0 !important;
+            border-top: 1px solid rgba(15, 42, 76, .18) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 EXTRACTION_WORKER_PATH = Path(__file__).with_name("iars_extract_worker.py")
 
 
@@ -597,11 +698,13 @@ def _archive_results_completed(results) -> bool:
 
 def _finish_pdf_tagging_download(
     uploader_base_key: str,
-    component_key: str,
+    component_keys,
     tagged_state_key: str,
 ) -> None:
-    """Clear the completed PDF Tagging upload after its tagged PDF is downloaded."""
-    _reset_file_uploader(uploader_base_key, component_key, tagged_state_key)
+    """Clear the completed full-document PDF Tagging session after download."""
+    keys = tuple(component_keys or ())
+    _reset_file_uploader(uploader_base_key, *keys, tagged_state_key)
+    st.session_state.pop(PDF_TAGGING_DIALOG_OPEN_KEY, None)
 
 
 def _render_saved_extraction_output(
@@ -613,6 +716,12 @@ def _render_saved_extraction_output(
     master_sheets,
     auditors_df,
 ) -> None:
+    clear_flash = st.session_state.pop(
+        "iars_extraction_clear_flash_v4_4_81", ""
+    )
+    if clear_flash:
+        st.success(clear_flash)
+
     payload = st.session_state.get("iars_last_extraction_payload_v4_4_78")
     if not isinstance(payload, dict):
         return
@@ -658,13 +767,31 @@ def _render_saved_extraction_output(
             master_sheets=master_sheets,
             auditors_df=auditors_df,
         )
-        st.download_button(
-            "Download Consolidated Excel Output",
-            data=excel_bytes(edited_result),
-            file_name="audit_extraction_consolidated.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key=f"iars_extraction_download_v4_4_78_{result_version}",
-        )
+        download_col, clear_col = st.columns([3, 1])
+        with download_col:
+            st.download_button(
+                "Download Consolidated Excel Output",
+                data=excel_bytes(edited_result),
+                file_name="audit_extraction_consolidated.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"iars_extraction_download_v4_4_81_{result_version}",
+            )
+        with clear_col:
+            if st.button(
+                "Clear Records",
+                use_container_width=True,
+                key=f"iars_extraction_clear_records_v4_4_81_{result_version}",
+            ):
+                st.session_state.pop(
+                    f"iars_extraction_result_editor_v4_4_78_{result_version}",
+                    None,
+                )
+                st.session_state.pop("iars_last_extraction_payload_v4_4_78", None)
+                st.session_state[
+                    "iars_extraction_clear_flash_v4_4_81"
+                ] = "Generated records were cleared successfully."
+                st.rerun()
 
     if archive_results:
         st.subheader("Archive Results")
@@ -695,6 +822,7 @@ st.set_page_config(
 apply_iars_theme()
 _apply_v4477_layout_refinements()
 _apply_v4479_readability_and_library_refinements()
+_apply_v4481_full_document_refinements()
 # V4.4.19: do not install the navigation loading veil. Streamlit will still rerun on clicks,
 # but users will no longer see the "Loading / Please wait" card on every module switch.
 
@@ -741,11 +869,70 @@ def render_pdf_page(pdf_bytes: bytes, page_no: int, zoom: float = 1.4):
         return None, None, None
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc.load_page(page_no)
-    mat = fitz.Matrix(zoom, zoom)
-    pix = page.get_pixmap(matrix=mat, alpha=False)
-    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    return img, page.rect.width, page.rect.height
+    try:
+        page = doc.load_page(page_no)
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        return img, page.rect.width, page.rect.height
+    finally:
+        doc.close()
+
+
+
+def render_pdf_document_continuous(
+    pdf_bytes: bytes,
+    *,
+    zoom: float = 1.75,
+    page_label_prefix: str = "Page",
+) -> int:
+    """Render every PDF page in sequence for clear, continuous scrolling."""
+    try:
+        import fitz
+        from PIL import Image
+    except Exception as exc:
+        st.warning(f"PDF preview dependencies are unavailable: {exc}")
+        return 0
+
+    document = None
+    try:
+        document = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page_count = len(document)
+        if page_count <= 0:
+            st.warning("The selected PDF contains no readable pages.")
+            return 0
+
+        matrix = fitz.Matrix(float(zoom), float(zoom))
+        for page_index in range(page_count):
+            page = document.load_page(page_index)
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            image = Image.frombytes(
+                "RGB",
+                [pixmap.width, pixmap.height],
+                pixmap.samples,
+            )
+            st.markdown(
+                '<div class="iars-continuous-pdf-page-v4481">'
+                f"{page_label_prefix} {page_index + 1} of {page_count}"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+            st.image(image, use_container_width=True)
+            if page_index < page_count - 1:
+                st.markdown(
+                    '<hr class="iars-continuous-pdf-separator-v4481">',
+                    unsafe_allow_html=True,
+                )
+        return page_count
+    except Exception as exc:
+        st.warning(f"PDF preview is unavailable: {exc}")
+        return 0
+    finally:
+        if document is not None:
+            try:
+                document.close()
+            except Exception:
+                pass
 
 
 def draw_preview_box(img, x_percent, y_percent, box_width_px=220, box_height_px=32):
@@ -1459,37 +1646,11 @@ def _render_policy_document_preview(
     extension = str(selected_record.get("file_extension", "") or "").lower()
 
     if extension == "pdf":
-        try:
-            import fitz
-
-            pdf_document = fitz.open(stream=selected_bytes, filetype="pdf")
-            page_count = len(pdf_document)
-            if page_count <= 0:
-                st.warning("The selected PDF contains no readable pages.")
-                return
-            preview_page = st.number_input(
-                "Page to read",
-                min_value=1,
-                max_value=page_count,
-                value=1,
-                step=1,
-                key=f"{key_prefix}_pdf_page",
-            )
-            preview_image, _, _ = render_pdf_page(
-                selected_bytes,
-                int(preview_page) - 1,
-                zoom=1.15,
-            )
-            if preview_image is not None:
-                st.image(
-                    preview_image,
-                    caption=f"Page {int(preview_page)} of {page_count}",
-                    use_container_width=True,
-                )
-            else:
-                st.warning("The selected PDF page could not be rendered.")
-        except Exception as exc:
-            st.warning(f"PDF preview is unavailable: {exc}")
+        render_pdf_document_continuous(
+            selected_bytes,
+            zoom=1.75,
+            page_label_prefix="Page",
+        )
         return
 
     if extension == "docx":
@@ -1658,7 +1819,7 @@ def _parse_optional_date(value: object) -> date | None:
 
 @st.dialog(
     "Policy / Memorandum Preview",
-    width="medium",
+    width="large",
     on_dismiss=_return_policy_preview_to_folder,
 )
 def render_policy_document_preview_dialog(
@@ -1671,7 +1832,7 @@ def render_policy_document_preview_dialog(
     records_cache_key: str,
 ) -> None:
     """Open one document in a stable, centered, screen-sized preview dialog."""
-    st.markdown('<div class="iars-policy-preview-v4480-marker"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="iars-policy-preview-v4481-marker"></div>', unsafe_allow_html=True)
 
     success_message = st.session_state.pop(
         "iars_policy_preview_success_v4_4_80", ""
@@ -1703,7 +1864,7 @@ def render_policy_document_preview_dialog(
         st.caption(description)
 
     st.download_button(
-        "⬇️ Download Original Document",
+        "Download Original Document",
         data=selected_bytes,
         file_name=str(selected_record.get("original_filename", "document")),
         mime=str(selected_record.get("mime_type", "application/octet-stream")),
@@ -1954,7 +2115,7 @@ def render_policy_folder_documents_dialog(
         st.info("No policy or memorandum title matched the search.")
         return
 
-    header_cols = st.columns([3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .62])
+    header_cols = st.columns([3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .78])
     for column, label in zip(
         header_cols,
         [
@@ -1965,7 +2126,7 @@ def render_policy_folder_documents_dialog(
             "Effective Date",
             "Uploaded By",
             "View",
-            "Download",
+            "⬇️",
         ],
     ):
         column.markdown(f"**{label}**")
@@ -1979,7 +2140,7 @@ def render_policy_folder_documents_dialog(
         record_key = _safe_library_key(record_id or f"row_{row_index}")
         records_by_id[record_id] = record
         row_cols = st.columns(
-            [3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .62],
+            [3.2, 1.15, 1.55, .85, 1.05, 1.05, .55, .78],
             vertical_alignment="center",
         )
         title = str(record.get("title") or record.get("original_filename") or "Untitled")
@@ -2031,12 +2192,7 @@ def render_policy_folder_documents_dialog(
     prepared_download_bytes = st.session_state.get(download_bytes_key)
     if prepared_download_record and prepared_download_bytes:
         st.download_button(
-            "⬇️ Download "
-            + str(
-                prepared_download_record.get("title")
-                or prepared_download_record.get("original_filename")
-                or "Selected Document"
-            ),
+            "Download Selected Document",
             data=prepared_download_bytes,
             file_name=str(
                 prepared_download_record.get("original_filename", "document")
@@ -2839,6 +2995,399 @@ if not auditor_options:
     auditor_options = sorted({_clean_option(name) for name in AUDITORS if _clean_option(name)}, key=str.casefold)
 
 
+
+ARCHIVE_PREVIEW_OPEN_KEY = "iars_archive_preview_open_v4_4_81"
+ARCHIVE_PREVIEW_RECORD_ID_KEY = "iars_archive_preview_record_id_v4_4_81"
+ARCHIVE_PREVIEW_BYTES_KEY = "iars_archive_preview_bytes_v4_4_81"
+PDF_TAGGING_DIALOG_OPEN_KEY = "iars_pdf_tagging_dialog_open_v4_4_81"
+
+
+def _dismiss_archive_preview_dialog() -> None:
+    st.session_state.pop(ARCHIVE_PREVIEW_OPEN_KEY, None)
+    st.session_state.pop(ARCHIVE_PREVIEW_RECORD_ID_KEY, None)
+    st.session_state.pop(ARCHIVE_PREVIEW_BYTES_KEY, None)
+
+
+def _dismiss_pdf_tagging_dialog() -> None:
+    st.session_state.pop(PDF_TAGGING_DIALOG_OPEN_KEY, None)
+
+
+@st.dialog(
+    "Archived PDF Preview",
+    width="large",
+    on_dismiss=_dismiss_archive_preview_dialog,
+)
+def render_archive_pdf_preview_dialog(
+    selected_record: dict,
+    selected_bytes: bytes,
+    archive_client,
+    archive_config: ArchiveConfig,
+    *,
+    admin: bool,
+) -> None:
+    """Show all pages of an archived PDF in one clear, scrollable dialog."""
+    st.markdown(
+        '<div class="iars-archive-preview-v4481-marker"></div>',
+        unsafe_allow_html=True,
+    )
+    title = str(
+        selected_record.get("original_filename")
+        or selected_record.get("audit_reference")
+        or "Archived PDF"
+    )
+    st.markdown(f"### {title}")
+    meta_left, meta_middle, meta_right = st.columns(3)
+    meta_left.markdown(
+        f"**Audit Reference:** {selected_record.get('audit_reference', '') or '—'}"
+    )
+    meta_middle.markdown(
+        f"**Auditee:** {selected_record.get('auditee_name', '') or '—'}"
+    )
+    meta_right.markdown(
+        f"**Type:** {selected_record.get('document_type', '') or '—'}"
+    )
+
+    st.download_button(
+        "Download Selected PDF",
+        data=selected_bytes,
+        file_name=title,
+        mime="application/pdf",
+        use_container_width=True,
+        key=(
+            "archive_dialog_download_v4_4_81_"
+            f"{_safe_library_key(selected_record.get('id'))}"
+        ),
+    )
+    render_pdf_document_continuous(
+        selected_bytes,
+        zoom=1.75,
+        page_label_prefix="Page",
+    )
+
+    if admin:
+        st.divider()
+        with st.expander("Delete Archived PDF — Administrator Only", expanded=False):
+            st.warning(
+                "Deleting permanently removes the private file and its archive record."
+            )
+            confirmation = st.text_input(
+                "Type DELETE to confirm",
+                key=(
+                    "archive_dialog_delete_confirm_v4_4_81_"
+                    f"{_safe_library_key(selected_record.get('id'))}"
+                ),
+            )
+            if st.button(
+                "Delete Archived PDF",
+                type="primary",
+                disabled=confirmation.strip().upper() != "DELETE",
+                use_container_width=True,
+                key=(
+                    "archive_dialog_delete_v4_4_81_"
+                    f"{_safe_library_key(selected_record.get('id'))}"
+                ),
+            ):
+                try:
+                    delete_archived_pdf(
+                        archive_client,
+                        archive_config,
+                        selected_record,
+                    )
+                    _invalidate_session_cache(
+                        "iars_archive_records_cache_v4_4_19",
+                        "iars_archive_duplicate_check_cache_v4_4_19",
+                    )
+                    _dismiss_archive_preview_dialog()
+                    st.session_state[
+                        "iars_archive_dialog_flash_v4_4_81"
+                    ] = "Archived PDF deleted successfully."
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
+
+@st.dialog(
+    "PDF Tagging — Full Document",
+    width="large",
+    on_dismiss=_dismiss_pdf_tagging_dialog,
+)
+def render_pdf_tagging_full_document_dialog(
+    *,
+    pdf_bytes: bytes,
+    filename: str,
+    file_id: str,
+    page_count: int,
+    tag_uploader_base: str,
+    archive_ready: bool,
+    archive_unlocked: bool,
+    archive_client,
+    archive_config: ArchiveConfig,
+    employee_records,
+    employee_options,
+    auditor_options,
+) -> None:
+    """Render every PDF page as a continuous, independently editable tag canvas."""
+    st.markdown(
+        '<div class="iars-pdf-tagging-v4481-marker"></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(f"### {filename}")
+    st.info(
+        "Scroll through all pages. Double-right-click a page to add a textbox, "
+        "then type, move, resize, or change the exact font size. Changes save "
+        "automatically after you pause."
+    )
+
+    reset_key = f"pdf_editor_reset_{file_id}"
+    reset_version = int(st.session_state.get(reset_key, 0) or 0)
+    storage_key = f"iars_pdf_editor_{file_id}_v30_reset_{reset_version}"
+    component_keys: list[str] = []
+    merged_pages: dict[str, list] = {}
+
+    for page_number in range(1, page_count + 1):
+        st.markdown(f"#### Page {page_number} of {page_count}")
+        preview_img, _, _ = render_pdf_page(
+            pdf_bytes,
+            page_number - 1,
+            zoom=1.7,
+        )
+        component_key = (
+            f"iars_pdf_editor_{file_id}_page_{page_number}_"
+            f"v30_reset_{reset_version}"
+        )
+        component_keys.append(component_key)
+        if preview_img is None:
+            st.error(f"Unable to render page {page_number}.")
+            editor_result = st.session_state.get(component_key)
+        else:
+            editor_height = max(
+                720,
+                min(
+                    1120,
+                    int((preview_img.height / max(preview_img.width, 1)) * 920) + 190,
+                ),
+            )
+            editor_result = pdf_textbox_editor(
+                image_data=image_to_data_uri(preview_img),
+                page_number=page_number,
+                storage_key=storage_key,
+                key=component_key,
+                height=editor_height,
+            )
+
+        for state_candidate in (
+            editor_result,
+            st.session_state.get(component_key),
+        ):
+            current_editor = component_editor_value(state_candidate)
+            pages = current_editor.get("pages", {}) if isinstance(current_editor, dict) else {}
+            if isinstance(pages, dict):
+                for page_key, page_boxes in pages.items():
+                    if isinstance(page_boxes, list):
+                        merged_pages[str(page_key)] = page_boxes
+
+        page_boxes = merged_pages.get(str(page_number), [])
+        nonempty_boxes = [
+            box
+            for box in page_boxes
+            if str((box or {}).get("text", "") or "").strip()
+        ]
+        st.caption(
+            f"Page {page_number}: {len(page_boxes)} textbox(es), "
+            f"{len(nonempty_boxes)} containing text."
+        )
+        if page_number < page_count:
+            st.divider()
+
+    all_tag_rows: list[dict] = []
+    for page_number_text, page_boxes in merged_pages.items():
+        try:
+            page_number = int(page_number_text)
+        except (TypeError, ValueError):
+            continue
+        if page_number < 1 or page_number > page_count or not isinstance(page_boxes, list):
+            continue
+        for box in page_boxes:
+            label_text = " ".join(str((box or {}).get("text", "") or "").split())
+            if not label_text:
+                continue
+            all_tag_rows.append(
+                {
+                    "Page": page_number,
+                    "Label Text": label_text,
+                    "X %": float((box or {}).get("x_pct", 0)),
+                    "Y %": float((box or {}).get("y_pct", 0)),
+                    "Width %": float((box or {}).get("w_pct", 30)),
+                    "Height %": float((box or {}).get("h_pct", 6)),
+                    "Font Size": float((box or {}).get("font_size", 11)),
+                    "Style": str((box or {}).get("style", "Box")),
+                }
+            )
+    all_tag_rows.sort(key=lambda row: (row["Page"], row["Y %"], row["X %"]))
+
+    st.divider()
+    if all_tag_rows:
+        with st.expander(f"Review saved textbox data ({len(all_tag_rows)})"):
+            st.dataframe(
+                pd.DataFrame(all_tag_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+    else:
+        st.info("No completed textbox tags yet.")
+
+    tagged_state_key = f"tagged_pdf_{file_id}"
+    action_left, action_middle, action_right = st.columns(3)
+    with action_left:
+        if st.button(
+            "Generate Tagged PDF",
+            type="primary",
+            disabled=not all_tag_rows,
+            use_container_width=True,
+            key=f"pdf_tagging_generate_v4_4_81_{file_id}",
+        ):
+            try:
+                st.session_state[tagged_state_key] = stamp_pdf_with_tags(
+                    pdf_bytes,
+                    all_tag_rows,
+                )
+                st.success("Tagged PDF generated successfully.")
+            except Exception as exc:
+                st.error(f"Unable to generate tagged PDF: {exc}")
+
+    with action_middle:
+        tagged_pdf = st.session_state.get(tagged_state_key)
+        if tagged_pdf:
+            st.download_button(
+                "Download Tagged PDF",
+                data=tagged_pdf,
+                file_name=f"tagged_{filename}",
+                mime="application/pdf",
+                use_container_width=True,
+                on_click=_finish_pdf_tagging_download,
+                args=(
+                    tag_uploader_base,
+                    tuple(component_keys),
+                    tagged_state_key,
+                ),
+                key=f"pdf_tagging_download_v4_4_81_{file_id}",
+            )
+
+    with action_right:
+        if st.button(
+            "Clear All PDF Tags",
+            use_container_width=True,
+            key=f"pdf_tagging_clear_v4_4_81_{file_id}",
+        ):
+            st.session_state[reset_key] = reset_version + 1
+            for component_key in component_keys:
+                st.session_state.pop(component_key, None)
+            st.session_state.pop(tagged_state_key, None)
+            st.rerun()
+
+    with st.expander("Save original/tagged PDF to permanent archive"):
+        if not archive_ready:
+            render_archive_setup_notice()
+        elif not archive_unlocked:
+            st.info("Unlock the archive before saving files.")
+        else:
+            archive_defaults = cached_archive_metadata(pdf_bytes, filename)
+            ar_ref = st.text_input(
+                "Audit Reference",
+                value=archive_defaults.get("audit_reference", ""),
+                key=f"tag_archive_ref_v4_4_81_{file_id}",
+            )
+            tag_default_auditees = resolve_auditee_defaults(
+                archive_defaults.get("auditee_name", ""),
+                employee_records,
+            )
+            ar_names = render_auditee_selector(
+                "Auditee Name(s) — Master Data Employees",
+                f"tag_archive_name_v4_4_81_{file_id}",
+                employee_options,
+                tag_default_auditees,
+            )
+            ar_name = "; ".join(ar_names)
+            ar_by = render_auditor_selector(
+                "Uploaded By",
+                f"tag_archive_by_v4_4_81_{file_id}",
+                auditor_options,
+            )
+            tagged_pdf = st.session_state.get(tagged_state_key)
+            ar_versions = st.multiselect(
+                "PDF version to archive",
+                ["Original", "Tagged"],
+                default=["Original"] + (["Tagged"] if tagged_pdf else []),
+                key=f"tag_archive_versions_v4_4_81_{file_id}",
+            )
+            if st.button(
+                "Save Selected PDF Version(s)",
+                use_container_width=True,
+                key=f"tag_archive_save_v4_4_81_{file_id}",
+            ):
+                if not ar_by.strip():
+                    st.error("Uploaded By is required.")
+                elif not ar_versions:
+                    st.error("Select at least one PDF version.")
+                else:
+                    archive_results = []
+                    if "Original" in ar_versions:
+                        archive_results.append(
+                            archive_pdf_with_feedback(
+                                archive_client,
+                                archive_config,
+                                pdf_bytes=pdf_bytes,
+                                filename=filename,
+                                audit_reference=ar_ref,
+                                auditee_name=ar_name,
+                                document_type="Original",
+                                uploaded_by=ar_by,
+                            )
+                        )
+                    if "Tagged" in ar_versions:
+                        if tagged_pdf:
+                            archive_results.append(
+                                archive_pdf_with_feedback(
+                                    archive_client,
+                                    archive_config,
+                                    pdf_bytes=tagged_pdf,
+                                    filename=f"tagged_{filename}",
+                                    audit_reference=ar_ref,
+                                    auditee_name=ar_name,
+                                    document_type="Tagged",
+                                    uploaded_by=ar_by,
+                                )
+                            )
+                        else:
+                            archive_results.append(
+                                {
+                                    "Status": "Skipped",
+                                    "File": f"tagged_{filename}",
+                                    "Details": "Generate the tagged PDF first.",
+                                }
+                            )
+                    if _archive_results_completed(archive_results):
+                        st.session_state["iars_tag_archive_flash_v4_4_78"] = (
+                            "Selected PDF version(s) were processed successfully. "
+                            "The upload field was cleared."
+                        )
+                        st.session_state[
+                            "iars_tag_archive_last_results_v4_4_78"
+                        ] = archive_results
+                        _reset_file_uploader(
+                            tag_uploader_base,
+                            *component_keys,
+                            tagged_state_key,
+                        )
+                        _dismiss_pdf_tagging_dialog()
+                        st.rerun()
+                    st.dataframe(
+                        pd.DataFrame(archive_results),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+
 def _clear_avatar_dialog_state_on_navigation() -> None:
     for key in [
         "iars_avatar_view_dialog_open",
@@ -2935,7 +3484,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.80", page_title=page_key)
+render_app_header(auth_user, version="4.4.81", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -3052,20 +3601,30 @@ if page_key == "Weekly Itinerary":
 
 
 if page_key == "PDF Tagging":
-    render_stepper(["Upload PDF", "Add & Position Tags", "Review", "Generate / Archive"], active_index=0)
+    render_stepper(
+        ["Upload PDF", "Add & Position Tags", "Review", "Generate / Archive"],
+        active_index=0,
+    )
     st.caption(
-        "Double-right-click the PDF to add a textbox. Click inside to type, "
-        "drag the move tab to reposition, and drag the blue handles to resize. "
-        "Use Font size for the exact text size. Changes save automatically after you pause or move to another control."
+        "Upload one PDF, then use the full-document popup to tag every page "
+        "continuously without changing page selectors."
     )
 
     tag_uploader_base = "tag_pdf_upload_v4_4_78"
-    tag_archive_flash = st.session_state.pop("iars_tag_archive_flash_v4_4_78", "")
-    tag_archive_last_results = st.session_state.pop("iars_tag_archive_last_results_v4_4_78", None)
+    tag_archive_flash = st.session_state.pop(
+        "iars_tag_archive_flash_v4_4_78", ""
+    )
+    tag_archive_last_results = st.session_state.pop(
+        "iars_tag_archive_last_results_v4_4_78", None
+    )
     if tag_archive_flash:
         st.success(tag_archive_flash)
     if tag_archive_last_results:
-        st.dataframe(pd.DataFrame(tag_archive_last_results), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(tag_archive_last_results),
+            use_container_width=True,
+            hide_index=True,
+        )
 
     tag_pdf = st.file_uploader(
         "Upload PDF to tag",
@@ -3076,224 +3635,65 @@ if page_key == "PDF Tagging":
     if tag_pdf is not None:
         pdf_bytes = tag_pdf.getvalue()
         file_id = editor_file_id(tag_pdf.name, pdf_bytes)
-
         try:
             import fitz
 
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            page_count = len(doc)
+            document = fitz.open(stream=pdf_bytes, filetype="pdf")
+            page_count = len(document)
+            document.close()
         except Exception as exc:
             st.error(f"Unable to open PDF: {exc}")
             page_count = 0
 
         if page_count:
-            reset_key = f"pdf_editor_reset_{file_id}"
-            reset_version = int(st.session_state.get(reset_key, 0))
-            component_key = f"iars_pdf_editor_{file_id}_v29_reset_{reset_version}"
-            storage_key = f"iars_pdf_editor_{file_id}_v26_reset_{reset_version}"
+            signature_key = "iars_pdf_tagging_signature_v4_4_81"
+            if st.session_state.get(signature_key) != file_id:
+                st.session_state[signature_key] = file_id
+                st.session_state[PDF_TAGGING_DIALOG_OPEN_KEY] = True
 
-            controls_left, controls_right = st.columns([1, 2])
-            with controls_left:
-                preview_page = st.number_input(
-                    "Page to tag",
-                    min_value=1,
-                    max_value=page_count,
-                    value=1,
-                    step=1,
-                    key=f"editor_page_{file_id}",
-                )
-            with controls_right:
+            open_col, info_col = st.columns([1, 2])
+            with open_col:
+                if st.button(
+                    "Open Full Document Tagging",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"open_full_pdf_tagging_v4_4_81_{file_id}",
+                ):
+                    st.session_state[PDF_TAGGING_DIALOG_OPEN_KEY] = True
+            with info_col:
                 st.info(
-                    "The first right-click marks the location. Right-click the same spot again "
-                    "to create a textbox. Font size remains exact; use Fit text when you want the box to match the label. "
-                    "Edits save automatically without a manual save button."
+                    f"{page_count} page(s) ready. All pages will appear in one "
+                    "scrollable tagging popup."
                 )
 
-            preview_img, page_width, page_height = render_pdf_page(
-                pdf_bytes,
-                int(preview_page) - 1,
-                zoom=1.7,
-            )
-
-            if preview_img is None:
-                st.error("Unable to render this PDF page.")
-                current_editor = component_editor_value(st.session_state.get(component_key))
-            else:
-                editor_result = pdf_textbox_editor(
-                    image_data=image_to_data_uri(preview_img),
-                    page_number=int(preview_page),
-                    storage_key=storage_key,
-                    key=component_key,
-                    height=940,
+            if st.session_state.get(PDF_TAGGING_DIALOG_OPEN_KEY):
+                render_pdf_tagging_full_document_dialog(
+                    pdf_bytes=pdf_bytes,
+                    filename=tag_pdf.name,
+                    file_id=file_id,
+                    page_count=page_count,
+                    tag_uploader_base=tag_uploader_base,
+                    archive_ready=archive_ready,
+                    archive_unlocked=archive_unlocked,
+                    archive_client=archive_client,
+                    archive_config=archive_config,
+                    employee_records=employee_records,
+                    employee_options=employee_options,
+                    auditor_options=auditor_options,
                 )
-
-                current_editor = component_editor_value(editor_result)
-                pages = current_editor.get("pages", {})
-                boxes = pages.get(str(int(preview_page)), []) if isinstance(pages, dict) else []
-                nonempty_boxes = [box for box in boxes if str(box.get("text", "")).strip()]
-                st.caption(
-                    f"Page {int(preview_page)}: {len(boxes)} textbox(es), "
-                    f"{len(nonempty_boxes)} containing text."
-                )
-
-            if not current_editor.get("pages"):
-                current_editor = component_editor_value(st.session_state.get(component_key))
-            all_pages = current_editor.get("pages", {}) if isinstance(current_editor, dict) else {}
-
-            all_tag_rows = []
-            if isinstance(all_pages, dict):
-                for page_number_text, page_boxes in all_pages.items():
-                    try:
-                        page_number = int(page_number_text)
-                    except (TypeError, ValueError):
-                        continue
-                    if page_number < 1 or page_number > page_count or not isinstance(page_boxes, list):
-                        continue
-                    for box in page_boxes:
-                        label_text = " ".join(str(box.get("text", "") or "").split())
-                        if not label_text:
-                            continue
-                        all_tag_rows.append(
-                            {
-                                "Page": page_number,
-                                "Label Text": label_text,
-                                "X %": float(box.get("x_pct", 0)),
-                                "Y %": float(box.get("y_pct", 0)),
-                                "Width %": float(box.get("w_pct", 30)),
-                                "Height %": float(box.get("h_pct", 6)),
-                                "Font Size": float(box.get("font_size", 11)),
-                                "Style": str(box.get("style", "Box")),
-                            }
-                        )
-
-            all_tag_rows.sort(key=lambda row: (row["Page"], row["Y %"], row["X %"]))
-
-            if all_tag_rows:
-                with st.expander(f"Review saved textbox data ({len(all_tag_rows)})"):
-                    st.dataframe(pd.DataFrame(all_tag_rows), use_container_width=True, hide_index=True)
-            else:
-                st.info("No completed textbox tags yet. You may proceed without tags or add them in the editor.")
-
-            action_left, action_middle, action_right = st.columns([1, 1, 1])
-            with action_left:
-                if st.button("Generate Tagged PDF", type="primary", disabled=not all_tag_rows):
-                    try:
-                        tagged_bytes = stamp_pdf_with_tags(pdf_bytes, all_tag_rows)
-                        st.session_state[f"tagged_pdf_{file_id}"] = tagged_bytes
-                        st.success("Tagged PDF generated successfully.")
-                    except Exception as exc:
-                        st.error(f"Unable to generate tagged PDF: {exc}")
-
-            with action_middle:
-                tagged_pdf = st.session_state.get(f"tagged_pdf_{file_id}")
-                if tagged_pdf:
-                    st.download_button(
-                        "Download Tagged PDF",
-                        data=tagged_pdf,
-                        file_name=f"tagged_{tag_pdf.name}",
-                        mime="application/pdf",
-                        on_click=_finish_pdf_tagging_download,
-                        args=(
-                            tag_uploader_base,
-                            component_key,
-                            f"tagged_pdf_{file_id}",
-                        ),
-                    )
-
-            with action_right:
-                if st.button("Clear All PDF Tags"):
-                    st.session_state[reset_key] = reset_version + 1
-                    st.session_state.pop(component_key, None)
-                    st.session_state.pop(f"tagged_pdf_{file_id}", None)
-                    st.rerun()
-
-            with st.expander("Save original/tagged PDF to permanent archive"):
-                if not archive_ready:
-                    render_archive_setup_notice()
-                elif not archive_unlocked:
-                    st.info("Unlock the archive in the Saved PDFs tab before saving files.")
-                else:
-                    archive_defaults = cached_archive_metadata(pdf_bytes, tag_pdf.name)
-                    ar_ref = st.text_input(
-                        "Audit Reference",
-                        value=archive_defaults.get("audit_reference", ""),
-                        key=f"tag_archive_ref_{file_id}",
-                    )
-                    tag_default_auditees = resolve_auditee_defaults(
-                        archive_defaults.get("auditee_name", ""), employee_records
-                    )
-                    ar_names = render_auditee_selector(
-                        "Auditee Name(s) — Master Data Employees",
-                        f"tag_archive_name_{file_id}",
-                        employee_options,
-                        tag_default_auditees,
-                    )
-                    ar_name = "; ".join(ar_names)
-                    ar_by = render_auditor_selector(
-                        "Uploaded By",
-                        f"tag_archive_by_{file_id}",
-                        auditor_options,
-                    )
-                    ar_versions = st.multiselect(
-                        "PDF version to archive",
-                        ["Original", "Tagged"],
-                        default=["Original"] + (["Tagged"] if st.session_state.get(f"tagged_pdf_{file_id}") else []),
-                        key=f"tag_archive_versions_{file_id}",
-                    )
-                    if st.button("Save Selected PDF Version(s)", key=f"tag_archive_save_{file_id}"):
-                        if not ar_by.strip():
-                            st.error("Uploaded By is required.")
-                        elif not ar_versions:
-                            st.error("Select at least one PDF version.")
-                        else:
-                            archive_results = []
-                            if "Original" in ar_versions:
-                                archive_results.append(
-                                    archive_pdf_with_feedback(
-                                        archive_client,
-                                        archive_config,
-                                        pdf_bytes=pdf_bytes,
-                                        filename=tag_pdf.name,
-                                        audit_reference=ar_ref,
-                                        auditee_name=ar_name,
-                                        document_type="Original",
-                                        uploaded_by=ar_by,
-                                    )
-                                )
-                            if "Tagged" in ar_versions:
-                                tagged_data = st.session_state.get(f"tagged_pdf_{file_id}")
-                                if tagged_data:
-                                    archive_results.append(
-                                        archive_pdf_with_feedback(
-                                            archive_client,
-                                            archive_config,
-                                            pdf_bytes=tagged_data,
-                                            filename=f"tagged_{tag_pdf.name}",
-                                            audit_reference=ar_ref,
-                                            auditee_name=ar_name,
-                                            document_type="Tagged",
-                                            uploaded_by=ar_by,
-                                        )
-                                    )
-                                else:
-                                    archive_results.append({"Status": "Skipped", "File": f"tagged_{tag_pdf.name}", "Details": "Generate the tagged PDF first."})
-                            if _archive_results_completed(archive_results):
-                                st.session_state["iars_tag_archive_flash_v4_4_78"] = (
-                                    "Selected PDF version(s) were processed successfully. The upload field was cleared."
-                                )
-                                st.session_state["iars_tag_archive_last_results_v4_4_78"] = archive_results
-                                _reset_file_uploader(
-                                    tag_uploader_base,
-                                    component_key,
-                                    f"tagged_pdf_{file_id}",
-                                )
-                                st.rerun()
-                            st.dataframe(pd.DataFrame(archive_results), use_container_width=True, hide_index=True)
     else:
-        st.info("Upload a PDF only when tags are needed. Otherwise, use Generate Extraction directly.")
+        st.info(
+            "Upload a PDF only when tags are needed. Otherwise, use Generate "
+            "Extraction directly."
+        )
 
 
 if page_key == "Shared PDF Archive":
+    archive_dialog_flash = st.session_state.pop(
+        "iars_archive_dialog_flash_v4_4_81", ""
+    )
+    if archive_dialog_flash:
+        st.success(archive_dialog_flash)
     render_library_note(
         "Controlled shared access",
         "All signed-in auditors may view and download archived PDFs. Files are compressed automatically; deletion remains administrator-only.",
@@ -3505,73 +3905,64 @@ if page_key == "Shared PDF Archive":
                         labels.append(label)
                         record_by_label[label] = record
 
-                    selected_label = st.selectbox("Select a PDF to preview or download", labels)
+                    selected_label = st.selectbox(
+                        "Select a PDF to preview or download",
+                        labels,
+                    )
                     selected_record = record_by_label[selected_label]
 
-                    if st.button("Load Selected PDF"):
+                    if st.button(
+                        "View Full Archived PDF",
+                        type="primary",
+                        use_container_width=True,
+                        key=(
+                            "archive_open_full_preview_v4_4_81_"
+                            f"{_safe_library_key(selected_record.get('id'))}"
+                        ),
+                    ):
                         try:
                             selected_bytes = download_archived_pdf(
                                 archive_client,
                                 archive_config,
                                 selected_record.get("storage_path", ""),
                             )
-                            st.session_state["archive_preview_bytes"] = selected_bytes
-                            st.session_state["archive_preview_record_id"] = selected_record.get("id")
+                            st.session_state[ARCHIVE_PREVIEW_RECORD_ID_KEY] = (
+                                selected_record.get("id")
+                            )
+                            st.session_state[ARCHIVE_PREVIEW_BYTES_KEY] = selected_bytes
+                            st.session_state[ARCHIVE_PREVIEW_OPEN_KEY] = True
+                            st.rerun()
                         except Exception as exc:
                             st.error(str(exc))
 
-                    selected_bytes = None
-                    if st.session_state.get("archive_preview_record_id") == selected_record.get("id"):
-                        selected_bytes = st.session_state.get("archive_preview_bytes")
-
-                    if selected_bytes:
-                        st.download_button(
-                            "Download Selected PDF",
-                            data=selected_bytes,
-                            file_name=selected_record.get("original_filename", "archived.pdf"),
-                            mime="application/pdf",
+                    if st.session_state.get(ARCHIVE_PREVIEW_OPEN_KEY):
+                        preview_record_id = str(
+                            st.session_state.get(ARCHIVE_PREVIEW_RECORD_ID_KEY, "")
+                            or ""
                         )
-                        try:
-                            import fitz
-
-                            archive_doc = fitz.open(stream=selected_bytes, filetype="pdf")
-                            preview_page = st.number_input(
-                                "Preview Page",
-                                min_value=1,
-                                max_value=len(archive_doc),
-                                value=1,
-                                step=1,
-                                key=f"archive_preview_page_{selected_record.get('id')}",
+                        preview_record = next(
+                            (
+                                record
+                                for record in records
+                                if str(record.get("id", "") or "")
+                                == preview_record_id
+                            ),
+                            None,
+                        )
+                        preview_bytes = st.session_state.get(
+                            ARCHIVE_PREVIEW_BYTES_KEY
+                        )
+                        if preview_record and preview_bytes:
+                            render_archive_pdf_preview_dialog(
+                                preview_record,
+                                preview_bytes,
+                                archive_client,
+                                archive_config,
+                                admin=is_admin_user(auth_user),
                             )
-                            preview_image, _, _ = render_pdf_page(selected_bytes, int(preview_page) - 1, zoom=1.35)
-                            if preview_image is not None:
-                                st.image(preview_image, caption=f"Page {preview_page}", use_container_width=True)
-                        except Exception as exc:
-                            st.warning(f"PDF preview unavailable: {exc}")
+                        else:
+                            _dismiss_archive_preview_dialog()
 
-                    if is_admin_user(auth_user):
-                        st.markdown("#### Delete Selected PDF — Administrator Only")
-                        st.warning("Deleting removes both the private Storage object and its archive metadata.")
-                        confirmation = st.text_input(
-                            "Type DELETE to confirm",
-                            key=f"delete_confirm_{selected_record.get('id')}",
-                        )
-                        if st.button(
-                            "Delete Selected PDF",
-                            type="primary",
-                            disabled=confirmation.strip().upper() != "DELETE",
-                        ):
-                            try:
-                                delete_archived_pdf(archive_client, archive_config, selected_record)
-                                _invalidate_session_cache("iars_archive_records_cache_v4_4_19", "iars_archive_duplicate_check_cache_v4_4_19")
-                                st.session_state.pop("archive_preview_bytes", None)
-                                st.session_state.pop("archive_preview_record_id", None)
-                                st.success("Archived PDF deleted successfully.")
-                                st.rerun()
-                            except Exception as exc:
-                                st.error(str(exc))
-                    else:
-                        st.caption("Only the administrator can delete archived PDFs.")
                 else:
                     st.info("No archived PDFs match the selected filters.")
 
@@ -3938,7 +4329,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.80", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.81", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
