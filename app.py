@@ -609,27 +609,37 @@ def _apply_v4481_full_document_refinements() -> None:
             white-space: nowrap !important;
         }
 
-        /* The Archive action table uses one continuous grid, not separate cards. */
-        .st-key-archive_records_grid_v4_4_83 > div,
-        .st-key-archive_records_grid_v4_4_83 > div > [data-testid="stVerticalBlock"],
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stVerticalBlock"] {
+        /* V4.4.84: one compact, continuous Archive table with no row gaps. */
+        [class*="st-key-archive_records_grid_"] > div,
+        [class*="st-key-archive_records_grid_"] > div > [data-testid="stVerticalBlock"],
+        [class*="st-key-archive_records_grid_"] [data-testid="stVerticalBlock"],
+        [class*="st-key-archive_records_grid_"] [data-testid="stVerticalBlockBorderWrapper"] {
             gap: 0 !important;
-        }
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stElementContainer"] {
+            row-gap: 0 !important;
             margin: 0 !important;
+            padding: 0 !important;
         }
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stHorizontalBlock"] {
+        [class*="st-key-archive_records_grid_"] [data-testid="stElementContainer"],
+        [class*="st-key-archive_records_grid_"] [data-testid="stElementContainer"] > div {
+            margin: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        [class*="st-key-archive_records_grid_"] [data-testid="stHorizontalBlock"] {
             gap: 0 !important;
+            column-gap: 0 !important;
+            row-gap: 0 !important;
             align-items: stretch !important;
             margin: 0 !important;
+            padding: 0 !important;
         }
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stColumn"] {
+        [class*="st-key-archive_records_grid_"] [data-testid="stColumn"] {
             min-width: 0 !important;
             align-self: stretch !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
-            padding: .44rem .50rem !important;
+            padding: .40rem .48rem !important;
             margin: 0 !important;
             border: 0 !important;
             border-right: 1px solid #CBD5E1 !important;
@@ -638,27 +648,33 @@ def _apply_v4481_full_document_refinements() -> None:
             background: #FFFFFF !important;
             box-sizing: border-box !important;
         }
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:first-child {
+        [class*="st-key-archive_records_grid_"] [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:first-child {
             border-left: 1px solid #CBD5E1 !important;
         }
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"] {
+        [class*="st-key-archive_records_grid_"] [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"] {
             border-top: 1px solid #CBD5E1 !important;
             background: #F8FAFC !important;
             color: #243B5A !important;
             font-weight: 800 !important;
         }
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stColumn"] p {
+        [class*="st-key-archive_records_grid_"] [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"] p {
+            font-size: .88rem !important;
+            line-height: 1.10 !important;
+            white-space: nowrap !important;
+            overflow-wrap: normal !important;
+        }
+        [class*="st-key-archive_records_grid_"] [data-testid="stColumn"] p {
             margin: 0 !important;
-            line-height: 1.30 !important;
+            line-height: 1.24 !important;
             overflow-wrap: anywhere !important;
         }
-        .st-key-archive_records_grid_v4_4_83 [data-testid="stColumn"] [data-testid="stVerticalBlock"] {
+        [class*="st-key-archive_records_grid_"] [data-testid="stColumn"] [data-testid="stVerticalBlock"] {
             height: 100% !important;
             justify-content: center !important;
         }
-        .st-key-archive_records_grid_v4_4_83 button {
-            min-height: 2.10rem !important;
-            padding: .25rem .35rem !important;
+        [class*="st-key-archive_records_grid_"] button {
+            min-height: 2.05rem !important;
+            padding: .22rem .32rem !important;
             white-space: nowrap !important;
         }
         </style>
@@ -2196,11 +2212,11 @@ def render_policy_folder_documents_dialog(
         return
 
     policy_column_widths = [2.85, .9, 1.28, .62, .9, .86, .48, .72]
-    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_83"
-    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_83"
+    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_84"
+    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_84"
     records_by_id: dict[str, dict] = {}
 
-    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_83"):
+    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_84"):
         header_cols = st.columns(
             policy_column_widths,
             gap=None,
@@ -2245,12 +2261,12 @@ def render_policy_folder_documents_dialog(
             row_cols[3].write(str(record.get("version_label", "") or "—"))
             row_cols[4].write(str(record.get("effective_date", "") or "—"))
             row_cols[5].write(str(record.get("uploaded_by", "") or "—"))
-            with row_cols[6]:
+            with row_cols[5]:
                 if st.button(
                     "👁️",
                     help=f"Read {title}",
                     use_container_width=True,
-                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_83",
+                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_84",
                 ):
                     try:
                         document_bytes = download_document(
@@ -2271,7 +2287,7 @@ def render_policy_folder_documents_dialog(
                     use_container_width=True,
                     key=(
                         f"policy_folder_prepare_download_{folder_key}_"
-                        f"{record_key}_v4_4_83"
+                        f"{record_key}_v4_4_84"
                     ),
                 ):
                     try:
@@ -2304,7 +2320,7 @@ def render_policy_folder_documents_dialog(
             use_container_width=True,
             key=(
                 "policy_folder_download_ready_"
-                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_83"
+                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_84"
             ),
         )
 
@@ -3583,7 +3599,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.83", page_title=page_key)
+render_app_header(auth_user, version="4.4.84", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -3806,38 +3822,6 @@ if page_key == "Shared PDF Archive":
         if archive_client is None:
             st.error("Unable to connect to Supabase. Verify the URL and service-role key in Streamlit Secrets.")
         else:
-            if is_admin_user(auth_user):
-                st.markdown("### Auditor Directory")
-                with st.expander("Add New Auditor", expanded=False):
-                    if additional_auditor_error:
-                        st.warning(
-                            "The additional-auditor table is not ready. Run "
-                            "SUPABASE_AUDITOR_MIGRATION.sql in Supabase, then refresh the app."
-                        )
-                    with st.form("add_new_auditor_form", clear_on_submit=True):
-                        new_auditor_name = st.text_input("Auditor Full Name")
-                        new_auditor_designation = st.text_input("Designation")
-                        new_auditor_user = st.text_input("User / Display Name")
-                        new_auditor_email = st.text_input("Email (optional)")
-                        new_auditor_status = st.selectbox("Status", ["Active", "Inactive"])
-                        add_auditor_submit = st.form_submit_button("Add New Auditor", type="primary")
-
-                    if add_auditor_submit:
-                        try:
-                            add_additional_auditor(
-                                archive_client,
-                                auditor_name=new_auditor_name,
-                                designation=new_auditor_designation,
-                                user_display=new_auditor_user,
-                                email=new_auditor_email,
-                                status=new_auditor_status,
-                                created_by="IARS Archive Admin",
-                            )
-                            _invalidate_session_cache("iars_additional_auditors_cache_v4_4_19")
-                            st.success("New auditor added successfully and is now available in the dropdown.")
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(str(exc))
 
             st.markdown("### Upload PDFs Directly to Archive")
             st.caption("This is available to all signed-in auditors. Uploaded PDFs become visible in the shared archive.")
@@ -3979,16 +3963,16 @@ if page_key == "Shared PDF Archive":
                     "record(s) from all auditors."
                 )
                 if filtered:
-                    archive_column_widths = [1.0, 1.55, 2.15, .9, 1.15, .48, .72]
+                    archive_column_widths = [1.25, 1.95, 1.05, 1.55, .55, .80]
                     archive_download_id_key = (
-                        "archive_table_download_record_id_v4_4_83"
+                        "archive_table_download_record_id_v4_4_84"
                     )
                     archive_download_bytes_key = (
-                        "archive_table_download_bytes_v4_4_83"
+                        "archive_table_download_bytes_v4_4_84"
                     )
                     archive_records_by_id: dict[str, dict] = {}
 
-                    with st.container(key="archive_records_grid_v4_4_83"):
+                    with st.container(key="archive_records_grid_v4_4_84"):
                         header_cols = st.columns(
                             archive_column_widths,
                             gap=None,
@@ -3999,7 +3983,6 @@ if page_key == "Shared PDF Archive":
                             [
                                 "Audit Reference",
                                 "Auditee Name",
-                                "Filename",
                                 "Uploaded Date",
                                 "Uploaded By",
                                 "View",
@@ -4032,20 +4015,19 @@ if page_key == "Shared PDF Archive":
                             row_cols[1].write(
                                 str(record.get("auditee_name", "") or "—")
                             )
-                            row_cols[2].write(filename)
-                            row_cols[3].write(
+                            row_cols[2].write(
                                 str(record.get("uploaded_at", ""))[:10] or "—"
                             )
-                            row_cols[4].write(
+                            row_cols[3].write(
                                 str(record.get("uploaded_by", "") or "—")
                             )
-                            with row_cols[5]:
+                            with row_cols[4]:
                                 if st.button(
                                     "👁️",
                                     help=f"View {filename}",
                                     use_container_width=True,
                                     key=(
-                                        f"archive_table_view_{record_key}_v4_4_83"
+                                        f"archive_table_view_{record_key}_v4_4_84"
                                     ),
                                 ):
                                     try:
@@ -4066,14 +4048,14 @@ if page_key == "Shared PDF Archive":
                                         st.rerun()
                                     except Exception as exc:
                                         st.error(str(exc))
-                            with row_cols[6]:
+                            with row_cols[5]:
                                 if st.button(
                                     "⬇️",
                                     help=f"Prepare download for {filename}",
                                     use_container_width=True,
                                     key=(
                                         f"archive_table_prepare_download_"
-                                        f"{record_key}_v4_4_83"
+                                        f"{record_key}_v4_4_84"
                                     ),
                                 ):
                                     try:
@@ -4114,7 +4096,7 @@ if page_key == "Shared PDF Archive":
                             use_container_width=True,
                             key=(
                                 "archive_table_download_ready_"
-                                f"{_safe_library_key(prepared_archive_id)}_v4_4_83"
+                                f"{_safe_library_key(prepared_archive_id)}_v4_4_84"
                             ),
                         )
 
@@ -4418,6 +4400,57 @@ if page_key == "Master Data" and is_admin_user(auth_user):
         ]
     )
 
+    st.markdown("### Auditor Directory")
+    st.caption(
+        "Add active auditors used by the Archive, Generate Extraction and auditor dropdowns."
+    )
+    with st.expander("Add New Auditor", expanded=False):
+        if not archive_ready or archive_client is None:
+            st.warning(
+                "The Auditor Directory requires the configured Supabase Archive connection."
+            )
+        else:
+            if additional_auditor_error:
+                st.warning(
+                    "The additional-auditor table is not ready. Run "
+                    "SUPABASE_AUDITOR_MIGRATION.sql in Supabase, then refresh the app."
+                )
+            with st.form("add_new_auditor_form_master_data_v4_4_84", clear_on_submit=True):
+                new_auditor_name = st.text_input("Auditor Full Name")
+                new_auditor_designation = st.text_input("Designation")
+                new_auditor_user = st.text_input("User / Display Name")
+                new_auditor_email = st.text_input("Email (optional)")
+                new_auditor_status = st.selectbox("Status", ["Active", "Inactive"])
+                add_auditor_submit = st.form_submit_button(
+                    "Add New Auditor",
+                    type="primary",
+                )
+
+            if add_auditor_submit:
+                try:
+                    add_additional_auditor(
+                        archive_client,
+                        auditor_name=new_auditor_name,
+                        designation=new_auditor_designation,
+                        user_display=new_auditor_user,
+                        email=new_auditor_email,
+                        status=new_auditor_status,
+                        created_by=str(
+                            auth_user.get("full_name")
+                            or auth_user.get("username")
+                            or "IARS Administrator"
+                        ),
+                    )
+                    _invalidate_session_cache(
+                        "iars_additional_auditors_cache_v4_4_19"
+                    )
+                    st.success(
+                        "New auditor added successfully and is now available in the dropdown."
+                    )
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
     master_data_flash = st.session_state.pop("iars_master_data_flash_v4_4_78", "")
     if master_data_flash:
         st.success(master_data_flash)
@@ -4513,7 +4546,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.83", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.84", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
