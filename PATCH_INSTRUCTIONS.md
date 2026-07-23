@@ -1,12 +1,9 @@
-# IARS V4.4.82 Deployment
+# IARS V4.4.83 Patch Instructions
 
-Replace only `app.py` in the current GitHub repository.
+1. Extract the ZIP.
+2. Replace only `app.py` in the current GitHub repository.
+3. Commit the change.
+4. Reboot the Streamlit application.
+5. Refresh the browser using Ctrl + F5.
 
-No Supabase SQL, requirements, or storage migration is required.
-
-After committing the replacement file:
-
-1. Reboot the Streamlit application.
-2. Open the application and press `Ctrl + F5`.
-3. Open a Policies & Memoranda folder and verify the bordered table.
-4. Open Shared PDF Archive and verify the View and Download columns.
+No Supabase SQL or dependency update is required.

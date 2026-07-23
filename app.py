@@ -582,35 +582,83 @@ def _apply_v4481_full_document_refinements() -> None:
             border-top: 1px solid rgba(15, 42, 76, .18) !important;
         }
 
-        /* V4.4.82: compact grid tables with visible row and column separators. */
-        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"],
-        .st-key-archive_records_grid_v4_4_82 [data-testid="stHorizontalBlock"] {
+        /* V4.4.83: restore the clean, continuous Archive grid. */
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"] {
             gap: 0 !important;
         }
-        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"],
-        .st-key-archive_records_grid_v4_4_82 [data-testid="stColumn"] {
+        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"] {
             min-width: 0 !important;
             padding: .42rem .48rem !important;
             border-color: #D0D5DD !important;
             border-radius: 0 !important;
             background: #FFFFFF !important;
         }
-        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"],
-        .st-key-archive_records_grid_v4_4_82 [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"] {
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"] {
             background: #F2F4F7 !important;
             font-weight: 800 !important;
             color: #344054 !important;
         }
-        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"] p,
-        .st-key-archive_records_grid_v4_4_82 [data-testid="stColumn"] p {
+        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"] p {
             margin: 0 !important;
             line-height: 1.28 !important;
             overflow-wrap: anywhere !important;
         }
-        [class*="st-key-policy_folder_grid_"] button,
-        .st-key-archive_records_grid_v4_4_82 button {
+        [class*="st-key-policy_folder_grid_"] button {
             min-height: 2.15rem !important;
             padding: .28rem .38rem !important;
+            white-space: nowrap !important;
+        }
+
+        /* The Archive action table uses one continuous grid, not separate cards. */
+        .st-key-archive_records_grid_v4_4_83 > div,
+        .st-key-archive_records_grid_v4_4_83 > div > [data-testid="stVerticalBlock"],
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stVerticalBlock"] {
+            gap: 0 !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stElementContainer"] {
+            margin: 0 !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+            align-items: stretch !important;
+            margin: 0 !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stColumn"] {
+            min-width: 0 !important;
+            align-self: stretch !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            padding: .44rem .50rem !important;
+            margin: 0 !important;
+            border: 0 !important;
+            border-right: 1px solid #CBD5E1 !important;
+            border-bottom: 1px solid #CBD5E1 !important;
+            border-radius: 0 !important;
+            background: #FFFFFF !important;
+            box-sizing: border-box !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:first-child {
+            border-left: 1px solid #CBD5E1 !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stColumn"] {
+            border-top: 1px solid #CBD5E1 !important;
+            background: #F8FAFC !important;
+            color: #243B5A !important;
+            font-weight: 800 !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stColumn"] p {
+            margin: 0 !important;
+            line-height: 1.30 !important;
+            overflow-wrap: anywhere !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 [data-testid="stColumn"] [data-testid="stVerticalBlock"] {
+            height: 100% !important;
+            justify-content: center !important;
+        }
+        .st-key-archive_records_grid_v4_4_83 button {
+            min-height: 2.10rem !important;
+            padding: .25rem .35rem !important;
             white-space: nowrap !important;
         }
         </style>
@@ -2148,11 +2196,11 @@ def render_policy_folder_documents_dialog(
         return
 
     policy_column_widths = [2.85, .9, 1.28, .62, .9, .86, .48, .72]
-    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_82"
-    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_82"
+    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_83"
+    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_83"
     records_by_id: dict[str, dict] = {}
 
-    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_82"):
+    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_83"):
         header_cols = st.columns(
             policy_column_widths,
             gap=None,
@@ -2202,7 +2250,7 @@ def render_policy_folder_documents_dialog(
                     "👁️",
                     help=f"Read {title}",
                     use_container_width=True,
-                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_82",
+                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_83",
                 ):
                     try:
                         document_bytes = download_document(
@@ -2223,7 +2271,7 @@ def render_policy_folder_documents_dialog(
                     use_container_width=True,
                     key=(
                         f"policy_folder_prepare_download_{folder_key}_"
-                        f"{record_key}_v4_4_82"
+                        f"{record_key}_v4_4_83"
                     ),
                 ):
                     try:
@@ -2256,7 +2304,7 @@ def render_policy_folder_documents_dialog(
             use_container_width=True,
             key=(
                 "policy_folder_download_ready_"
-                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_82"
+                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_83"
             ),
         )
 
@@ -3535,7 +3583,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.82", page_title=page_key)
+render_app_header(auth_user, version="4.4.83", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -3933,19 +3981,18 @@ if page_key == "Shared PDF Archive":
                 if filtered:
                     archive_column_widths = [1.0, 1.55, 2.15, .9, 1.15, .48, .72]
                     archive_download_id_key = (
-                        "archive_table_download_record_id_v4_4_82"
+                        "archive_table_download_record_id_v4_4_83"
                     )
                     archive_download_bytes_key = (
-                        "archive_table_download_bytes_v4_4_82"
+                        "archive_table_download_bytes_v4_4_83"
                     )
                     archive_records_by_id: dict[str, dict] = {}
 
-                    with st.container(key="archive_records_grid_v4_4_82"):
+                    with st.container(key="archive_records_grid_v4_4_83"):
                         header_cols = st.columns(
                             archive_column_widths,
                             gap=None,
                             vertical_alignment="center",
-                            border=True,
                         )
                         for column, label in zip(
                             header_cols,
@@ -3974,7 +4021,6 @@ if page_key == "Shared PDF Archive":
                                 archive_column_widths,
                                 gap=None,
                                 vertical_alignment="center",
-                                border=True,
                             )
                             filename = str(
                                 record.get("original_filename", "")
@@ -3999,7 +4045,7 @@ if page_key == "Shared PDF Archive":
                                     help=f"View {filename}",
                                     use_container_width=True,
                                     key=(
-                                        f"archive_table_view_{record_key}_v4_4_82"
+                                        f"archive_table_view_{record_key}_v4_4_83"
                                     ),
                                 ):
                                     try:
@@ -4027,7 +4073,7 @@ if page_key == "Shared PDF Archive":
                                     use_container_width=True,
                                     key=(
                                         f"archive_table_prepare_download_"
-                                        f"{record_key}_v4_4_82"
+                                        f"{record_key}_v4_4_83"
                                     ),
                                 ):
                                     try:
@@ -4068,7 +4114,7 @@ if page_key == "Shared PDF Archive":
                             use_container_width=True,
                             key=(
                                 "archive_table_download_ready_"
-                                f"{_safe_library_key(prepared_archive_id)}_v4_4_82"
+                                f"{_safe_library_key(prepared_archive_id)}_v4_4_83"
                             ),
                         )
 
@@ -4467,7 +4513,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.82", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.83", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
