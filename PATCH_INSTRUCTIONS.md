@@ -1,28 +1,11 @@
-# Deployment Instructions — V4.4.79
+# IARS V4.4.80 Deployment
 
-## 1. Run the database migration first
+Replace these files in the current GitHub repository:
 
-Open the same Supabase project used by IARS, open **SQL Editor**, and run:
+1. `app.py`
+2. `iars_document_library.py`
+3. `assets/login_left_panel.png`
 
-`SUPABASE_POLICY_SUBJECT_CATEGORY_MIGRATION.sql`
+Then commit the changes, reboot the Streamlit app, and refresh the browser with Ctrl + F5.
 
-The final query should show the `subject_category` column.
-
-## 2. Replace or add these GitHub files
-
-- `app.py`
-- `iars_document_library.py`
-- `assets/login_left_panel.png`
-
-The ZIP also includes the unchanged current `iars_parser.py` and
-`iars_weekly_itinerary.py` so the patch remains aligned with V4.4.78.
-
-For a new document-library installation, use the included corrected:
-
-- `SUPABASE_DOCUMENT_LIBRARY_SETUP.sql`
-
-## 3. Deploy
-
-Commit the files, reboot the Streamlit app, then use **Ctrl + F5**.
-
-No requirements update is needed.
+No Supabase SQL migration and no requirements update are needed. The current document-library setup already grants update and delete privileges to the service role.

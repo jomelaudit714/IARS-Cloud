@@ -483,6 +483,59 @@ def download_document(
         raise DocumentLibraryError("Supabase returned an unsupported download response.") from exc
 
 
+def update_document_metadata(
+    client: Any,
+    config: DocumentLibraryConfig,
+    record: dict[str, Any],
+    *,
+    title: str,
+    category: str,
+    subject_category: str,
+    description: str,
+    version_label: str,
+    effective_date: date | None,
+) -> dict[str, Any]:
+    """Update editable document metadata without replacing the stored file."""
+    record_id = record.get("id")
+    if not record_id:
+        raise DocumentLibraryError("The selected document record is incomplete.")
+
+    title_value = _clean_text(title, 220)
+    if not title_value:
+        raise DocumentLibraryError("Document Title is required.")
+
+    category_value = _clean_text(category, 100) or "General"
+    subject_value = _clean_text(subject_category, 120) or "Other"
+    payload = {
+        "title": title_value,
+        "category": category_value,
+        "subject_category": subject_value,
+        "description": _clean_text(description, 2000),
+        "version_label": _clean_text(version_label, 60),
+        "effective_date": (
+            effective_date.isoformat() if isinstance(effective_date, date) else None
+        ),
+    }
+
+    try:
+        response = (
+            client.table(config.table)
+            .update(payload)
+            .eq("id", record_id)
+            .execute()
+        )
+        rows = _response_data(response)
+        updated = dict(record)
+        updated.update(payload)
+        if rows:
+            updated.update(rows[0])
+        return updated
+    except Exception as exc:
+        raise DocumentLibraryError(
+            f"Unable to update the document details: {exc}"
+        ) from exc
+
+
 def delete_document(
     client: Any,
     config: DocumentLibraryConfig,
