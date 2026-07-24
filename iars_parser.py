@@ -2411,6 +2411,25 @@ def canonical_auditor_name(auditors_df, raw_name):
     return raw_name, raw_name.split()[0] if raw_name else "None"
 
 
+
+
+def normalize_tag_task_id(value):
+    """Return a valid Task ID and reject names accidentally captured as IDs.
+
+    Task IDs must contain at least one digit. This prevents an Auditor value
+    such as ``Patricia`` from leaking into the Task ID column when PDF text
+    blocks are merged or reordered.
+    """
+    text = clean_text(value)
+    if not text:
+        return ""
+
+    # Prefer the first compact token containing a digit (001, T001, 001-A).
+    match = re.search(r"\b[A-Za-z]*\d+[A-Za-z0-9-]*\b", text)
+    if match:
+        return clean_text(match.group(0))
+    return ""
+
 def extract_inline_tag(line, tag):
     """Extract handwritten/typed tag values such as Task ID: 001 or Auditor: Sarina.
 
@@ -2428,7 +2447,7 @@ def extract_inline_tag(line, tag):
     if not m and tag.lower() in ["task id", "taskid"]:
         m2 = re.search(r"\bTA(?:S)?K\s*(?:ID|1D|I[Dd])\s*[\.:;\-]?\s*([A-Za-z0-9\-]+)", line_clean, re.I)
         if m2:
-            return clean_text(m2.group(1))
+            return normalize_tag_task_id(m2.group(1))
 
     if m:
         val = clean_text(m.group(2))
@@ -2511,7 +2530,7 @@ def extract_context_tags(text, master_df=None, auditors_df=None, rows=None):
         if not task_val:
             m = re.search(r"\bTA(?:S)?K\s*(?:ID|1D|I[Dd])\s*[\.:;\-]?\s*([A-Za-z0-9\-]+)", line, re.I)
             if m:
-                task_val = clean_text(m.group(1))
+                task_val = normalize_tag_task_id(m.group(1))
 
         if auditee_val:
             persistent["auditee_raw"] = auditee_val
@@ -2530,7 +2549,7 @@ def extract_context_tags(text, master_df=None, auditors_df=None, rows=None):
             persistent["auditor_user"] = user
 
         if task_val:
-            persistent["task_id"] = clean_text(task_val)
+            persistent["task_id"] = normalize_tag_task_id(task_val)
 
         if current_issue:
             ctx = issue_context(current_issue)
@@ -2721,7 +2740,7 @@ def extract_positional_context_tags(pdf_file, rows, master_df=None, auditors_df=
             })
             positional_fields.add("auditor")
         elif field_name == "task_id":
-            ctx["task_id"] = clean_text(raw_value)
+            ctx["task_id"] = normalize_tag_task_id(raw_value)
             positional_fields.add("task_id")
         elif field_name == "auditee":
             resolved = resolve_auditee_tag_from_header(raw_value, header_auditee)
@@ -2805,7 +2824,7 @@ def apply_carry_forward_context(rows, text, master_df=None, auditors_df=None, pd
                 row["auditor_override"] = ctx.get("auditor")
                 row["auditor_user_override"] = ctx.get("auditor_user")
             if ctx.get("task_id"):
-                row["task_id_override"] = ctx.get("task_id")
+                row["task_id_override"] = normalize_tag_task_id(ctx.get("task_id"))
             if exact.get("frequency"):
                 row["frequency_override"] = normalize_frequency_label(exact.get("frequency"))
             if exact.get("reaction"):
@@ -3749,7 +3768,7 @@ def build_records(
 
     for row_no, item in enumerate(items, 1):
         manual = manual_map.get(item["issue_no"])
-        task_id = clean_text(item.get("task_id_override", "")) or header["task_id"]
+        task_id = normalize_tag_task_id(item.get("task_id_override", "")) or normalize_tag_task_id(header["task_id"])
         auditor_raw = master_display_text(item.get("auditor_override", "")) or auditor_default
 
         issue_title = infer_issue_title_from_narrative(item["issue"], item["narrative"])
@@ -3778,7 +3797,7 @@ def build_records(
             frequency_raw = master_display_text(item.get("frequency_override", "")) or frequency_raw
 
         if manual is not None:
-            task_id = clean_text(manual.get("Task ID", "")) or task_id
+            task_id = normalize_tag_task_id(manual.get("Task ID", "")) or task_id
             auditor_raw = master_display_text(manual.get("Auditor", "")) or auditor_raw
             reaction_raw = master_display_text(manual.get("Reaction", "")) or reaction_raw
             frequency_raw = master_display_text(manual.get("Frequency", "")) or frequency_raw
