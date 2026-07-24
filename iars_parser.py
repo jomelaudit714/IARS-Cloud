@@ -1533,6 +1533,120 @@ def make_issue_summary(issue, narrative):
     return f"{issue_clean} was noted." if issue_clean else "Issue noted during audit review."
 
 
+
+RECEIVER_SIGNATURE_OMISSION_PATTERNS = [
+    "no recipient signature",
+    "without recipient signature",
+    "missing recipient signature",
+    "no signature of recipient",
+    "recipient did not sign",
+    "recipient was not signed",
+    "no receiver signature",
+    "without receiver signature",
+    "missing receiver signature",
+    "no signature by receiver",
+    "no signature of receiver",
+    "receiver did not sign",
+    "unsigned by receiver",
+    "unsigned received by",
+    "received by portion has no signature",
+    "received by portion without signature",
+    "received by portion was not signed",
+    "received by was not signed",
+    "received by is unsigned",
+    "no signature in received by",
+    "blank received by",
+]
+
+RECEIVING_DOCUMENT_PATTERNS = [
+    "pcv", "petty cash voucher", "pcr", "petty cash request",
+    "cash voucher", "cash receipt", "receiving receipt",
+    "acknowledgment receipt", "acknowledgement receipt",
+    "received by", "recipient", "receiver",
+]
+
+CASH_FUND_RECEIVING_PATTERNS = [
+    "cash", "budget", "fund", "reimbursement", "disbursement",
+    "release of funds", "fund release", "cash release", "budget release",
+    "received payment", "receiving payment", "receipt of funds",
+]
+
+GOVERNING_DOCUMENT_TERMS = [
+    "memorandum", "memo", "guideline", "guidelines", "policy", "policies",
+    "procedure", "procedures", "process", "circular", "sop",
+    "standard operating procedure", "manual", "protocol", "rule", "rules",
+    "written policy", "written procedure", "written guidelines",
+]
+
+GOVERNING_RECOMMENDATION_DIRECTIVES = [
+    "please review", "review the", "refer to", "in accordance with",
+    "comply with", "follow the", "observe the", "adhere to",
+    "as required by", "pursuant to",
+]
+
+
+def is_missing_receiver_signature_issue(issue, narrative="", recommendation=""):
+    """Detect unsigned receiver/recipient fields in cash or fund documents.
+
+    The rule covers PCV, PCR and comparable documents used to acknowledge the
+    receipt of cash, budget or funds. It intentionally takes precedence over a
+    policy-reference recommendation because the primary defect is the omitted
+    receiving signature in the document itself.
+    """
+    combined = clean_text(f"{issue} {narrative} {recommendation}").lower()
+    has_signature_omission = any(
+        pattern in combined for pattern in RECEIVER_SIGNATURE_OMISSION_PATTERNS
+    )
+    if not has_signature_omission:
+        # Support flexible OCR word order such as "recipient signature: none"
+        # or "receiver signature was missing".
+        has_signature_omission = bool(
+            re.search(
+                r"(?:recipient|receiver|received\s+by).{0,45}"
+                r"(?:no\s+signature|without\s+signature|missing\s+signature|unsigned|blank)",
+                combined,
+                re.I,
+            )
+            or re.search(
+                r"(?:no\s+signature|without\s+signature|missing\s+signature|unsigned|blank)"
+                r".{0,45}(?:recipient|receiver|received\s+by)",
+                combined,
+                re.I,
+            )
+        )
+    if not has_signature_omission:
+        return False
+
+    has_document_context = any(
+        pattern in combined for pattern in RECEIVING_DOCUMENT_PATTERNS
+    )
+    has_cash_fund_context = any(
+        pattern in combined for pattern in CASH_FUND_RECEIVING_PATTERNS
+    )
+    return has_document_context and has_cash_fund_context
+
+
+def recommendation_requires_written_policy_compliance(recommendation):
+    """Return True when the recommendation cites a governing document."""
+    rec = clean_text(recommendation).lower()
+    if not rec:
+        return False
+    has_governing_term = any(term in rec for term in GOVERNING_DOCUMENT_TERMS)
+    has_directive = any(term in rec for term in GOVERNING_RECOMMENDATION_DIRECTIVES)
+    # "Please review Circular ..." is the common format, while direct wording
+    # such as "Follow Policy X" or "Comply with the SOP" is also supported.
+    return has_governing_term and has_directive
+
+
+def is_explicit_minimal_cash_shortage(issue, narrative=""):
+    """Detect titles explicitly declaring a minimal cash shortage."""
+    combined = clean_text(f"{issue} {narrative}").lower()
+    return bool(
+        re.search(r"\bminimal\s+cash\s+shortage\b", combined, re.I)
+        or re.search(r"\bminimal\s+shortage\b", combined, re.I)
+    )
+
+
 def classify_finding(issue, recommendation, narrative="", company="", audit_title=""):
     issue_lower = clean_text(issue).lower()
     rec_lower = clean_text(recommendation).lower()
@@ -1540,6 +1654,18 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     company_lower = clean_text(company).lower()
     audit_title_lower = clean_text(audit_title).lower()
     combined = f"{issue_lower} {narrative_lower} {rec_lower}"
+
+    # Highest-priority document rule: an omitted recipient/receiver signature
+    # in PCV, PCR or a comparable cash/fund receiving document is an omission
+    # in the document, even if the recommendation also cites a policy.
+    if is_missing_receiver_signature_issue(issue, narrative, recommendation):
+        return "Omission & Alteration Of Details in Documents -7"
+
+    # Recommendation-only policy trigger. A direction to review or comply with
+    # a memorandum, circular, policy, procedure, process, guideline or related
+    # written requirement is classified as written-policy nonconformity.
+    if recommendation_requires_written_policy_compliance(recommendation):
+        return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
 
     # Explicit no-finding titles/phrases.
     if any(p in combined for p in NO_FINDING_PATTERNS):
@@ -1552,9 +1678,23 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     is_petty_cash = "petty cash" in combined or "petty cash" in audit_title_lower
     is_cash_advance = is_cash_advance_context(issue, narrative, audit_title)
 
-    # Special rule: Cash Advance Overage is always No Findings.
-    if is_cash_advance and any(k in issue_lower for k in ["cash overage", "fund overage", "collection overage", "overage"]):
+    # Cash Advance controlled variance rules. No-variance phrases are already
+    # handled by NO_FINDING_PATTERNS above. For a cash-advance row, cash overage,
+    # minimal overage and minimal cash overage are also treated as No Findings.
+    cash_variance_text = clean_text(f"{issue} {narrative}").lower()
+    if is_cash_advance and any(
+        key in cash_variance_text
+        for key in [
+            "cash overage", "fund overage", "collection overage",
+            "minimal overage", "minimal cash overage", "overage",
+        ]
+    ):
         return "No Findings 10"
+
+    # An explicitly titled minimal cash shortage/minimal shortage in a cash
+    # advance is Immaterial Findings regardless of the extracted peso amount.
+    if is_cash_advance and is_explicit_minimal_cash_shortage(issue, narrative):
+        return "Immaterial Findings 3"
 
     # Cash/Fund/Sales/Collection/Daily Sales/Change Fund shortages and overages:
     # evaluate immateriality first before actual finding category.

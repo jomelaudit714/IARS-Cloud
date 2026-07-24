@@ -1,9 +1,10 @@
-# Deployment Instructions — IARS V4.4.85
+# V4.4.86 Patch Instructions
 
-1. Open the current IARS GitHub repository.
-2. Replace the existing `app.py` with the `app.py` contained in this patch.
-3. Commit the change.
-4. Reboot the Streamlit application.
-5. Perform a hard refresh using `Ctrl + F5`.
+Replace these files in the current GitHub repository:
 
-No Supabase SQL, requirements update, or other file replacement is required.
+1. `app.py`
+2. `iars_parser.py`
+
+Commit the changes, reboot the Streamlit app, then use `Ctrl + F5`.
+
+No Supabase SQL, Master Data or requirements update is required.
