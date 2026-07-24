@@ -1538,6 +1538,11 @@ RECEIVER_SIGNATURE_OMISSION_PATTERNS = [
     "no recipient signature",
     "without recipient signature",
     "missing recipient signature",
+    "no affixed signature of the recipient",
+    "without affixed signature of the recipient",
+    "signature of the recipient was not affixed",
+    "recipient's signature was not affixed",
+    "recipient signature was not affixed",
     "no signature of recipient",
     "recipient did not sign",
     "recipient was not signed",
@@ -1602,14 +1607,16 @@ def is_missing_receiver_signature_issue(issue, narrative="", recommendation=""):
         # or "receiver signature was missing".
         has_signature_omission = bool(
             re.search(
-                r"(?:recipient|receiver|received\s+by).{0,45}"
-                r"(?:no\s+signature|without\s+signature|missing\s+signature|unsigned|blank)",
+                r"(?:recipient|receiver|received\s+by).{0,60}"
+                r"(?:no\s+(?:affixed\s+)?signature|without\s+(?:an?\s+)?(?:affixed\s+)?signature|"
+                r"missing\s+signature|signature\s+(?:was\s+)?not\s+affixed|unsigned|blank)",
                 combined,
                 re.I,
             )
             or re.search(
-                r"(?:no\s+signature|without\s+signature|missing\s+signature|unsigned|blank)"
-                r".{0,45}(?:recipient|receiver|received\s+by)",
+                r"(?:no\s+(?:affixed\s+)?signature|without\s+(?:an?\s+)?(?:affixed\s+)?signature|"
+                r"missing\s+signature|signature\s+(?:was\s+)?not\s+affixed|unsigned|blank)"
+                r".{0,60}(?:recipient|receiver|received\s+by)",
                 combined,
                 re.I,
             )
@@ -1623,6 +1630,11 @@ def is_missing_receiver_signature_issue(issue, narrative="", recommendation=""):
     has_cash_fund_context = any(
         pattern in combined for pattern in CASH_FUND_RECEIVING_PATTERNS
     )
+    # PCV and PCR are inherently cash/fund receiving documents. Their common
+    # abbreviations may appear without the words "cash" or "fund" in the title,
+    # as in "INCOMPLETE DETAILS IN PCV".
+    if re.search(r"\b(?:pcv|pcr)\b|petty\s+cash\s+(?:voucher|request)", combined, re.I):
+        has_cash_fund_context = True
     return has_document_context and has_cash_fund_context
 
 
@@ -3553,8 +3565,14 @@ def build_records(
             reaction_raw = master_display_text(manual.get("Reaction", "")) or reaction_raw
             frequency_raw = master_display_text(manual.get("Frequency", "")) or frequency_raw
 
-        # For Operations Audit, By01 must come from Prepared by/Audited by.
-        if audit_type == "Operations Audit" and auditor_default != "None":
+        # For Operations Audit, Prepared/Audited by remains the default By01.
+        # An explicit PDF Auditor tag has higher priority and carries forward
+        # until a newer Auditor tag appears, matching the tagging rules.
+        if (
+            audit_type == "Operations Audit"
+            and auditor_default != "None"
+            and not clean_text(item.get("auditor_override", ""))
+        ):
             auditor_raw = auditor_default
 
         auditor = exact_auditor(auditor_raw)

@@ -3369,7 +3369,9 @@ def render_pdf_tagging_full_document_dialog(
     st.info(
         "Scroll through all pages. Double-right-click a page to add a textbox, "
         "then type, move, resize, or change the exact font size. Changes save "
-        "automatically after you pause."
+        "automatically after you pause. Auditee, Auditor, and Task ID tags carry "
+        "forward to every succeeding issue and page until a newer tag of the same "
+        "type appears. Frequency Rate and Reaction remain issue-specific."
     )
 
     reset_key = f"pdf_editor_reset_{file_id}"
@@ -3718,7 +3720,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.86", page_title=page_key)
+render_app_header(auth_user, version="4.4.87", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -4668,7 +4670,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.86", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.87", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
