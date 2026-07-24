@@ -683,6 +683,116 @@ def _apply_v4481_full_document_refinements() -> None:
     )
 
 
+def _apply_v4485_table_and_clear_refinements() -> None:
+    """Fit grid headers/cells and avoid layout jumps when clearing records."""
+    st.markdown(
+        """
+        <style>
+        .iars-grid-header-v4485 {
+            width: 100% !important;
+            min-height: 2.25rem !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: .18rem .16rem !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            font-size: clamp(.70rem, .78vw, .84rem) !important;
+            font-weight: 800 !important;
+            line-height: 1.08 !important;
+            text-align: center !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            word-break: normal !important;
+        }
+
+        /* Shared PDF Archive: compact headers that stay inside their cells. */
+        [class*="st-key-archive_records_grid_"] [data-testid="stHorizontalBlock"]:first-of-type
+        [data-testid="stColumn"] {
+            padding: .20rem .18rem !important;
+            min-height: 2.35rem !important;
+        }
+        [class*="st-key-archive_records_grid_"] [data-testid="stHorizontalBlock"]:first-of-type
+        [data-testid="stColumn"] p {
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            text-align: center !important;
+            line-height: 1.06 !important;
+            font-size: .78rem !important;
+        }
+
+        /* Policies & Memoranda: one continuous grid with no gaps or detached cells. */
+        [class*="st-key-policy_folder_grid_"] > div,
+        [class*="st-key-policy_folder_grid_"] > div > [data-testid="stVerticalBlock"],
+        [class*="st-key-policy_folder_grid_"] [data-testid="stVerticalBlock"],
+        [class*="st-key-policy_folder_grid_"] [data-testid="stVerticalBlockBorderWrapper"] {
+            gap: 0 !important;
+            row-gap: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stElementContainer"],
+        [class*="st-key-policy_folder_grid_"] [data-testid="stElementContainer"] > div {
+            margin: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+            column-gap: 0 !important;
+            row-gap: 0 !important;
+            align-items: stretch !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"] {
+            min-width: 0 !important;
+            align-self: stretch !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            padding: .38rem .42rem !important;
+            margin: 0 !important;
+            border: 0 !important;
+            border-right: 1px solid #CBD5E1 !important;
+            border-bottom: 1px solid #CBD5E1 !important;
+            border-radius: 0 !important;
+            background: #FFFFFF !important;
+            box-sizing: border-box !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]
+        [data-testid="stColumn"]:first-child {
+            border-left: 1px solid #CBD5E1 !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]:first-of-type
+        [data-testid="stColumn"] {
+            border-top: 1px solid #CBD5E1 !important;
+            background: #F8FAFC !important;
+            color: #243B5A !important;
+            padding: .20rem .16rem !important;
+            min-height: 2.45rem !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"] p {
+            margin: 0 !important;
+            line-height: 1.20 !important;
+            overflow-wrap: anywhere !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stColumn"]
+        [data-testid="stVerticalBlock"] {
+            height: 100% !important;
+            justify-content: center !important;
+        }
+        [class*="st-key-policy_folder_grid_"] button {
+            min-height: 2.05rem !important;
+            padding: .22rem .30rem !important;
+            white-space: nowrap !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 EXTRACTION_WORKER_PATH = Path(__file__).with_name("iars_extract_worker.py")
 
 
@@ -803,6 +913,18 @@ def _finish_pdf_tagging_download(
     st.session_state.pop(PDF_TAGGING_DIALOG_OPEN_KEY, None)
 
 
+def _clear_saved_extraction_records(result_version: int) -> None:
+    """Clear the saved Generate Extraction output before Streamlit's normal rerun."""
+    st.session_state.pop(
+        f"iars_extraction_result_editor_v4_4_78_{int(result_version)}",
+        None,
+    )
+    st.session_state.pop("iars_last_extraction_payload_v4_4_78", None)
+    st.session_state[
+        "iars_extraction_clear_flash_v4_4_85"
+    ] = "Generated records were cleared successfully."
+
+
 def _render_saved_extraction_output(
     *,
     finding_options,
@@ -813,10 +935,10 @@ def _render_saved_extraction_output(
     auditors_df,
 ) -> None:
     clear_flash = st.session_state.pop(
-        "iars_extraction_clear_flash_v4_4_81", ""
+        "iars_extraction_clear_flash_v4_4_85", ""
     )
     if clear_flash:
-        st.success(clear_flash)
+        st.toast(clear_flash, icon="✅")
 
     payload = st.session_state.get("iars_last_extraction_payload_v4_4_78")
     if not isinstance(payload, dict):
@@ -874,20 +996,13 @@ def _render_saved_extraction_output(
                 key=f"iars_extraction_download_v4_4_81_{result_version}",
             )
         with clear_col:
-            if st.button(
+            st.button(
                 "Clear Records",
                 use_container_width=True,
-                key=f"iars_extraction_clear_records_v4_4_81_{result_version}",
-            ):
-                st.session_state.pop(
-                    f"iars_extraction_result_editor_v4_4_78_{result_version}",
-                    None,
-                )
-                st.session_state.pop("iars_last_extraction_payload_v4_4_78", None)
-                st.session_state[
-                    "iars_extraction_clear_flash_v4_4_81"
-                ] = "Generated records were cleared successfully."
-                st.rerun()
+                key=f"iars_extraction_clear_records_v4_4_85_{result_version}",
+                on_click=_clear_saved_extraction_records,
+                args=(result_version,),
+            )
 
     if archive_results:
         st.subheader("Archive Results")
@@ -919,6 +1034,7 @@ apply_iars_theme()
 _apply_v4477_layout_refinements()
 _apply_v4479_readability_and_library_refinements()
 _apply_v4481_full_document_refinements()
+_apply_v4485_table_and_clear_refinements()
 # V4.4.19: do not install the navigation loading veil. Streamlit will still rerun on clicks,
 # but users will no longer see the "Loading / Please wait" card on every module switch.
 
@@ -2211,17 +2327,17 @@ def render_policy_folder_documents_dialog(
         st.info("No policy or memorandum title matched the search.")
         return
 
-    policy_column_widths = [2.85, .9, 1.28, .62, .9, .86, .48, .72]
-    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_84"
-    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_84"
+    policy_column_widths = [3.15, .92, 1.32, .68, 1.02, .98, .56, .80]
+    download_id_key = f"policy_folder_download_record_id_{folder_key}_v4_4_85"
+    download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_85"
     records_by_id: dict[str, dict] = {}
 
-    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_84"):
+    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_85"):
         header_cols = st.columns(
             policy_column_widths,
             gap=None,
             vertical_alignment="center",
-            border=True,
+            border=False,
         )
         for column, label in zip(
             header_cols,
@@ -2236,7 +2352,10 @@ def render_policy_folder_documents_dialog(
                 "Download",
             ],
         ):
-            column.markdown(f"**{label}**")
+            column.markdown(
+                f'<div class="iars-grid-header-v4485">{html.escape(label)}</div>',
+                unsafe_allow_html=True,
+            )
 
         for row_index, record in enumerate(visible_records):
             record_id = str(record.get("id", "") or record.get("storage_path", ""))
@@ -2246,7 +2365,7 @@ def render_policy_folder_documents_dialog(
                 policy_column_widths,
                 gap=None,
                 vertical_alignment="center",
-                border=True,
+                border=False,
             )
             title = str(
                 record.get("title")
@@ -2261,12 +2380,12 @@ def render_policy_folder_documents_dialog(
             row_cols[3].write(str(record.get("version_label", "") or "—"))
             row_cols[4].write(str(record.get("effective_date", "") or "—"))
             row_cols[5].write(str(record.get("uploaded_by", "") or "—"))
-            with row_cols[5]:
+            with row_cols[6]:
                 if st.button(
                     "👁️",
                     help=f"Read {title}",
                     use_container_width=True,
-                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_84",
+                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_85",
                 ):
                     try:
                         document_bytes = download_document(
@@ -2287,7 +2406,7 @@ def render_policy_folder_documents_dialog(
                     use_container_width=True,
                     key=(
                         f"policy_folder_prepare_download_{folder_key}_"
-                        f"{record_key}_v4_4_84"
+                        f"{record_key}_v4_4_85"
                     ),
                 ):
                     try:
@@ -2320,7 +2439,7 @@ def render_policy_folder_documents_dialog(
             use_container_width=True,
             key=(
                 "policy_folder_download_ready_"
-                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_84"
+                f"{folder_key}_{_safe_library_key(prepared_download_id)}_v4_4_85"
             ),
         )
 
@@ -3599,7 +3718,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.84", page_title=page_key)
+render_app_header(auth_user, version="4.4.85", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -3940,7 +4059,7 @@ if page_key == "Shared PDF Archive":
                 with filter_1:
                     search_text = st.text_input(
                         "Search",
-                        placeholder="Audit reference, auditee, filename or uploader",
+                        placeholder="Audit reference, auditee, or uploader",
                         key="archive_search",
                     )
                 with filter_2:
@@ -3963,16 +4082,16 @@ if page_key == "Shared PDF Archive":
                     "record(s) from all auditors."
                 )
                 if filtered:
-                    archive_column_widths = [1.25, 1.95, 1.05, 1.55, .55, .80]
+                    archive_column_widths = [1.35, 2.15, 1.15, 1.72, .62, .82]
                     archive_download_id_key = (
-                        "archive_table_download_record_id_v4_4_84"
+                        "archive_table_download_record_id_v4_4_85"
                     )
                     archive_download_bytes_key = (
-                        "archive_table_download_bytes_v4_4_84"
+                        "archive_table_download_bytes_v4_4_85"
                     )
                     archive_records_by_id: dict[str, dict] = {}
 
-                    with st.container(key="archive_records_grid_v4_4_84"):
+                    with st.container(key="archive_records_grid_v4_4_85"):
                         header_cols = st.columns(
                             archive_column_widths,
                             gap=None,
@@ -3989,7 +4108,10 @@ if page_key == "Shared PDF Archive":
                                 "Download",
                             ],
                         ):
-                            column.markdown(f"**{label}**")
+                            column.markdown(
+                                f'<div class="iars-grid-header-v4485">{html.escape(label)}</div>',
+                                unsafe_allow_html=True,
+                            )
 
                         for row_index, record in enumerate(filtered):
                             record_id = str(
@@ -4027,7 +4149,7 @@ if page_key == "Shared PDF Archive":
                                     help=f"View {filename}",
                                     use_container_width=True,
                                     key=(
-                                        f"archive_table_view_{record_key}_v4_4_84"
+                                        f"archive_table_view_{record_key}_v4_4_85"
                                     ),
                                 ):
                                     try:
@@ -4055,7 +4177,7 @@ if page_key == "Shared PDF Archive":
                                     use_container_width=True,
                                     key=(
                                         f"archive_table_prepare_download_"
-                                        f"{record_key}_v4_4_84"
+                                        f"{record_key}_v4_4_85"
                                     ),
                                 ):
                                     try:
@@ -4096,7 +4218,7 @@ if page_key == "Shared PDF Archive":
                             use_container_width=True,
                             key=(
                                 "archive_table_download_ready_"
-                                f"{_safe_library_key(prepared_archive_id)}_v4_4_84"
+                                f"{_safe_library_key(prepared_archive_id)}_v4_4_85"
                             ),
                         )
 
@@ -4415,7 +4537,7 @@ if page_key == "Master Data" and is_admin_user(auth_user):
                     "The additional-auditor table is not ready. Run "
                     "SUPABASE_AUDITOR_MIGRATION.sql in Supabase, then refresh the app."
                 )
-            with st.form("add_new_auditor_form_master_data_v4_4_84", clear_on_submit=True):
+            with st.form("add_new_auditor_form_master_data_v4_4_85", clear_on_submit=True):
                 new_auditor_name = st.text_input("Auditor Full Name")
                 new_auditor_designation = st.text_input("Designation")
                 new_auditor_user = st.text_input("User / Display Name")
@@ -4546,7 +4668,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.84", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.85", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
