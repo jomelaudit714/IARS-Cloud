@@ -545,25 +545,11 @@ def _apply_v4481_full_document_refinements() -> None:
             margin: 0 auto !important;
         }
 
-        /* V4.4.88: keep every long-dialog title and X close button visible. */
-        div[data-testid="stDialog"] div[role="dialog"]
-        div:has(> button[aria-label="Close"]),
-        div[data-testid="stDialog"] div[role="dialog"]
-        div:has(> button[title="Close"]) {
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 10020 !important;
-            margin-top: 0 !important;
-            padding-top: .30rem !important;
-            padding-bottom: .30rem !important;
-            background: rgba(255, 255, 255, .97) !important;
-            backdrop-filter: blur(8px) !important;
-            border-bottom: 1px solid rgba(15, 42, 76, .12) !important;
-        }
-        div[data-testid="stDialog"] div[role="dialog"]
-        button[aria-label="Close"],
-        div[data-testid="stDialog"] div[role="dialog"]
-        button[title="Close"] {
+        /* V4.4.90: keep the native close control styled. A separate fixed
+           close control is installed in the parent document below so it stays
+           visible even when BaseWeb scrolls the modal container itself. */
+        [data-testid="stDialog"] button[aria-label="Close"],
+        [data-testid="stDialog"] button[title="Close"] {
             z-index: 10030 !important;
             background: #FFFFFF !important;
             border: 1px solid #D0D5DD !important;
@@ -708,6 +694,130 @@ def _apply_v4481_full_document_refinements() -> None:
         unsafe_allow_html=True,
     )
 
+
+
+def _install_v4490_persistent_dialog_close() -> None:
+    """Keep a visible close control while any Streamlit dialog is scrolled.
+
+    Streamlit 1.58 uses BaseWeb modals whose outer container can be the
+    scrolling element. A close control inside that container therefore scrolls
+    away. This parent-document controller creates a fixed mirror of the native
+    close action and aligns it with the active dialog's upper-right edge.
+    """
+    import streamlit.components.v1 as components
+
+    components.html(
+        """
+        <!doctype html>
+        <html>
+          <head><meta charset="utf-8"></head>
+          <body>
+            <script>
+              (() => {
+                const hostWindow = window.parent;
+                const hostDocument = hostWindow.document;
+                const controllerKey = "__iarsPersistentDialogCloseV4490";
+
+                if (hostWindow[controllerKey]) {
+                  try { hostWindow[controllerKey].destroy(); } catch (_) {}
+                }
+
+                const floating = hostDocument.createElement("button");
+                floating.id = "iars-floating-dialog-close-v4490";
+                floating.type = "button";
+                floating.setAttribute("aria-label", "Close dialog");
+                floating.setAttribute("title", "Close");
+                floating.textContent = "×";
+                Object.assign(floating.style, {
+                  position: "fixed",
+                  display: "none",
+                  width: "40px",
+                  height: "40px",
+                  padding: "0",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontFamily: "Arial, sans-serif",
+                  fontSize: "29px",
+                  fontWeight: "400",
+                  lineHeight: "36px",
+                  color: "#0A2342",
+                  background: "rgba(255,255,255,.98)",
+                  border: "1px solid #D0D5DD",
+                  borderRadius: "999px",
+                  boxShadow: "0 6px 20px rgba(15,42,76,.24)",
+                  cursor: "pointer",
+                  zIndex: "2147483647"
+                });
+                hostDocument.body.appendChild(floating);
+
+                let nativeClose = null;
+
+                function locate() {
+                  const overlay = hostDocument.querySelector(
+                    '[data-testid="stDialog"]'
+                  );
+                  const close = overlay && overlay.querySelector(
+                    'button[aria-label="Close"], button[title="Close"]'
+                  );
+                  const dialog = overlay && (
+                    overlay.querySelector('[role="dialog"]') ||
+                    close?.closest('[role="dialog"]') ||
+                    close?.parentElement
+                  );
+                  return { overlay, close, dialog };
+                }
+
+                function update() {
+                  const { overlay, close, dialog } = locate();
+                  nativeClose = close || null;
+                  if (!overlay || !nativeClose || !dialog) {
+                    floating.style.display = "none";
+                    return;
+                  }
+
+                  const rect = dialog.getBoundingClientRect();
+                  const right = Math.max(
+                    14,
+                    hostWindow.innerWidth - rect.right + 14
+                  );
+                  const top = Math.max(12, Math.min(28, rect.top + 12));
+                  floating.style.right = `${right}px`;
+                  floating.style.top = `${top}px`;
+                  floating.style.display = "flex";
+                }
+
+                floating.addEventListener("click", () => {
+                  const current = locate().close || nativeClose;
+                  if (current) current.click();
+                });
+
+                const observer = new MutationObserver(update);
+                observer.observe(hostDocument.body, {
+                  childList: true,
+                  subtree: true,
+                  attributes: true
+                });
+                hostWindow.addEventListener("resize", update);
+                hostWindow.addEventListener("scroll", update, true);
+                update();
+
+                hostWindow[controllerKey] = {
+                  destroy() {
+                    observer.disconnect();
+                    hostWindow.removeEventListener("resize", update);
+                    hostWindow.removeEventListener("scroll", update, true);
+                    floating.remove();
+                  }
+                };
+              })();
+            </script>
+          </body>
+        </html>
+        """,
+        width=1,
+        height=1,
+        scrolling=False,
+    )
 
 def _apply_v4485_table_and_clear_refinements() -> None:
     """Fit grid headers/cells and avoid layout jumps when clearing records."""
@@ -1060,6 +1170,7 @@ apply_iars_theme()
 _apply_v4477_layout_refinements()
 _apply_v4479_readability_and_library_refinements()
 _apply_v4481_full_document_refinements()
+_install_v4490_persistent_dialog_close()
 _apply_v4485_table_and_clear_refinements()
 # V4.4.19: do not install the navigation loading veil. Streamlit will still rerun on clicks,
 # but users will no longer see the "Loading / Please wait" card on every module switch.
@@ -3746,7 +3857,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.89", page_title=page_key)
+render_app_header(auth_user, version="4.4.90", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -4696,7 +4807,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.89", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.90", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
