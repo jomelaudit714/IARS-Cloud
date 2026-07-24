@@ -545,6 +545,32 @@ def _apply_v4481_full_document_refinements() -> None:
             margin: 0 auto !important;
         }
 
+        /* V4.4.88: keep every long-dialog title and X close button visible. */
+        div[data-testid="stDialog"] div[role="dialog"]
+        div:has(> button[aria-label="Close"]),
+        div[data-testid="stDialog"] div[role="dialog"]
+        div:has(> button[title="Close"]) {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10020 !important;
+            margin-top: 0 !important;
+            padding-top: .30rem !important;
+            padding-bottom: .30rem !important;
+            background: rgba(255, 255, 255, .97) !important;
+            backdrop-filter: blur(8px) !important;
+            border-bottom: 1px solid rgba(15, 42, 76, .12) !important;
+        }
+        div[data-testid="stDialog"] div[role="dialog"]
+        button[aria-label="Close"],
+        div[data-testid="stDialog"] div[role="dialog"]
+        button[title="Close"] {
+            z-index: 10030 !important;
+            background: #FFFFFF !important;
+            border: 1px solid #D0D5DD !important;
+            border-radius: 999px !important;
+            box-shadow: 0 4px 14px rgba(15, 42, 76, .14) !important;
+        }
+
         /* Keep download labels on one line and vertically centered. */
         div[data-testid="stDialog"]:has(.iars-policy-preview-v4481-marker)
         [data-testid="stDownloadButton"] button,
@@ -3720,7 +3746,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.87", page_title=page_key)
+render_app_header(auth_user, version="4.4.88", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -4670,7 +4696,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.87", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.88", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

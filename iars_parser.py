@@ -2548,13 +2548,229 @@ def extract_context_tags(text, master_df=None, auditors_df=None, rows=None):
     return contexts
 
 
-def apply_carry_forward_context(rows, text, master_df=None, auditors_df=None):
+
+def extract_positional_context_tags(pdf_file, rows, master_df=None, auditors_df=None):
+    """Map PDF Tagging identity/task labels to the issue row they visually occupy.
+
+    Searchable PDF text order is not always the same as the visual order. A tag
+    drawn inside Issue 4 can be emitted before Issue 4's title, which previously
+    caused the new Auditor/Task ID to be applied to Issue 3. This function uses
+    the actual PDF page and Y coordinates so a tag starts at the visually tagged
+    issue, then the normal carry-forward logic applies it to succeeding issues.
+    """
+    if pdf_file is None or not rows:
+        return {}, set()
+
+    try:
+        import fitz
+    except Exception:
+        return {}, set()
+
+    original_position = None
+    try:
+        if hasattr(pdf_file, "tell"):
+            original_position = pdf_file.tell()
+        if hasattr(pdf_file, "seek"):
+            pdf_file.seek(0)
+        pdf_bytes = pdf_file.read()
+    except Exception:
+        return {}, set()
+    finally:
+        if original_position is not None and hasattr(pdf_file, "seek"):
+            try:
+                pdf_file.seek(original_position)
+            except Exception:
+                pass
+
+    if not pdf_bytes:
+        return {}, set()
+
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception:
+        return {}, set()
+
+    page_blocks = {}
+    for page_index, page in enumerate(doc):
+        blocks = []
+        for block in page.get_text("blocks") or []:
+            if len(block) < 5:
+                continue
+            x0, y0, x1, y1, block_text = block[:5]
+            cleaned = clean_text(block_text)
+            if cleaned:
+                blocks.append({
+                    "x0": float(x0),
+                    "y0": float(y0),
+                    "x1": float(x1),
+                    "y1": float(y1),
+                    "text": cleaned,
+                    "norm": normalize_for_match(cleaned),
+                })
+        page_blocks[page_index] = blocks
+
+    # Locate the visual start of each extracted issue using the issue title.
+    anchors_by_page = {}
+    unmatched_rows = []
+    for row_order, row in enumerate(rows):
+        issue_no = clean_text(row.get("issue_no", ""))
+        title_norm = normalize_for_match(row.get("issue", ""))
+        if not issue_no or not title_norm:
+            continue
+
+        tokens = [token for token in title_norm.split() if token]
+        prefix = " ".join(tokens[: min(7, len(tokens))])
+        candidates = []
+        for page_index, blocks in page_blocks.items():
+            for block in blocks:
+                block_norm = block["norm"]
+                if not block_norm:
+                    continue
+                full_match = title_norm in block_norm
+                prefix_match = len(prefix) >= 8 and prefix in block_norm
+                if full_match or prefix_match:
+                    # Prefer finding-column blocks over report headers/signatures.
+                    finding_column_bonus = 0 if 80 <= block["x0"] <= 410 else 1
+                    candidates.append((
+                        finding_column_bonus,
+                        page_index,
+                        block["y0"],
+                        block["x0"],
+                    ))
+
+        if candidates:
+            _, page_index, y0, x0 = sorted(candidates)[0]
+            anchors_by_page.setdefault(page_index, []).append({
+                "issue_no": issue_no,
+                "y": float(y0),
+                "x": float(x0),
+                "order": row_order,
+            })
+        else:
+            unmatched_rows.append((row_order, issue_no))
+
+    # Fallback: use issue-number blocks for titles that could not be matched.
+    for row_order, issue_no in unmatched_rows:
+        pattern = re.compile(rf"^{re.escape(issue_no)}\s*[\.)]?$", re.I)
+        candidates = []
+        for page_index, blocks in page_blocks.items():
+            for block in blocks:
+                if block["x0"] <= 125 and pattern.match(block["text"]):
+                    candidates.append((page_index, block["y0"], block["x0"]))
+        if candidates:
+            page_index, y0, x0 = sorted(candidates)[0]
+            anchors_by_page.setdefault(page_index, []).append({
+                "issue_no": issue_no,
+                "y": float(y0),
+                "x": float(x0),
+                "order": row_order,
+            })
+
+    for anchors in anchors_by_page.values():
+        anchors.sort(key=lambda item: (item["y"], item["order"]))
+
+    positional_contexts = {}
+    positional_fields = set()
+    header_auditee = extract_header("\n".join(
+        block["text"]
+        for page_index in sorted(page_blocks)
+        for block in page_blocks[page_index]
+    )).get("auditee_name", "")
+
+    tag_events = []
+    tag_patterns = [
+        ("auditee", re.compile(r"\bAUDITEE\s*[:;]\s*([^\n|]+)", re.I)),
+        ("auditor", re.compile(r"\bAUDITOR\s*[:;]\s*([^\n|]+)", re.I)),
+        ("task_id", re.compile(r"\bTA(?:S)?K\s*(?:ID|1D|I[Dd])\s*[:;.\-]?\s*([A-Za-z0-9\-]+)", re.I)),
+    ]
+
+    for page_index, blocks in page_blocks.items():
+        anchors = anchors_by_page.get(page_index, [])
+        if not anchors:
+            continue
+        for block in blocks:
+            for field_name, pattern in tag_patterns:
+                match = pattern.search(block["text"])
+                if not match:
+                    continue
+                raw_value = clean_text(match.group(1))
+                if not raw_value:
+                    continue
+                # The nearest visual issue-title anchor is the issue containing
+                # the tag. This correctly maps tags placed just above a title.
+                anchor = min(
+                    anchors,
+                    key=lambda item: (abs(item["y"] - block["y0"]), item["order"]),
+                )
+                tag_events.append((
+                    page_index,
+                    block["y0"],
+                    field_name,
+                    raw_value,
+                    anchor["issue_no"],
+                ))
+
+    for _, _, field_name, raw_value, issue_no in sorted(tag_events):
+        ctx = positional_contexts.setdefault(issue_no, {})
+        if field_name == "auditor":
+            auditor, user = canonical_auditor_name(auditors_df, raw_value)
+            ctx.update({
+                "auditor_raw": raw_value,
+                "auditor": auditor,
+                "auditor_user": user,
+            })
+            positional_fields.add("auditor")
+        elif field_name == "task_id":
+            ctx["task_id"] = clean_text(raw_value)
+            positional_fields.add("task_id")
+        elif field_name == "auditee":
+            resolved = resolve_auditee_tag_from_header(raw_value, header_auditee)
+            emp_id, emp_name = canonical_employee_name(master_df, resolved)
+            ctx.update({
+                "auditee_raw": raw_value,
+                "auditee_id": emp_id,
+                "auditee_name": emp_name,
+            })
+            positional_fields.add("auditee")
+
+    try:
+        doc.close()
+    except Exception:
+        pass
+    return positional_contexts, positional_fields
+
+
+def _merge_positional_context_tags(text_contexts, positional_contexts, positional_fields):
+    """Make visual PDF tags authoritative over unreliable plain-text order."""
+    contexts = {key: dict(value) for key, value in (text_contexts or {}).items()}
+
+    field_keys = {
+        "auditor": ["auditor_raw", "auditor", "auditor_user"],
+        "task_id": ["task_id"],
+        "auditee": ["auditee_raw", "auditee_id", "auditee_name"],
+    }
+    for field_name in positional_fields or set():
+        for ctx in contexts.values():
+            for key in field_keys.get(field_name, []):
+                ctx.pop(key, None)
+
+    for issue_no, positional in (positional_contexts or {}).items():
+        contexts.setdefault(issue_no, {}).update(positional)
+    return contexts
+
+def apply_carry_forward_context(rows, text, master_df=None, auditors_df=None, pdf_file=None):
     """Apply context tags to extracted rows.
 
     Auditee, Auditor and Task ID carry forward. Frequency and Reaction are
     issue-specific and are never copied to a succeeding issue.
     """
-    contexts = extract_context_tags(text, master_df, auditors_df, rows=rows)
+    text_contexts = extract_context_tags(text, master_df, auditors_df, rows=rows)
+    positional_contexts, positional_fields = extract_positional_context_tags(
+        pdf_file, rows, master_df, auditors_df
+    )
+    contexts = _merge_positional_context_tags(
+        text_contexts, positional_contexts, positional_fields
+    )
     if not contexts:
         return rows
 
@@ -3280,7 +3496,9 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
     if not rows:
         rows = extract_rows_from_text_fallback(report_text, master_df, auditors_df)
 
-    rows = apply_carry_forward_context(rows, report_text, master_df, auditors_df)
+    rows = apply_carry_forward_context(
+        rows, report_text, master_df, auditors_df, pdf_file=pdf_file
+    )
 
     # Final safety filter for OCR/plain-text extraction paths.
     if is_operations_audit:
