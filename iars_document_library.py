@@ -127,6 +127,55 @@ def _clean_text(value: Any, limit: int = 250) -> str:
     return " ".join(str(value or "").split()).strip()[:limit]
 
 
+SUBJECT_CATEGORY_MIGRATION_FILE = "SUPABASE_POLICY_SUBJECT_CATEGORY_FIX.sql"
+
+
+def _exception_text(exc: Exception) -> str:
+    """Return a stable lower-case representation of a Supabase/PostgREST error."""
+    parts = [str(exc)]
+    for attr in ("message", "code", "details", "hint"):
+        value = getattr(exc, attr, None)
+        if value:
+            parts.append(str(value))
+    return " ".join(parts).casefold()
+
+
+def _is_missing_column_error(exc: Exception, column_name: str) -> bool:
+    text = _exception_text(exc)
+    column = str(column_name or "").casefold()
+    return bool(
+        column
+        and column in text
+        and (
+            "pgrst204" in text
+            or "schema cache" in text
+            or "could not find" in text
+            or "column" in text and "does not exist" in text
+        )
+    )
+
+
+def ensure_policy_subject_category_schema(
+    client: Any,
+    config: DocumentLibraryConfig,
+) -> None:
+    """Fail before Storage upload when the policy metadata column is unavailable."""
+    try:
+        client.table(config.table).select("subject_category").limit(1).execute()
+    except Exception as exc:
+        if _is_missing_column_error(exc, "subject_category"):
+            raise DocumentLibraryError(
+                "Policies & Memoranda database setup is incomplete: the "
+                "document_library.subject_category column is missing or is not yet "
+                "visible in the PostgREST schema cache. Run "
+                f"{SUBJECT_CATEGORY_MIGRATION_FILE} once in the Supabase SQL Editor, "
+                "wait a few seconds, and then retry the upload."
+            ) from exc
+        raise DocumentLibraryError(
+            f"Unable to verify the Policies & Memoranda database schema: {exc}"
+        ) from exc
+
+
 def sanitize_segment(value: str, fallback: str = "document") -> str:
     value = _clean_text(value, 180)
     value = re.sub(r"[^A-Za-z0-9._-]+", "_", value)
@@ -336,6 +385,10 @@ def upload_document(
         raise DocumentLibraryError(
             "Select a company/group folder before uploading a policy or memorandum."
         )
+    if collection_value == COLLECTION_POLICIES:
+        # Verify the metadata schema before placing the file in Storage. This avoids
+        # the misleading "file uploaded but record could not be saved" sequence.
+        ensure_policy_subject_category_schema(client, config)
 
     storage_path = make_storage_path(
         collection=collection_value,
@@ -506,6 +559,8 @@ def update_document_metadata(
 
     category_value = _clean_text(category, 100) or "General"
     subject_value = _clean_text(subject_category, 120) or "Other"
+    ensure_policy_subject_category_schema(client, config)
+
     payload = {
         "title": title_value,
         "category": category_value,
