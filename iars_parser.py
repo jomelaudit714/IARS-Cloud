@@ -3705,6 +3705,139 @@ def extract_rows_from_text_fallback(text, master_df=None, auditors_df=None):
     return rows
 
 
+
+def _cell_starts_with_distinct_issue(value):
+    """Return True when an unnumbered table cell starts with a real issue title.
+
+    This is deliberately strict. It permits activity/generic ``OTHER ISSUES``
+    labels before the title, but rejects ordinary narrative continuations. It
+    is used for table rows that inherit the preceding Issue No.
+    """
+    raw_lines = [
+        clean_text(line)
+        for line in str(value or "").replace("\r", "\n").split("\n")
+        if clean_text(line)
+    ]
+    if not raw_lines:
+        return False
+
+    for raw_line in raw_lines:
+        line = _clean_title_candidate_line(raw_line)
+        if not line:
+            continue
+        upper = line.upper().strip().rstrip(":")
+        if _is_activity_header(upper) or _is_generic_other(upper):
+            continue
+        return _looks_like_issue_title_line(line)
+    return False
+
+
+def _extract_unnumbered_table_issues(cells):
+    """Extract distinct findings from a table row with a blank Issue No. cell.
+
+    Some reports continue the same numbered item in another physical row or on
+    the next page. Example: Issue No. 2 contains ``INCOMPLETE RECEIPT
+    INFORMATION`` followed by an unnumbered row titled ``OUTDATED DAILY
+    MONITORING``. The second title must become a separate finding while
+    inheriting the same Issue No., Task ID, Auditee and Auditor.
+    """
+    cleaned_cells = [clean_cell_preserve(cell) for cell in (cells or [])]
+    if not cleaned_cells:
+        return [], "None"
+
+    header_labels = {
+        "ISSUE", "NO", "NO.", "AUDIT FINDINGS", "RECOMMENDATION",
+    }
+    candidates = []
+    for cell_index, value in enumerate(cleaned_cells):
+        text = clean_text(value)
+        if not text or text.upper().strip() in header_labels:
+            continue
+        # The right-most table cell is ordinarily the recommendation column.
+        # Still allow it as a last-resort candidate when the table extractor
+        # collapses columns, but prefer a valid title in an earlier cell.
+        if not _cell_starts_with_distinct_issue(value):
+            continue
+        segments = split_finding_cell_multiple(value)
+        if not segments:
+            continue
+        candidates.append((cell_index, value, segments))
+
+    if not candidates:
+        return [], "None"
+
+    non_last = [item for item in candidates if item[0] < len(cleaned_cells) - 1]
+    finding_index, _finding_value, segments = max(
+        non_last or candidates,
+        key=lambda item: (len(item[2]), len(clean_text(item[1]))),
+    )
+
+    recommendation_parts = []
+    for value in cleaned_cells[finding_index + 1 :]:
+        text = clean_text(value)
+        if not text or text.upper().strip() in header_labels:
+            continue
+        recommendation_parts.append(value)
+    recommendation_cell = "\n".join(recommendation_parts) if recommendation_parts else "None"
+    return segments, recommendation_cell
+
+
+def _append_inherited_table_issues(rows, cells):
+    """Append unnumbered distinct issues and inherit the latest Issue No.
+
+    Returns True only when one or more separate issue rows were appended.
+    """
+    if not rows:
+        return False
+
+    issue_segments, recommendation_cell = _extract_unnumbered_table_issues(cells)
+    if not issue_segments:
+        return False
+
+    inherited_issue_no = clean_text(rows[-1].get("issue_no", ""))
+    if not inherited_issue_no:
+        return False
+
+    recommendation_segments = split_recommendation_cell_for_issues(
+        recommendation_cell, len(issue_segments)
+    )
+    existing_indexes = [
+        int(row.get("sub_issue_index", 0) or 0)
+        for row in rows
+        if clean_text(row.get("issue_no", "")) == inherited_issue_no
+    ]
+    next_sub_issue_index = max(existing_indexes or [0]) + 1
+    inherited_activity = clean_text(rows[-1].get("activity_context", ""))
+
+    for segment_offset, segment in enumerate(issue_segments):
+        issue_title = clean_text(segment.get("issue", ""))
+        narrative = clean_cell_preserve(segment.get("narrative", ""))
+        if not issue_title:
+            continue
+
+        rec_segment = recommendation_segments[segment_offset]
+        recommendation1, recommendation2 = extract_recommendation_pair(rec_segment)
+        rows.append({
+            "issue_no": inherited_issue_no,
+            "issue": issue_title,
+            "narrative": remove_action_taken(narrative),
+            "recommendation1": recommendation1,
+            "recommendation2": recommendation2,
+            "explanation": extract_explanation_from_narrative(narrative),
+            "correction": extract_correction_from_text(
+                narrative + "\n" + clean_text(rec_segment)
+            ),
+            "activity_context": (
+                clean_text(segment.get("activity_context", ""))
+                or inherited_activity
+            ),
+            "sub_issue_index": next_sub_issue_index + segment_offset,
+            "inherited_issue_number": True,
+        })
+
+    return True
+
+
 def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, auditors_df=None):
     """Extract finding rows from PDF.
 
@@ -3747,11 +3880,18 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
                                 break
 
                         if not issue_no:
-                            # A finding can continue at the top of the next PDF page
-                            # without repeating its issue number. Append only the first
-                            # substantive table row on a non-exhibit page to the most
-                            # recent finding. This captures cause statements such as
-                            # "This occurred due to ..." that otherwise become detached.
+                            # A blank Issue No. can mean either:
+                            # 1) a distinct second issue inheriting the preceding number, or
+                            # 2) an ordinary narrative continuation at the top of a new page.
+                            # Detect a real title first. This captures layouts such as:
+                            #   Issue 2 - INCOMPLETE RECEIPT INFORMATION
+                            #   [blank no.] OUTDATED DAILY MONITORING
+                            # as two separate records with the same Issue No./tag context.
+                            if not is_exhibit_page and _append_inherited_table_issues(rows, cells):
+                                continue
+
+                            # Otherwise retain the established page-boundary narrative
+                            # continuation behavior for cause/explanation paragraphs.
                             if rows and row_index == 0 and page_index > 0 and not is_exhibit_page:
                                 candidates = []
                                 for cell_index, cell in enumerate(cells):
