@@ -1388,7 +1388,8 @@ def image_to_data_uri(image):
 
 def editor_file_id(file_name: str, pdf_bytes: bytes) -> str:
     digest = hashlib.sha256(pdf_bytes).hexdigest()[:12]
-    safe_name = "".join(ch if ch.isalnum() else "_" for ch in file_name)[:40]
+    safe_name = "".join(ch if ch.isalnum() else "_" for ch in file_name)
+    safe_name = re.sub(r"_+", "_", safe_name).strip("_")[:40] or "pdf"
     return f"{safe_name}_{digest}"
 
 
@@ -3505,9 +3506,9 @@ def render_pdf_tagging_full_document_dialog(
     st.markdown(f"### {filename}")
     st.info(
         "Scroll through all pages. Double-right-click a page to add a textbox, "
-        "then type, move, resize, or change the exact font size. Text saves "
-        "automatically within about one second after you pause, click outside, "
-        "or right-click outside the active textbox. Auditee, Auditor, and Task ID tags carry "
+        "then type, move, resize, or change the exact font size. Active text saves "
+        "within one second after you click outside or switch to another textbox, "
+        "and is flushed immediately when you leave or close the editor. Auditee, Auditor, and Task ID tags carry "
         "forward to every succeeding issue and page until a newer tag of the same "
         "type appears. Frequency Rate and Reaction remain issue-specific."
     )
@@ -3525,9 +3526,13 @@ def render_pdf_tagging_full_document_dialog(
             page_number - 1,
             zoom=1.7,
         )
-        component_key = (
-            f"iars_pdf_editor_{file_id}_page_{page_number}_"
-            f"v30_reset_{reset_version}"
+        component_key = re.sub(
+            r"__+",
+            "_",
+            (
+                f"iars_pdf_editor_{file_id}_page_{page_number}_"
+                f"v30_reset_{reset_version}"
+            ),
         )
         component_keys.append(component_key)
         if preview_img is None:
@@ -3858,7 +3863,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.91", page_title=page_key)
+render_app_header(auth_user, version="4.4.92", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -4808,7 +4813,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.91", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.92", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

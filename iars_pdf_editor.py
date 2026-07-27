@@ -1,20 +1,19 @@
-"""IARS PDF textbox editor v3.1.
+"""IARS PDF textbox editor v3.2.
 
-Fixes in this version:
-- exact per-textbox font sizes from 6 to 48 pt without automatic shrinking
-- font-size value remains visible when a textbox is deselected
-- browser-local editing with no Streamlit rerun while typing, resizing, or selecting
-- automatic idle synchronization to Streamlit with no manual save button
-- one-click text editing after deselection
-- long-press drag from text interior, immediate drag from plain borders, blue-handle resize
-- no synchronization while a textbox or font-size field is actively being edited
-- smoother return, delete, and retyping behavior in existing textboxes
-- tighter text padding, Fit text, duplicate, resize, and page persistence
-- component registration repeated safely on every Streamlit rerun
+Text is synchronized only after an explicit editing boundary:
+- click outside the active textbox
+- switch to another textbox
+- leave the editor
+- close or unmount the popup
+
+Outside-click and box-switch commits use a one-second timer. Leaving or closing
+flushes immediately so the last active text is not lost. Browser-local backup is
+still updated while typing, but typing alone does not trigger Streamlit sync.
 """
 from __future__ import annotations
 
 from typing import Any
+import re
 
 import streamlit as st
 
@@ -422,10 +421,11 @@ export default function(component) {
   let lastSnapshot = null;
   let localSaveTimer = null;
   let autoSyncTimer = null;
+  let textCommitTimer = null;
   let dirty = localUpdated > pythonUpdated;
   let syncing = false;
   const AUTOSAVE_IDLE_MS = 900;
-  const OUTSIDE_COMMIT_DELAY_MS = 120;
+  const OUTSIDE_COMMIT_DELAY_MS = 1000;
   let suppressBlurCommit = false;
   let isComposing = false;
   let lastInteractionAt = performance.now();
@@ -542,11 +542,18 @@ export default function(component) {
     scheduleAutoSync(Math.max(120, Number(delay) || AUTOSAVE_IDLE_MS));
   }
 
-  function syncSoon(delay = OUTSIDE_COMMIT_DELAY_MS, message = 'All changes saved automatically.') {
-    if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
-    autoSyncTimer = window.setTimeout(() => {
-      autoSyncTimer = null;
-      if (!dirty || syncing || isComposing) return;
+  function syncTextCommitSoon(
+    delay = OUTSIDE_COMMIT_DELAY_MS,
+    message = 'All changes saved automatically.'
+  ) {
+    if (textCommitTimer) window.clearTimeout(textCommitTimer);
+    textCommitTimer = window.setTimeout(() => {
+      textCommitTimer = null;
+      if (!dirty || syncing) return;
+      if (isComposing) {
+        syncTextCommitSoon(120, message);
+        return;
+      }
       syncToStreamlit(message);
     }, Math.max(40, Number(delay) || OUTSIDE_COMMIT_DELAY_MS));
   }
@@ -560,6 +567,10 @@ export default function(component) {
     if (autoSyncTimer) {
       window.clearTimeout(autoSyncTimer);
       autoSyncTimer = null;
+    }
+    if (textCommitTimer) {
+      window.clearTimeout(textCommitTimer);
+      textCommitTimer = null;
     }
     const value = saveLocal();
     syncing = true;
@@ -992,18 +1003,17 @@ export default function(component) {
         dirty = true;
         queueLocalSave(20);
         noteUserInteraction();
-        scheduleAutoSync(AUTOSAVE_IDLE_MS);
+        setStatus('Text updated — click outside or switch boxes to save.');
       });
       textElement.addEventListener('input', () => {
-        // Keep typing smooth in the browser. The local backup updates almost
-        // immediately, while Streamlit receives the committed text after the
-        // user pauses or clicks/right-clicks outside the textbox.
+        // Keep typing smooth and update only the browser-local backup.
+        // Streamlit synchronization begins only after an explicit boundary:
+        // outside click, box switch, leaving the editor, or closing the popup.
         box.text = textElement.innerText;
         dirty = true;
         queueLocalSave(20);
-        setStatus('Editing… click or right-click outside to save immediately.');
+        setStatus('Editing… click outside or switch boxes to save.');
         noteUserInteraction();
-        scheduleAutoSync(AUTOSAVE_IDLE_MS);
       });
       textElement.addEventListener('paste', (event) => {
         event.preventDefault();
@@ -1016,8 +1026,8 @@ export default function(component) {
         textElement.innerText = box.text;
         dirty = true;
         saveLocal();
-        setStatus('Text committed — saving now…');
-        syncSoon(OUTSIDE_COMMIT_DELAY_MS);
+        setStatus('Text committed — saving within one second…');
+        syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
       });
       textElement.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -1205,9 +1215,13 @@ export default function(component) {
       suppressBlurCommit = false;
     }
 
-    setStatus(immediate ? 'Text committed — saving now…' : 'Text updated — saving automatically…');
-    if (immediate) syncSoon(OUTSIDE_COMMIT_DELAY_MS);
-    else scheduleAutoSync(AUTOSAVE_IDLE_MS);
+    if (immediate) {
+      setStatus('Text committed — saving now…');
+      syncToStreamlit();
+    } else {
+      setStatus('Text committed — saving within one second…');
+      syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
+    }
     return true;
   }
 
@@ -1216,16 +1230,12 @@ export default function(component) {
     if (!focused) return;
     const path = event.composedPath?.() ?? [];
     if (!path.includes(focused)) {
-      flushFocusedText({ blur: true, immediate: true });
+      flushFocusedText({ blur: true, immediate: false });
     }
   }
 
   function handleContextMenu(event) {
-    const focused = layer.querySelector('.tag-text:focus');
     const targetBox = event.target.closest('.tag-box');
-    if (focused && !targetBox?.contains(focused)) {
-      flushFocusedText({ blur: true, immediate: true });
-    }
     if (targetBox) return;
     event.preventDefault();
     const now = performance.now();
@@ -1265,18 +1275,19 @@ export default function(component) {
   window.addEventListener('pointercancel', finishOperation);
   const handleWindowBlur = () => {
     if (flushFocusedText({ blur: true, immediate: true })) return;
-    if (dirty) syncSoon(OUTSIDE_COMMIT_DELAY_MS);
+    if (dirty) syncToStreamlit();
   };
   const handleVisibilityChange = () => {
     if (document.visibilityState !== 'hidden') return;
     if (flushFocusedText({ blur: false, immediate: true })) return;
-    if (dirty) syncSoon(40);
+    if (dirty) syncToStreamlit();
   };
   const handlePageHide = () => {
-    flushFocusedText({ blur: false, immediate: false });
+    if (flushFocusedText({ blur: false, immediate: true })) return;
     if (dirty) {
       const value = saveLocal();
       try { setStateValue('editor', value); } catch (_) {}
+      dirty = false;
     }
   };
   window.addEventListener('blur', handleWindowBlur);
@@ -1313,7 +1324,15 @@ export default function(component) {
   }
 
   return () => {
-    flushFocusedText();
+    if (!flushFocusedText({ blur: false, immediate: true }) && dirty) {
+      const value = saveLocal();
+      try { setStateValue('editor', value); } catch (_) {}
+      dirty = false;
+    }
+    if (textCommitTimer) {
+      window.clearTimeout(textCommitTimer);
+      textCommitTimer = null;
+    }
     layer.removeEventListener('contextmenu', handleContextMenu);
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
     clearTextGestureTimer();
@@ -1344,7 +1363,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v31",
+        name="iars_pdf_textbox_editor_v32",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
@@ -1378,7 +1397,11 @@ def pdf_textbox_editor(
         "default_font_size": 11,
         "updated_at": 0,
     }
-    current_editor = _read_editor_state(st.session_state.get(key), initial_editor)
+    # Streamlit Components v2 reserves ``__`` as an internal ID delimiter.
+    # Uploaded filenames can contain repeated punctuation that becomes repeated
+    # underscores, so normalize the widget key before reading or mounting it.
+    safe_key = re.sub(r"__+", "_", str(key)).strip("_") or "iars_pdf_editor"
+    current_editor = _read_editor_state(st.session_state.get(safe_key), initial_editor)
 
     component = _register_pdf_editor_component()
 
@@ -1391,7 +1414,7 @@ def pdf_textbox_editor(
             "zoom": 1.0,
         },
         default={"editor": current_editor},
-        key=key,
+        key=safe_key,
         on_editor_change=lambda: None,
         width="stretch",
         height=height,
