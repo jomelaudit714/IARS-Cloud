@@ -1,4 +1,4 @@
-"""IARS PDF textbox editor v2.9.
+"""IARS PDF textbox editor v3.1.
 
 Fixes in this version:
 - exact per-textbox font sizes from 6 to 48 pt without automatic shrinking
@@ -424,7 +424,10 @@ export default function(component) {
   let autoSyncTimer = null;
   let dirty = localUpdated > pythonUpdated;
   let syncing = false;
-  const AUTOSAVE_IDLE_MS = 1800;
+  const AUTOSAVE_IDLE_MS = 900;
+  const OUTSIDE_COMMIT_DELAY_MS = 120;
+  let suppressBlurCommit = false;
+  let isComposing = false;
   let lastInteractionAt = performance.now();
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -502,7 +505,7 @@ export default function(component) {
     const active = document.activeElement;
     return Boolean(
       operation ||
-      layer.querySelector('.tag-text:focus') ||
+      isComposing ||
       active === fontSizeInput
     );
   }
@@ -534,9 +537,18 @@ export default function(component) {
   function markDirty(message = 'Saving changes automatically…', delay = AUTOSAVE_IDLE_MS) {
     dirty = true;
     noteUserInteraction();
-    queueLocalSave(60);
+    queueLocalSave(40);
     setStatus(message);
-    scheduleAutoSync(Math.max(delay, AUTOSAVE_IDLE_MS));
+    scheduleAutoSync(Math.max(120, Number(delay) || AUTOSAVE_IDLE_MS));
+  }
+
+  function syncSoon(delay = OUTSIDE_COMMIT_DELAY_MS, message = 'All changes saved automatically.') {
+    if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
+    autoSyncTimer = window.setTimeout(() => {
+      autoSyncTimer = null;
+      if (!dirty || syncing || isComposing) return;
+      syncToStreamlit(message);
+    }, Math.max(40, Number(delay) || OUTSIDE_COMMIT_DELAY_MS));
   }
 
   function syncToStreamlit(message = 'All changes saved automatically.') {
@@ -970,13 +982,26 @@ export default function(component) {
         placeCaretAtPoint(textElement, event.clientX, event.clientY);
       });
       textElement.addEventListener('focus', () => selectBox(box.id));
-      textElement.addEventListener('input', () => {
-        // Keep typing entirely in the browser while the textbox is focused.
-        // Automatic Streamlit synchronization waits until editing is idle.
+      textElement.addEventListener('compositionstart', () => {
+        isComposing = true;
+        noteUserInteraction();
+      });
+      textElement.addEventListener('compositionend', () => {
+        isComposing = false;
         box.text = textElement.innerText;
         dirty = true;
-        queueLocalSave(50);
-        setStatus('Editing… changes are saved automatically when you pause.');
+        queueLocalSave(20);
+        noteUserInteraction();
+        scheduleAutoSync(AUTOSAVE_IDLE_MS);
+      });
+      textElement.addEventListener('input', () => {
+        // Keep typing smooth in the browser. The local backup updates almost
+        // immediately, while Streamlit receives the committed text after the
+        // user pauses or clicks/right-clicks outside the textbox.
+        box.text = textElement.innerText;
+        dirty = true;
+        queueLocalSave(20);
+        setStatus('Editing… click or right-click outside to save immediately.');
         noteUserInteraction();
         scheduleAutoSync(AUTOSAVE_IDLE_MS);
       });
@@ -986,9 +1011,13 @@ export default function(component) {
         document.execCommand('insertText', false, pasted);
       });
       textElement.addEventListener('blur', () => {
+        if (suppressBlurCommit) return;
         box.text = normalizeText(textElement.innerText);
         textElement.innerText = box.text;
-        markDirty('Text updated — saving automatically after a short pause…', AUTOSAVE_IDLE_MS);
+        dirty = true;
+        saveLocal();
+        setStatus('Text committed — saving now…');
+        syncSoon(OUTSIDE_COMMIT_DELAY_MS);
       });
       textElement.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -1158,18 +1187,27 @@ export default function(component) {
     markDirty('Page cleared — saving automatically…', AUTOSAVE_IDLE_MS);
   }
 
-  function flushFocusedText() {
+  function flushFocusedText({ blur = false, immediate = false } = {}) {
     const focused = layer.querySelector('.tag-text:focus');
     if (!focused) return false;
     const boxElement = focused.closest('.tag-box');
     const box = boxes.find((item) => item.id === boxElement?.dataset?.boxId);
     if (!box) return false;
+
     box.text = normalizeText(focused.innerText);
     focused.innerText = box.text;
     dirty = true;
     saveLocal();
-    setStatus('Text updated — saving automatically…');
-    scheduleAutoSync(AUTOSAVE_IDLE_MS);
+
+    if (blur && document.activeElement === focused) {
+      suppressBlurCommit = true;
+      focused.blur();
+      suppressBlurCommit = false;
+    }
+
+    setStatus(immediate ? 'Text committed — saving now…' : 'Text updated — saving automatically…');
+    if (immediate) syncSoon(OUTSIDE_COMMIT_DELAY_MS);
+    else scheduleAutoSync(AUTOSAVE_IDLE_MS);
     return true;
   }
 
@@ -1177,11 +1215,18 @@ export default function(component) {
     const focused = layer.querySelector('.tag-text:focus');
     if (!focused) return;
     const path = event.composedPath?.() ?? [];
-    if (!path.includes(focused)) flushFocusedText();
+    if (!path.includes(focused)) {
+      flushFocusedText({ blur: true, immediate: true });
+    }
   }
 
   function handleContextMenu(event) {
-    if (event.target.closest('.tag-box')) return;
+    const focused = layer.querySelector('.tag-text:focus');
+    const targetBox = event.target.closest('.tag-box');
+    if (focused && !targetBox?.contains(focused)) {
+      flushFocusedText({ blur: true, immediate: true });
+    }
+    if (targetBox) return;
     event.preventDefault();
     const now = performance.now();
     const distance = Math.hypot(event.clientX - lastRightClick.x, event.clientY - lastRightClick.y);
@@ -1218,7 +1263,24 @@ export default function(component) {
   window.addEventListener('pointerup', finishOperation);
   window.addEventListener('pointercancel', handleTextPointerCancel);
   window.addEventListener('pointercancel', finishOperation);
-  const handlePageHide = () => flushFocusedText();
+  const handleWindowBlur = () => {
+    if (flushFocusedText({ blur: true, immediate: true })) return;
+    if (dirty) syncSoon(OUTSIDE_COMMIT_DELAY_MS);
+  };
+  const handleVisibilityChange = () => {
+    if (document.visibilityState !== 'hidden') return;
+    if (flushFocusedText({ blur: false, immediate: true })) return;
+    if (dirty) syncSoon(40);
+  };
+  const handlePageHide = () => {
+    flushFocusedText({ blur: false, immediate: false });
+    if (dirty) {
+      const value = saveLocal();
+      try { setStateValue('editor', value); } catch (_) {}
+    }
+  };
+  window.addEventListener('blur', handleWindowBlur);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('pagehide', handlePageHide);
   window.addEventListener('keydown', handleKeydown);
   fontSizeInput.addEventListener('input', () => setSelectedFontSize(fontSizeInput.value));
@@ -1263,6 +1325,8 @@ export default function(component) {
     window.removeEventListener('pointercancel', finishOperation);
     if (localSaveTimer) window.clearTimeout(localSaveTimer);
     if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
+    window.removeEventListener('blur', handleWindowBlur);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('pagehide', handlePageHide);
     window.removeEventListener('keydown', handleKeydown);
     if (contextHint) contextHint.remove();
@@ -1280,7 +1344,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v30",
+        name="iars_pdf_textbox_editor_v31",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
