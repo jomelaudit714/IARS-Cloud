@@ -1050,8 +1050,12 @@ _ACTIVITY_HEADINGS = {
     "CASH ADVANCE",
     "CASH ADVANCES",
     "DAILY SALES",
-    "CASH SALES",
+    "DAILY SALES AND COLLECTION",
+    "DAILY SALES COUNT AND COLLECTION",
+    "SALES",
     "SALES AND COLLECTION",
+    "SALES COUNT AND COLLECTION",
+    "CASH SALES",
     "CASH SALES AND COLLECTION",
     "COLLECTION",
     "CHANGE FUND",
@@ -1121,6 +1125,206 @@ def _clean_title_candidate_line(value):
         return normalize_title(suffix)
 
     return ""
+
+
+
+def _looks_like_issue_title_line(value):
+    """Recognize a standalone issue title, including titles not in hard-coded lists.
+
+    This is intentionally broader than ``_has_true_issue_marker`` so a second
+    valid title inside one numbered finding cell is not swallowed by the first
+    issue narrative. Narrative sentences and table labels remain excluded.
+    """
+    line = _clean_title_candidate_line(value)
+    if not line:
+        return False
+
+    upper = line.upper().strip().rstrip(":")
+    ignored = {
+        "ISSUE", "NO", "NO.", "AUDIT FINDINGS", "RECOMMENDATION",
+        "NONE", "NONE.", "N/A", "ACTION TAKEN",
+    }
+    if upper in ignored or _is_activity_header(upper) or _is_generic_other(upper):
+        return False
+    if _CONTEXT_TAG_LABEL.search(line):
+        return False
+    if re.match(r"^(?:WE RECOMMEND|WE ADVISE|PLEASE REVIEW|REVIEW\b)", upper):
+        return False
+    if len(line) > 230 or upper_ratio(line) < 0.70:
+        return False
+
+    if _has_true_issue_marker(line):
+        return True
+
+    words = re.findall(r"[A-Z0-9][A-Z0-9'’/&.()\-]*", upper)
+    if len(words) < 2 or len(words) > 24:
+        return False
+
+    # These are normal narrative openings, even when PDF extraction converts
+    # the line to uppercase.
+    narrative_starters = (
+        "UPON ", "DURING ", "ACCORDING ", "THE ", "THIS ", "THERE ",
+        "INCLUDED ", "CONTINUOUSLY ", "BASED ", "IT WAS ", "WE NOTED ",
+        "AUDIT NOTED ", "SURPRISE ", "DETAILS ", "TOTAL ", "AS OF ",
+    )
+    if upper.startswith(narrative_starters):
+        return False
+
+    # Unknown titles are normally short, predominantly uppercase headings and
+    # do not end like a narrative sentence.
+    return upper_ratio(line) >= 0.86 and not re.search(r"[.!?]$", line)
+
+
+def split_finding_cell_multiple(finding_cell):
+    """Return every distinct issue title/narrative inside one numbered cell.
+
+    A single numbered table row can contain this layout::
+
+        FIRST ISSUE TITLE
+        First issue narrative...
+        SECOND ISSUE TITLE
+        Second issue narrative...
+
+    Both issues are returned in document order. Activity headings such as
+    DAILY SALES COUNT or CHANGE FUND COUNT are retained only as context and are
+    never returned as issue titles.
+    """
+    raw_lines = [
+        clean_text(x)
+        for x in str(finding_cell or "").replace("\r", "\n").split("\n")
+        if clean_text(x)
+    ]
+    if not raw_lines:
+        return []
+
+    lines = [_clean_title_candidate_line(x) for x in raw_lines]
+    results = []
+    current_activity = ""
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        upper = line.upper().strip().rstrip(":") if line else ""
+
+        if line and _is_activity_header(upper):
+            current_activity = clean_text(line).strip().rstrip(":")
+            i += 1
+            continue
+
+        if not _looks_like_issue_title_line(line):
+            i += 1
+            continue
+
+        title_parts = [line.rstrip(":")]
+        title_start = i
+        j = i + 1
+
+        # Consecutive uppercase title lines are treated as one wrapped title.
+        while j < len(lines):
+            nxt = lines[j]
+            nxt_upper = nxt.upper().strip().rstrip(":") if nxt else ""
+            if not nxt or _is_activity_header(nxt_upper):
+                break
+            if _looks_like_issue_title_line(nxt):
+                title_parts.append(nxt.rstrip(":"))
+                j += 1
+                continue
+            break
+
+        # Narrative ends at the next activity heading that introduces another
+        # title, or at the next standalone title.
+        k = j
+        while k < len(lines):
+            candidate = lines[k]
+            candidate_upper = candidate.upper().strip().rstrip(":") if candidate else ""
+            if candidate and _is_activity_header(candidate_upper):
+                look = k + 1
+                while look < len(lines) and not lines[look]:
+                    look += 1
+                if look < len(lines) and _looks_like_issue_title_line(lines[look]):
+                    break
+            if candidate and _looks_like_issue_title_line(candidate):
+                break
+            k += 1
+
+        raw_title = normalize_title(" ".join(title_parts))
+        narrative_lines = []
+        for raw, cleaned in zip(raw_lines[j:k], lines[j:k]):
+            cleaned_upper = cleaned.upper().strip().rstrip(":") if cleaned else ""
+            if cleaned and _is_activity_header(cleaned_upper):
+                continue
+            if cleaned and _CONTEXT_TAG_LABEL.search(cleaned):
+                continue
+            narrative_lines.append(raw)
+        narrative = "\n".join(narrative_lines)
+
+        issue_title = infer_issue_title_from_narrative(raw_title, narrative)
+        issue_title = enhance_issue_title_details(issue_title, narrative)
+        if issue_title and not _is_activity_header(issue_title) and not _is_generic_other(issue_title.upper()):
+            results.append({
+                "issue": issue_title,
+                "narrative": narrative,
+                "activity_context": current_activity,
+                "title_start": title_start,
+            })
+
+        i = k if k > i else i + 1
+
+    if results:
+        return results
+
+    # Preserve the established single-title fallback for unusual PDFs.
+    issue_title, narrative = split_finding_cell(finding_cell)
+    if not clean_text(issue_title):
+        return []
+    return [{
+        "issue": issue_title,
+        "narrative": narrative,
+        "activity_context": current_activity,
+        "title_start": 0,
+    }]
+
+
+def split_recommendation_cell_for_issues(rec_cell, issue_count):
+    """Split vertically stacked recommendation text for multiple issues.
+
+    When clear boundaries cannot be found, the first recommendation is assigned
+    to the first issue and later issues receive ``None`` rather than incorrectly
+    inheriting a policy recommendation from another issue.
+    """
+    if issue_count <= 1:
+        return [clean_cell_preserve(rec_cell) or "None"]
+
+    lines = [
+        clean_text(x)
+        for x in str(rec_cell or "").replace("\r", "\n").split("\n")
+        if clean_text(x)
+    ]
+    if not lines:
+        return ["None"] * issue_count
+
+    groups = []
+    current = []
+    boundary = re.compile(
+        r"^(?:WE RECOMMEND|WE ADVISE|PLEASE REVIEW|REVIEW\b|NONE\.?$|N/A$)",
+        re.I,
+    )
+    for line in lines:
+        if current and boundary.match(line):
+            groups.append(" ".join(current))
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        groups.append(" ".join(current))
+
+    if len(groups) == 1:
+        return [groups[0]] + ["None"] * (issue_count - 1)
+    if len(groups) < issue_count:
+        groups.extend(["None"] * (issue_count - len(groups)))
+    elif len(groups) > issue_count:
+        groups = groups[: issue_count - 1] + [" ".join(groups[issue_count - 1 :])]
+    return groups
 
 
 def split_finding_cell(finding_cell):
@@ -1659,7 +1863,7 @@ def is_explicit_minimal_cash_shortage(issue, narrative=""):
     )
 
 
-def classify_finding(issue, recommendation, narrative="", company="", audit_title=""):
+def classify_finding(issue, recommendation, narrative="", company="", audit_title="", activity_context="", sales_count_task=False):
     issue_lower = clean_text(issue).lower()
     rec_lower = clean_text(recommendation).lower()
     narrative_lower = clean_text(narrative).lower()
@@ -1689,6 +1893,10 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     is_estancia = "estancia de lorenzo" in company_lower
     is_petty_cash = "petty cash" in combined or "petty cash" in audit_title_lower
     is_cash_advance = is_cash_advance_context(issue, narrative, audit_title)
+    is_sales_variance_task = (
+        is_sales_count_context(issue, narrative, audit_title, activity_context)
+        or (sales_count_task and is_change_fund_context(issue, narrative, activity_context))
+    )
 
     # Cash Advance controlled variance rules. No-variance phrases are already
     # handled by NO_FINDING_PATTERNS above. For a cash-advance row, cash overage,
@@ -1713,7 +1921,14 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     is_shortage = any(k in issue_lower for k in ["cash shortage", "fund shortage", "collection shortage", "sales shortage", "change fund shortage", "unaccounted cash", "shortage"])
     is_overage = any(k in issue_lower for k in ["cash overage", "fund overage", "collection overage", "sales overage", "change fund overage", "minimal cash overage", "overage"])
 
-    if (is_shortage or is_overage) and is_immaterial_cash_variance(amount, issue, narrative, audit_title):
+    # Sales Count and its separate Change Fund Count never use Immaterial
+    # Findings for an actual shortage/overage. The peso amount always selects
+    # one of the controlled shortage/overage threshold categories below.
+    if (
+        (is_shortage or is_overage)
+        and not is_sales_variance_task
+        and is_immaterial_cash_variance(amount, issue, narrative, audit_title)
+    ):
         return "Immaterial Findings 3"
 
     if is_shortage:
@@ -2215,6 +2430,88 @@ def extract_accountability_amount(text):
     return None
 
 
+
+def is_sales_count_context(issue="", narrative="", audit_title="", activity_context=""):
+    """Return True for Sales Count / Daily Sales Count and Collection contexts.
+
+    In a mixed report (for example Petty Cash Fund and Daily Sales Count), an
+    explicit row activity heading is authoritative. This prevents a Petty Cash
+    variance from being treated as a Sales Count variance merely because the
+    overall report title also mentions Daily Sales Count.
+    """
+    patterns = (
+        "SALES COUNT",
+        "DAILY SALES COUNT",
+        "DAILY SALES AND COLLECTION",
+        "DAILY SALES COUNT AND COLLECTION",
+        "DAILY SALES AND COLLECTION COUNT",
+        "SALES COUNT AND COLLECTION",
+    )
+
+    activity_normalized = _normalize_exact_report_title(activity_context)
+    if activity_normalized:
+        row_normalized = _normalize_exact_report_title(
+            f"{activity_context} {issue} {narrative}"
+        )
+        return any(pattern in row_normalized for pattern in patterns)
+
+    normalized = _normalize_exact_report_title(
+        f"{audit_title} {issue} {narrative}"
+    )
+    return any(pattern in normalized for pattern in patterns)
+
+
+def is_change_fund_context(issue="", narrative="", activity_context=""):
+    normalized = _normalize_exact_report_title(
+        f"{activity_context} {issue} {narrative}"
+    )
+    return "CHANGE FUND" in normalized
+
+
+def report_has_sales_count_context(report_text=""):
+    normalized = _normalize_exact_report_title(report_text)
+    patterns = (
+        "SALES COUNT",
+        "DAILY SALES COUNT",
+        "DAILY SALES AND COLLECTION",
+        "DAILY SALES COUNT AND COLLECTION",
+        "DAILY SALES AND COLLECTION COUNT",
+        "SALES COUNT AND COLLECTION",
+    )
+    return any(pattern in normalized for pattern in patterns)
+
+
+def normalize_sales_change_fund_task_ids(items, report_text=""):
+    """Keep Sales Count and its separate Change Fund Count under one Task ID."""
+    if not report_has_sales_count_context(report_text):
+        return items
+
+    related = []
+    for item in items or []:
+        activity = item.get("activity_context", "")
+        issue = item.get("issue", "")
+        narrative = item.get("narrative", "")
+        if (
+            is_sales_count_context(issue, narrative, "", activity)
+            or is_change_fund_context(issue, narrative, activity)
+        ):
+            related.append(item)
+
+    if not related:
+        return items
+
+    common_task_id = ""
+    for item in related:
+        common_task_id = normalize_tag_task_id(item.get("task_id_override", ""))
+        if common_task_id:
+            break
+
+    if common_task_id:
+        for item in related:
+            item["task_id_override"] = common_task_id
+    return items
+
+
 def is_cash_advance_context(issue, narrative, audit_title=""):
     # Do not use audit_title here because mixed reports may say
     # "Revolving Fund and Cash Advances Count" even when a row is a revolving fund count.
@@ -2286,7 +2583,15 @@ def filter_rows_by_task_id(row_dicts):
         if actual:
             final_rows.extend(actual)
         else:
-            final_rows.extend(rows)
+            # Sales Count and a separate Change Fund Count are one audit task.
+            # If both have no actual finding, retain only one No Findings row.
+            sales_change_seen = False
+            for row in rows:
+                if row.get("sales_change_task"):
+                    if sales_change_seen:
+                        continue
+                    sales_change_seen = True
+                final_rows.append(row)
 
     return final_rows
 def remove_title_from_segment(segment, title):
@@ -3491,21 +3796,35 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
                         if not clean_text(finding_cell):
                             continue
 
-                        issue_title, narrative = split_finding_cell(finding_cell)
-                        recommendation, recommendation2 = extract_recommendation_pair(rec_cell)
-
-                        if not clean_text(issue_title):
+                        issue_segments = split_finding_cell_multiple(finding_cell)
+                        if not issue_segments:
                             continue
 
-                        rows.append({
-                            "issue_no": issue_no,
-                            "issue": issue_title,
-                            "narrative": remove_action_taken(narrative),
-                            "recommendation1": recommendation,
-                            "recommendation2": recommendation2,
-                            "explanation": extract_explanation_from_narrative(narrative),
-                            "correction": extract_correction_from_text(narrative + "\n" + clean_text(rec_cell)),
-                        })
+                        recommendation_segments = split_recommendation_cell_for_issues(
+                            rec_cell, len(issue_segments)
+                        )
+                        for segment_index, segment in enumerate(issue_segments):
+                            issue_title = segment.get("issue", "")
+                            narrative = segment.get("narrative", "")
+                            rec_segment = recommendation_segments[segment_index]
+                            recommendation, recommendation2 = extract_recommendation_pair(rec_segment)
+
+                            if not clean_text(issue_title):
+                                continue
+
+                            rows.append({
+                                "issue_no": issue_no,
+                                "issue": issue_title,
+                                "narrative": remove_action_taken(narrative),
+                                "recommendation1": recommendation,
+                                "recommendation2": recommendation2,
+                                "explanation": extract_explanation_from_narrative(narrative),
+                                "correction": extract_correction_from_text(
+                                    narrative + "\n" + clean_text(rec_segment)
+                                ),
+                                "activity_context": segment.get("activity_context", ""),
+                                "sub_issue_index": segment_index + 1,
+                            })
     except Exception:
         rows = []
 
@@ -3518,6 +3837,7 @@ def extract_finding_rows_from_pdf(pdf_file, full_text=None, master_df=None, audi
     rows = apply_carry_forward_context(
         rows, report_text, master_df, auditors_df, pdf_file=pdf_file
     )
+    rows = normalize_sales_change_fund_task_ids(rows, report_text)
 
     # Final safety filter for OCR/plain-text extraction paths.
     if is_operations_audit:
@@ -3765,6 +4085,7 @@ def build_records(
                 manual_map[issue_no] = r
 
     row_dicts = []
+    sales_count_report = report_has_sales_count_context(text)
 
     for row_no, item in enumerate(items, 1):
         manual = manual_map.get(item["issue_no"])
@@ -3840,6 +4161,8 @@ def build_records(
                 item["narrative"],
                 header.get("company", ""),
                 header.get("audit_title", ""),
+                item.get("activity_context", ""),
+                sales_count_report,
             )
         findings, score = resolve_finding_category(classified_value, classification_df)
 
@@ -3862,11 +4185,26 @@ def build_records(
         case_status = "No Case/Issue" if no_or_immaterial else "Follow up with HR"
         user = auditor_user(auditor, auditors_df)
 
+        sales_change_task = (
+            is_sales_count_context(
+                issue_title, item.get("narrative", ""),
+                header.get("audit_title", ""), item.get("activity_context", "")
+            )
+            or (
+                sales_count_report
+                and is_change_fund_context(
+                    issue_title, item.get("narrative", ""),
+                    item.get("activity_context", "")
+                )
+            )
+        )
+
         row_dicts.append({
             "row_no": row_no,
             "task_id": task_id or "None",
             "issue": issue_title,
             "findings": findings,
+            "sales_change_task": sales_change_task,
             "row": [
                 "", date.today().isoformat(), audit_type, header["date_reported"],
                 header["audit_reference"], row_emp_id, row_emp_name, task_id or "None",

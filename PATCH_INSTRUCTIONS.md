@@ -1,10 +1,11 @@
-# Patch Instructions — IARS V4.4.92
+# Patch Instructions
 
-Replace these files in the current GitHub repository:
+Replace these files in the current IARS GitHub repository:
 
 1. `app.py`
-2. `iars_pdf_editor.py`
+2. `iars_parser.py`
+3. `iars_pdf_editor.py`
 
-Then commit the changes, reboot the Streamlit app, and perform a hard refresh (`Ctrl + F5`).
+Commit the files, reboot the Streamlit app, and perform a hard refresh (`Ctrl + F5`).
 
-No Supabase SQL, package, or requirements update is required.
+No Supabase SQL, requirements, or Master Data update is required.
