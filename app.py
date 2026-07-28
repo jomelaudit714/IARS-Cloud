@@ -924,7 +924,7 @@ def _apply_v4485_table_and_clear_refinements() -> None:
             padding: .22rem .30rem !important;
             white-space: nowrap !important;
         }
-        .iars-policy-grid-cell-v4497 {
+        .iars-policy-grid-cell-v4498 {
             width: 100% !important;
             min-height: 2.30rem !important;
             height: auto !important;
@@ -939,7 +939,7 @@ def _apply_v4485_table_and_clear_refinements() -> None:
             word-break: break-word !important;
             hyphens: auto !important;
         }
-        .iars-policy-grid-cell-v4497.is-title {
+        .iars-policy-grid-cell-v4498.is-title {
             min-height: 2.45rem !important;
             align-items: center !important;
             text-wrap: pretty !important;
@@ -962,13 +962,63 @@ def _apply_v4485_table_and_clear_refinements() -> None:
             display: flex !important;
             align-items: center !important;
         }
-        .iars-policy-grid-cell-v4497.is-centered {
+        .iars-policy-grid-cell-v4498.is-centered {
             justify-content: center !important;
             text-align: center !important;
         }
-        .iars-policy-grid-cell-v4497.is-left {
+        .iars-policy-grid-cell-v4498.is-left {
             justify-content: flex-start !important;
             text-align: left !important;
+        }
+        .iars-policy-grid-cell-v4498 {
+            font-weight: 400 !important;
+        }
+        .iars-policy-grid-cell-v4498.is-title {
+            font-weight: 700 !important;
+        }
+        [class*="st-key-policy_grid_header_"] > div,
+        [class*="st-key-policy_grid_row_"] > div,
+        [class*="st-key-policy_grid_header_"] [data-testid="stVerticalBlock"],
+        [class*="st-key-policy_grid_row_"] [data-testid="stVerticalBlock"] {
+            gap: 0 !important;
+            row-gap: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        [class*="st-key-policy_grid_header_"] [data-testid="stHorizontalBlock"],
+        [class*="st-key-policy_grid_row_"] [data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+            column-gap: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        [class*="st-key-policy_grid_header_"] [data-testid="stColumn"] {
+            min-height: 2.45rem !important;
+            background: #F8FAFC !important;
+            font-weight: 800 !important;
+        }
+        [class*="st-key-policy_grid_row_"] [data-testid="stColumn"] {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            background: #FFFFFF !important;
+            font-weight: 400 !important;
+            border-top: 0 !important;
+            overflow: hidden !important;
+        }
+        [class*="st-key-policy_grid_row_"] [data-testid="stColumn"] p {
+            font-weight: 400 !important;
+        }
+        [class*="st-key-policy_grid_row_"] [data-testid="stColumn"]:first-child p {
+            font-weight: 700 !important;
+        }
+        [class*="st-key-policy_grid_row_"] [data-testid="stElementContainer"],
+        [class*="st-key-policy_grid_row_"] [data-testid="stElementContainer"] > div {
+            width: 100% !important;
+            min-height: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            margin: 0 !important;
         }
         </style>
         """,
@@ -2029,16 +2079,54 @@ def _render_policy_grid_text(
     force_center: bool = False,
     is_title: bool = False,
 ) -> None:
-    """Render policy values with wrapping and adaptive row height for long text."""
+    """Render a policy grid value inside a wrapping, height-aware cell."""
     display = str(value or "—").strip() or "—"
     centered = force_center or (not is_title and len(display) <= short_limit)
     alignment_class = "is-centered" if centered else "is-left"
     title_class = " is-title" if is_title else ""
     column.markdown(
-        '<div class="iars-policy-grid-cell-v4497 '
+        '<div class="iars-policy-grid-cell-v4498 '
         f'{alignment_class}{title_class}">{html.escape(display)}</div>',
         unsafe_allow_html=True,
     )
+
+
+def _policy_grid_row_height_rem(
+    *,
+    title: object,
+    category: object,
+    subject: object,
+    version: object,
+    effective_date: object,
+    uploaded_by: object,
+) -> float:
+    """Estimate one shared row height so every bordered column grows together."""
+    # Approximate visible characters per line for each current column width.
+    values_and_capacity = (
+        (str(title or "Untitled"), 42),
+        (str(category or "General"), 14),
+        (str(subject or "Uncategorized"), 21),
+        (str(version or "—"), 11),
+        (str(effective_date or "—"), 14),
+        (str(uploaded_by or "—"), 16),
+    )
+    max_lines = 1
+    for value, capacity in values_and_capacity:
+        words = value.split()
+        line_count = 1
+        current = 0
+        for word in words or [value]:
+            word_len = max(1, len(word))
+            if current == 0:
+                current = word_len
+            elif current + 1 + word_len <= capacity:
+                current += 1 + word_len
+            else:
+                line_count += max(1, (word_len + capacity - 1) // capacity)
+                current = min(word_len, capacity)
+        max_lines = max(max_lines, line_count)
+    # One line stays compact; each additional line expands the complete row.
+    return min(8.25, 2.55 + (max_lines - 1) * 1.20)
 
 
 def _docx_preview_text(file_bytes: bytes, *, max_characters: int = 30000) -> str:
@@ -2592,103 +2680,122 @@ def render_policy_folder_documents_dialog(
     download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_85"
     records_by_id: dict[str, dict] = {}
 
-    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_97"):
-        header_cols = st.columns(
-            policy_column_widths,
-            gap=None,
-            vertical_alignment="center",
-            border=False,
-        )
-        for column, label in zip(
-            header_cols,
-            [
-                "Title",
-                "Type",
-                "Subject / Process",
-                "Version",
-                "Effective Date",
-                "Uploaded By",
-                "View",
-                "Download",
-            ],
-        ):
-            column.markdown(
-                f'<div class="iars-grid-header-v4485">{html.escape(label)}</div>',
-                unsafe_allow_html=True,
-            )
-
-        for row_index, record in enumerate(visible_records):
-            record_id = str(record.get("id", "") or record.get("storage_path", ""))
-            record_key = _safe_library_key(record_id or f"row_{row_index}")
-            records_by_id[record_id] = record
-            row_cols = st.columns(
+    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_98"):
+        with st.container(key=f"policy_grid_header_{folder_key}_v4_4_98"):
+            header_cols = st.columns(
                 policy_column_widths,
                 gap=None,
                 vertical_alignment="center",
                 border=False,
             )
+            for column, label in zip(
+                header_cols,
+                [
+                    "Title",
+                    "Type",
+                    "Subject / Process",
+                    "Version",
+                    "Effective Date",
+                    "Uploaded By",
+                    "View",
+                    "Download",
+                ],
+            ):
+                column.markdown(
+                    f'<div class="iars-grid-header-v4485">{html.escape(label)}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        for row_index, record in enumerate(visible_records):
+            record_id = str(record.get("id", "") or record.get("storage_path", ""))
+            record_key = _safe_library_key(record_id or f"row_{row_index}")
+            records_by_id[record_id] = record
             title = str(
                 record.get("title")
                 or record.get("original_filename")
                 or "Untitled"
             )
-            _render_policy_grid_text(row_cols[0], title, short_limit=30, is_title=True)
-            _render_policy_grid_text(
-                row_cols[1], record.get("category", "") or "General", force_center=True
+            category = record.get("category", "") or "General"
+            subject = record.get("subject_category", "") or "Uncategorized"
+            version_label = record.get("version_label", "") or "—"
+            effective_date = record.get("effective_date", "") or "—"
+            uploaded_by = record.get("uploaded_by", "") or "—"
+            row_min_height = _policy_grid_row_height_rem(
+                title=title,
+                category=category,
+                subject=subject,
+                version=version_label,
+                effective_date=effective_date,
+                uploaded_by=uploaded_by,
             )
-            _render_policy_grid_text(
-                row_cols[2],
-                record.get("subject_category", "") or "Uncategorized",
-                short_limit=24,
+            row_container_key = (
+                f"policy_grid_row_{folder_key}_{record_key}_{row_index}_v4_4_98"
             )
-            _render_policy_grid_text(
-                row_cols[3], record.get("version_label", "") or "—", force_center=True
+            st.markdown(
+                "<style>"
+                f'[class*="st-key-{row_container_key}"] '
+                '[data-testid="stHorizontalBlock"] {'
+                f'min-height:{row_min_height:.2f}rem !important;'
+                'align-items:stretch !important;}'
+                f'[class*="st-key-{row_container_key}"] '
+                '[data-testid="stColumn"] {'
+                f'min-height:{row_min_height:.2f}rem !important;'
+                'height:auto !important;align-self:stretch !important;}'
+                "</style>",
+                unsafe_allow_html=True,
             )
-            _render_policy_grid_text(
-                row_cols[4], record.get("effective_date", "") or "—", force_center=True
-            )
-            _render_policy_grid_text(
-                row_cols[5], record.get("uploaded_by", "") or "—", short_limit=24
-            )
-            with row_cols[6]:
-                if st.button(
-                    "👁️",
-                    help=f"Read {title}",
-                    use_container_width=True,
-                    key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_85",
-                ):
-                    try:
-                        document_bytes = download_document(
-                            client,
-                            config,
-                            str(record.get("storage_path", "") or ""),
-                        )
-                        st.session_state[POLICY_PREVIEW_RECORD_ID_KEY] = record_id
-                        st.session_state[POLICY_PREVIEW_BYTES_KEY] = document_bytes
-                        st.session_state[POLICY_DIALOG_MODE_KEY] = "preview"
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(str(exc))
-            with row_cols[7]:
-                if st.button(
-                    "⬇️",
-                    help=f"Prepare download for {title}",
-                    use_container_width=True,
-                    key=(
-                        f"policy_folder_prepare_download_{folder_key}_"
-                        f"{record_key}_v4_4_85"
-                    ),
-                ):
-                    try:
-                        st.session_state[download_id_key] = record_id
-                        st.session_state[download_bytes_key] = download_document(
-                            client,
-                            config,
-                            str(record.get("storage_path", "") or ""),
-                        )
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(str(exc))
+            with st.container(key=row_container_key):
+                row_cols = st.columns(
+                    policy_column_widths,
+                    gap=None,
+                    vertical_alignment="center",
+                    border=False,
+                )
+                _render_policy_grid_text(row_cols[0], title, short_limit=30, is_title=True)
+                _render_policy_grid_text(row_cols[1], category, force_center=True)
+                _render_policy_grid_text(row_cols[2], subject, short_limit=24)
+                _render_policy_grid_text(row_cols[3], version_label, force_center=True)
+                _render_policy_grid_text(row_cols[4], effective_date, force_center=True)
+                _render_policy_grid_text(row_cols[5], uploaded_by, short_limit=24)
+                with row_cols[6]:
+                    if st.button(
+                        "👁️",
+                        help=f"Read {title}",
+                        use_container_width=True,
+                        key=f"policy_folder_view_{folder_key}_{record_key}_v4_4_85",
+                    ):
+                        try:
+                            document_bytes = download_document(
+                                client,
+                                config,
+                                str(record.get("storage_path", "") or ""),
+                            )
+                            st.session_state[POLICY_PREVIEW_RECORD_ID_KEY] = record_id
+                            st.session_state[POLICY_PREVIEW_BYTES_KEY] = document_bytes
+                            st.session_state[POLICY_DIALOG_MODE_KEY] = "preview"
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(str(exc))
+                with row_cols[7]:
+                    if st.button(
+                        "⬇️",
+                        help=f"Prepare download for {title}",
+                        use_container_width=True,
+                        key=(
+                            f"policy_folder_prepare_download_{folder_key}_"
+                            f"{record_key}_v4_4_85"
+                        ),
+                    ):
+                        try:
+                            st.session_state[download_id_key] = record_id
+                            st.session_state[download_bytes_key] = download_document(
+                                client,
+                                config,
+                                str(record.get("storage_path", "") or ""),
+                            )
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(str(exc))
 
     prepared_download_id = str(st.session_state.get(download_id_key, "") or "")
     prepared_download_record = records_by_id.get(prepared_download_id)
@@ -4061,7 +4168,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.97", page_title=page_key)
+render_app_header(auth_user, version="4.4.98", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -5051,7 +5158,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.97", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.98", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
