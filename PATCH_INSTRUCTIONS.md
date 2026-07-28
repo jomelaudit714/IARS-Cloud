@@ -1,4 +1,4 @@
-# Deployment Instructions
+# Deployment Instructions — IARS V4.5.00
 
 Replace these files in the current IARS GitHub repository:
 
@@ -7,4 +7,4 @@ Replace these files in the current IARS GitHub repository:
 
 Then commit the changes, reboot the Streamlit app, and perform a hard refresh (`Ctrl + F5`).
 
-No Supabase SQL, requirements, or asset update is required. The transition uses the existing `assets/edl_logo.png`; if that asset is unavailable, it safely displays an EDL text emblem instead.
+No Supabase SQL, requirements, database, or asset update is required. The transition continues to use the existing `assets/edl_logo.png`; when that file is unavailable, the built-in EDL text emblem is used safely.

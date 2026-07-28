@@ -1026,8 +1026,8 @@ def _apply_v4485_table_and_clear_refinements() -> None:
     )
 
 
-IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_4_99"
-IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_4_99"
+IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_5_00"
+IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_5_00"
 
 
 def _transition_logo_data_uri() -> str:
@@ -1041,26 +1041,60 @@ def _transition_logo_data_uri() -> str:
         return ""
 
 
-def _apply_v4499_transition_refinements() -> None:
-    """Mask partial rerenders and reveal complete pages with a restrained fade."""
+def _apply_v4500_transition_refinements() -> None:
+    """Keep every module aligned and show the EDL loader only for slower transitions."""
     st.markdown(
         """
         <style>
-        @keyframes iarsV4499MaskOut {
+        @keyframes iarsV4500MaskOut {
             0% { opacity: 1; visibility: visible; }
             100% { opacity: 0; visibility: hidden; }
         }
-        @keyframes iarsV4499LogoPulse {
+        @keyframes iarsV4500LoaderReveal {
+            0% { opacity: 0; transform: translateY(3px) scale(.985); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes iarsV4500LogoPulse {
             0%, 100% { transform: scale(1); filter: drop-shadow(0 12px 24px rgba(6,26,54,.16)); }
             50% { transform: scale(1.035); filter: drop-shadow(0 16px 30px rgba(6,26,54,.24)); }
         }
-        @keyframes iarsV4499Progress {
+        @keyframes iarsV4500Progress {
             0% { transform: translateX(-105%); }
             55% { transform: translateX(35%); }
             100% { transform: translateX(205%); }
         }
 
-        .iars-v4499-transition-mask,
+        /* Keep the authenticated top bar at one fixed vertical position on every module. */
+        .stApp:has(.edl-topbar) .block-container {
+            padding-top: 0 !important;
+        }
+        .stApp:has(.edl-topbar) .edl-topbar {
+            margin-top: -25px !important;
+        }
+
+        /* The transition HTML must never become a normal Streamlit layout row. */
+        div[data-testid="stElementContainer"]:has(.iars-transition-detached) {
+            position: fixed !important;
+            inset: 0 auto auto 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            z-index: 2147483000 !important;
+        }
+        div[data-testid="stMarkdown"]:has(.iars-transition-detached),
+        div[data-testid="stMarkdownContainer"]:has(.iars-transition-detached) {
+            width: 0 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+
+        .iars-v4500-transition-mask,
         .iars-login-exit-mask,
         .iars-logout-transition-mask {
             position: fixed !important;
@@ -1076,7 +1110,7 @@ def _apply_v4499_transition_refinements() -> None:
             opacity: 1;
             visibility: visible;
         }
-        .iars-v4499-transition-card,
+        .iars-v4500-transition-card,
         .iars-login-exit-card,
         .iars-logout-transition-card {
             width: min(360px, calc(100vw - 44px)) !important;
@@ -1088,16 +1122,19 @@ def _apply_v4499_transition_refinements() -> None:
             padding: 1.25rem 1.35rem !important;
             text-align: center !important;
             font-family: Inter,"Segoe UI",Roboto,Arial,sans-serif !important;
+            opacity: 0;
+            transform: translateY(3px) scale(.985);
+            animation: iarsV4500LoaderReveal .18s .52s ease-out forwards !important;
         }
-        .iars-v4499-transition-logo,
+        .iars-v4500-transition-logo,
         .iars-login-exit-logo,
         .iars-logout-transition-logo {
             width: 112px !important;
             height: 112px !important;
             object-fit: contain !important;
-            animation: iarsV4499LogoPulse 1.15s ease-in-out infinite !important;
+            animation: iarsV4500LogoPulse 1.15s ease-in-out infinite !important;
         }
-        .iars-v4499-transition-fallback,
+        .iars-v4500-transition-fallback,
         .iars-login-exit-fallback,
         .iars-logout-transition-fallback {
             width: 104px !important;
@@ -1112,23 +1149,23 @@ def _apply_v4499_transition_refinements() -> None:
             font-size: 1.72rem !important;
             font-weight: 900 !important;
             letter-spacing: .04em !important;
-            animation: iarsV4499LogoPulse 1.15s ease-in-out infinite !important;
+            animation: iarsV4500LogoPulse 1.15s ease-in-out infinite !important;
         }
-        .iars-v4499-transition-card strong,
+        .iars-v4500-transition-card strong,
         .iars-login-exit-card strong,
         .iars-logout-transition-card strong {
             color: #061A36 !important;
             font-size: 1.02rem !important;
             line-height: 1.2 !important;
         }
-        .iars-v4499-transition-card span,
+        .iars-v4500-transition-card span,
         .iars-login-exit-card span,
         .iars-logout-transition-card span {
             color: #667085 !important;
             font-size: .78rem !important;
             line-height: 1.35 !important;
         }
-        .iars-v4499-transition-line,
+        .iars-v4500-transition-line,
         .iars-login-exit-line,
         .iars-logout-transition-line {
             position: relative !important;
@@ -1139,7 +1176,7 @@ def _apply_v4499_transition_refinements() -> None:
             border-radius: 999px !important;
             background: #DDE4ED !important;
         }
-        .iars-v4499-transition-line::after,
+        .iars-v4500-transition-line::after,
         .iars-login-exit-line::after,
         .iars-logout-transition-line::after {
             content: "" !important;
@@ -1148,21 +1185,21 @@ def _apply_v4499_transition_refinements() -> None:
             width: 48% !important;
             border-radius: inherit !important;
             background: linear-gradient(90deg,#C88A08,#E4AE2F,#175CD3) !important;
-            animation: iarsV4499Progress .95s ease-in-out infinite !important;
+            animation: iarsV4500Progress .95s ease-in-out infinite !important;
         }
 
-        /* Hide module/login masks only after the final ready marker arrives. */
+        /* Hide login/logout masks only after the destination has completed rendering. */
         .stApp:has(.iars-app-ready-marker) .iars-login-exit-mask,
         .stApp:has(.iars-auth-ready-marker) .iars-login-exit-mask {
-            animation: iarsV4499MaskOut .28s .06s cubic-bezier(.22,.61,.36,1) forwards !important;
+            animation: iarsV4500MaskOut .24s .03s cubic-bezier(.22,.61,.36,1) forwards !important;
         }
         .stApp:has(.iars-auth-ready-marker) .iars-logout-transition-mask {
-            animation: iarsV4499MaskOut .28s .08s cubic-bezier(.22,.61,.36,1) forwards !important;
+            animation: iarsV4500MaskOut .24s .04s cubic-bezier(.22,.61,.36,1) forwards !important;
         }
 
         /* Preserve the approved full-width Sign Out treatment with a native callback. */
-        .st-key-iars_profile_signout_v4_4_99 .stButton > button,
-        .st-key-iars_profile_signout_v4_4_99 button {
+        .st-key-iars_profile_signout_v4_5_00 .stButton > button,
+        .st-key-iars_profile_signout_v4_5_00 button {
             width: 100% !important;
             min-height: 44px !important;
             border-radius: 10px !important;
@@ -1172,13 +1209,13 @@ def _apply_v4499_transition_refinements() -> None:
             box-shadow: 0 8px 18px rgba(6,26,54,.16) !important;
             font-weight: 800 !important;
         }
-        .st-key-iars_profile_signout_v4_4_99 button:hover {
+        .st-key-iars_profile_signout_v4_5_00 button:hover {
             filter: brightness(1.05) !important;
             color: #FFFFFF !important;
         }
 
-        /* Do not animate individual dashboard elements one by one. */
-        .stApp:has(.iars-v4499-transition-mask) .block-container,
+        /* Do not animate individual dashboard/module elements one by one. */
+        .stApp:has(.iars-v4500-transition-mask) .block-container,
         .stApp:has(.iars-login-exit-mask) .block-container {
             opacity: 1 !important;
             transform: none !important;
@@ -1186,13 +1223,18 @@ def _apply_v4499_transition_refinements() -> None:
         }
 
         @media (prefers-reduced-motion: reduce) {
-            .iars-v4499-transition-logo,
+            .iars-v4500-transition-card,
+            .iars-login-exit-card,
+            .iars-logout-transition-card {
+                animation: iarsV4500LoaderReveal .001s .52s linear forwards !important;
+            }
+            .iars-v4500-transition-logo,
             .iars-login-exit-logo,
             .iars-logout-transition-logo,
-            .iars-v4499-transition-fallback,
+            .iars-v4500-transition-fallback,
             .iars-login-exit-fallback,
             .iars-logout-transition-fallback,
-            .iars-v4499-transition-line::after,
+            .iars-v4500-transition-line::after,
             .iars-login-exit-line::after,
             .iars-logout-transition-line::after {
                 animation: none !important;
@@ -1213,27 +1255,27 @@ def _render_workspace_transition(target_page: str, transition_token: int) -> Non
     logo_uri = _transition_logo_data_uri()
     if logo_uri:
         logo_html = (
-            f'<img class="iars-v4499-transition-logo" src="{html.escape(logo_uri, quote=True)}" '
+            f'<img class="iars-v4500-transition-logo" src="{html.escape(logo_uri, quote=True)}" '
             'alt="EDL Group of Companies">'
         )
     else:
-        logo_html = '<div class="iars-v4499-transition-fallback">EDL</div>'
+        logo_html = '<div class="iars-v4500-transition-fallback">EDL</div>'
     target = html.escape(str(target_page or "IARS"))
     safe_token = max(1, int(transition_token or 1))
-    mask_class = f"iars-v4499-transition-{safe_token}"
-    ready_class = f"iars-v4499-ready-{safe_token}"
+    mask_class = f"iars-v4500-transition-{safe_token}"
+    ready_class = f"iars-v4500-ready-{safe_token}"
     st.markdown(
         f'<style>'
         f'.stApp:has(.{ready_class}) .{mask_class},.stApp:has(.iars-auth-ready-marker) .{mask_class}{{'
-        'animation:iarsV4499MaskOut .28s .06s cubic-bezier(.22,.61,.36,1) forwards!important;'
+        'animation:iarsV4500MaskOut .24s .03s cubic-bezier(.22,.61,.36,1) forwards!important;'
         '}'
         f'@media (prefers-reduced-motion:reduce){{.stApp:has(.{ready_class}) .{mask_class},.stApp:has(.iars-auth-ready-marker) .{mask_class}{{display:none!important;}}}}'
         '</style>'
-        f'<div class="iars-v4499-transition-mask {mask_class}">'
-        '<div class="iars-v4499-transition-card">'
+        f'<div class="iars-transition-detached iars-v4500-transition-mask {mask_class}">'
+        '<div class="iars-v4500-transition-card">'
         f'{logo_html}<strong>Opening {target}</strong>'
         '<span>Preparing your audit workspace…</span>'
-        '<div class="iars-v4499-transition-line"></div>'
+        '<div class="iars-v4500-transition-line"></div>'
         '</div></div>',
         unsafe_allow_html=True,
     )
@@ -1508,8 +1550,8 @@ _apply_v4479_readability_and_library_refinements()
 _apply_v4481_full_document_refinements()
 _install_v4490_persistent_dialog_close()
 _apply_v4485_table_and_clear_refinements()
-_apply_v4499_transition_refinements()
-# V4.4.99 uses a lightweight native-CSS transition mask only for login, logout,
+_apply_v4500_transition_refinements()
+# V4.5.00 uses a lightweight native-CSS transition mask only for login, logout,
 # and module navigation. It avoids the retired Components v1 loading guard.
 
 _pending_page_transition = st.session_state.pop(IARS_PAGE_TRANSITION_KEY, None)
@@ -4407,7 +4449,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.99", page_title=page_key)
+render_app_header(auth_user, version="4.5.00", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -5397,7 +5439,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.99", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.00", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
@@ -5442,7 +5484,7 @@ if page_key == "Settings":
 # transition masks remain opaque until the matching marker reaches the browser.
 _ready_marker_classes = "iars-app-ready-marker"
 if _active_page_transition_token:
-    _ready_marker_classes += f" iars-v4499-ready-{_active_page_transition_token}"
+    _ready_marker_classes += f" iars-v4500-ready-{_active_page_transition_token}"
 st.markdown(
     f'<div class="{_ready_marker_classes}"></div>',
     unsafe_allow_html=True,
