@@ -924,20 +924,49 @@ def _apply_v4485_table_and_clear_refinements() -> None:
             padding: .22rem .30rem !important;
             white-space: nowrap !important;
         }
-        .iars-policy-grid-cell-v4496 {
+        .iars-policy-grid-cell-v4497 {
             width: 100% !important;
             min-height: 2.30rem !important;
+            height: auto !important;
             display: flex !important;
             align-items: center !important;
             box-sizing: border-box !important;
-            line-height: 1.20 !important;
+            padding: .18rem 0 !important;
+            line-height: 1.24 !important;
+            white-space: normal !important;
+            overflow: visible !important;
             overflow-wrap: anywhere !important;
+            word-break: break-word !important;
+            hyphens: auto !important;
         }
-        .iars-policy-grid-cell-v4496.is-centered {
+        .iars-policy-grid-cell-v4497.is-title {
+            min-height: 2.45rem !important;
+            align-items: center !important;
+            text-wrap: pretty !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]:not(:first-of-type) {
+            min-height: 2.55rem !important;
+            height: auto !important;
+            align-items: stretch !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]:not(:first-of-type)
+        [data-testid="stColumn"] {
+            height: auto !important;
+            min-height: 100% !important;
+        }
+        [class*="st-key-policy_folder_grid_"] [data-testid="stHorizontalBlock"]:not(:first-of-type)
+        [data-testid="stElementContainer"] {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        .iars-policy-grid-cell-v4497.is-centered {
             justify-content: center !important;
             text-align: center !important;
         }
-        .iars-policy-grid-cell-v4496.is-left {
+        .iars-policy-grid-cell-v4497.is-left {
             justify-content: flex-start !important;
             text-align: left !important;
         }
@@ -1035,6 +1064,19 @@ def _uploader_widget_key(base_key: str) -> str:
     reset_key = f"{base_key}__reset_counter"
     reset_version = int(st.session_state.get(reset_key, 0) or 0)
     return f"{base_key}__v{reset_version}"
+
+
+def _form_widget_key(base_key: str, form_key: str) -> str:
+    """Return a versioned key so a completed form reopens with clean inputs."""
+    reset_key = f"{form_key}__reset_counter"
+    reset_version = int(st.session_state.get(reset_key, 0) or 0)
+    return f"{base_key}__v{reset_version}"
+
+
+def _reset_completed_form(form_key: str) -> None:
+    """Advance a form version only after its upload or save succeeds."""
+    reset_key = f"{form_key}__reset_counter"
+    st.session_state[reset_key] = int(st.session_state.get(reset_key, 0) or 0) + 1
 
 
 def _reset_file_uploader(base_key: str, *state_keys_to_clear: str) -> None:
@@ -1985,14 +2027,16 @@ def _render_policy_grid_text(
     *,
     short_limit: int = 28,
     force_center: bool = False,
+    is_title: bool = False,
 ) -> None:
-    """Center concise policy-table values while keeping long text readable."""
+    """Render policy values with wrapping and adaptive row height for long text."""
     display = str(value or "—").strip() or "—"
-    centered = force_center or len(display) <= short_limit
+    centered = force_center or (not is_title and len(display) <= short_limit)
     alignment_class = "is-centered" if centered else "is-left"
+    title_class = " is-title" if is_title else ""
     column.markdown(
-        '<div class="iars-policy-grid-cell-v4496 '
-        f'{alignment_class}">{html.escape(display)}</div>',
+        '<div class="iars-policy-grid-cell-v4497 '
+        f'{alignment_class}{title_class}">{html.escape(display)}</div>',
         unsafe_allow_html=True,
     )
 
@@ -2548,7 +2592,7 @@ def render_policy_folder_documents_dialog(
     download_bytes_key = f"policy_folder_download_bytes_{folder_key}_v4_4_85"
     records_by_id: dict[str, dict] = {}
 
-    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_85"):
+    with st.container(key=f"policy_folder_grid_{folder_key}_v4_4_97"):
         header_cols = st.columns(
             policy_column_widths,
             gap=None,
@@ -2588,7 +2632,7 @@ def render_policy_folder_documents_dialog(
                 or record.get("original_filename")
                 or "Untitled"
             )
-            _render_policy_grid_text(row_cols[0], title, short_limit=30)
+            _render_policy_grid_text(row_cols[0], title, short_limit=30, is_title=True)
             _render_policy_grid_text(
                 row_cols[1], record.get("category", "") or "General", force_center=True
             )
@@ -2787,6 +2831,7 @@ def render_policy_folder_library_page(
         if not folders:
             st.warning("Create at least one company/group folder before uploading a document.")
 
+        policy_form_key = "policy_upload_form_v4_4_97"
         policy_uploader_base = "document_upload_Policies_Memoranda_v4_4_78"
         uploaded_document = st.file_uploader(
             "Select Excel, Word or PDF file",
@@ -2802,7 +2847,7 @@ def render_policy_folder_library_page(
             "Company / Group Folder",
             folder_options if folder_options else ["Create a folder first"],
             disabled=not bool(folder_options),
-            key="policy_upload_folder_v4_4_69",
+            key=_form_widget_key("policy_upload_folder_v4_4_69", policy_form_key),
         )
 
         left, right = st.columns(2)
@@ -2810,12 +2855,12 @@ def render_policy_folder_library_page(
             document_title = st.text_input(
                 "Document Title",
                 placeholder="Example: Revolving Fund Policy",
-                key="document_title_Policies_Memoranda_v4_4_79",
+                key=_form_widget_key("document_title_Policies_Memoranda_v4_4_79", policy_form_key),
             )
             document_category = st.selectbox(
                 "Document Type",
                 ["Policy", "Memorandum", "Procedure", "Guidelines", "Manual", "Circular", "Other"],
-                key="document_category_Policies_Memoranda_v4_4_79",
+                key=_form_widget_key("document_category_Policies_Memoranda_v4_4_79", policy_form_key),
             )
             subject_category_choice = st.selectbox(
                 "Subject / Process Category",
@@ -2835,13 +2880,13 @@ def render_policy_folder_library_page(
                     "Sales Operations",
                     "Other",
                 ],
-                key="document_subject_category_Policies_Memoranda_v4_4_79",
+                key=_form_widget_key("document_subject_category_Policies_Memoranda_v4_4_79", policy_form_key),
             )
             custom_subject_category = (
                 st.text_input(
                     "Specify Other Subject / Process",
                     placeholder="Enter the applicable process or subject",
-                    key="document_subject_category_other_Policies_Memoranda_v4_4_79",
+                    key=_form_widget_key("document_subject_category_other_Policies_Memoranda_v4_4_79", policy_form_key),
                 )
                 if subject_category_choice == "Other"
                 else ""
@@ -2855,16 +2900,16 @@ def render_policy_folder_library_page(
             version_label = st.text_input(
                 "Version / Revision",
                 placeholder="Example: Rev. 02 or 2026 Edition",
-                key="document_version_Policies_Memoranda_v4_4_79",
+                key=_form_widget_key("document_version_Policies_Memoranda_v4_4_79", policy_form_key),
             )
             use_effective_date = st.checkbox(
                 "Include effective/issuance date",
-                key="document_use_date_Policies_Memoranda_v4_4_79",
+                key=_form_widget_key("document_use_date_Policies_Memoranda_v4_4_79", policy_form_key),
             )
             effective_date = (
                 st.date_input(
                     "Effective / Issuance Date",
-                    key="document_effective_date_Policies_Memoranda_v4_4_79",
+                    key=_form_widget_key("document_effective_date_Policies_Memoranda_v4_4_79", policy_form_key),
                 )
                 if use_effective_date
                 else None
@@ -2873,7 +2918,7 @@ def render_policy_folder_library_page(
         description = st.text_area(
             "Description / Purpose",
             placeholder="Briefly describe the scope or purpose of the document.",
-            key="document_description_Policies_Memoranda_v4_4_69",
+            key=_form_widget_key("document_description_Policies_Memoranda_v4_4_69", policy_form_key),
         )
         if st.button(
             "Upload to Selected Folder",
@@ -2915,6 +2960,7 @@ def render_policy_folder_library_page(
                         f'{record.get("original_filename", uploaded_document.name)} was uploaded to "{selected_folder_name}".'
                     )
                     _reset_file_uploader(policy_uploader_base)
+                    _reset_completed_form(policy_form_key)
                     st.rerun()
                 except DuplicateDocumentError as exc:
                     st.warning(str(exc))
@@ -3162,6 +3208,7 @@ def render_document_library_page(
                 "Other",
             ]
         )
+        library_form_key = f"document_library_upload_form_{collection}_v4_4_97"
         library_uploader_base = f"document_upload_{collection}_v4_4_78"
         uploaded_document = st.file_uploader(
             "Select Excel, Word or PDF file",
@@ -3172,35 +3219,35 @@ def render_document_library_page(
         with left:
             document_title = st.text_input(
                 "Document Title",
-                key=f"document_title_{collection}",
+                key=_form_widget_key(f"document_title_{collection}", library_form_key),
                 placeholder="Example: Revolving Fund Count Sheet",
             )
             document_category = st.selectbox(
                 "Category",
                 categories,
-                key=f"document_category_{collection}",
+                key=_form_widget_key(f"document_category_{collection}", library_form_key),
             )
         with right:
             version_label = st.text_input(
                 "Version / Revision",
-                key=f"document_version_{collection}",
+                key=_form_widget_key(f"document_version_{collection}", library_form_key),
                 placeholder="Example: Rev. 02 or 2026 Edition",
             )
             use_effective_date = st.checkbox(
                 "Include effective/issuance date",
-                key=f"document_use_date_{collection}",
+                key=_form_widget_key(f"document_use_date_{collection}", library_form_key),
             )
             effective_date = (
                 st.date_input(
                     "Effective / Issuance Date",
-                    key=f"document_effective_date_{collection}",
+                    key=_form_widget_key(f"document_effective_date_{collection}", library_form_key),
                 )
                 if use_effective_date
                 else None
             )
         description = st.text_area(
             "Description / Purpose",
-            key=f"document_description_{collection}",
+            key=_form_widget_key(f"document_description_{collection}", library_form_key),
             placeholder="Briefly describe when this document should be used.",
         )
         if st.button(
@@ -3236,6 +3283,7 @@ def render_document_library_page(
                         f"{record.get('original_filename', uploaded_document.name)} was added to the shared library."
                     )
                     _reset_file_uploader(library_uploader_base)
+                    _reset_completed_form(library_form_key)
                     st.rerun()
                 except DuplicateDocumentError as exc:
                     st.warning(str(exc))
@@ -4013,7 +4061,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.96", page_title=page_key)
+render_app_header(auth_user, version="4.4.97", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -5003,7 +5051,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.96", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.97", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

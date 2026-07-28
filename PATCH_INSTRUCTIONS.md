@@ -1,10 +1,7 @@
-# Patch Instructions
+# Installation
 
-Replace these files in the current IARS repository:
+1. Replace the current `app.py` with the included file.
+2. Commit the change and reboot the Streamlit app.
+3. Perform a hard refresh (`Ctrl + F5`).
 
-1. `app.py`
-2. `iars_document_library.py`
-
-Commit the changes, reboot the Streamlit app, and perform a hard browser refresh (`Ctrl + F5`).
-
-No new SQL or package installation is required for V4.4.96. If the earlier Policies upload error still appears, run the V4.4.95 `subject_category` Supabase migration once.
+No Supabase SQL, requirements, or Master Data update is required for this patch.
