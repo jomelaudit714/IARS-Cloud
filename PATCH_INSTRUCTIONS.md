@@ -1,10 +1,9 @@
-# Deployment Instructions — IARS V4.5.00
+# Patch Instructions
 
-Replace these files in the current IARS GitHub repository:
+1. Back up the current repository files.
+2. Replace the repository's `app.py` and `iars_auth.py` with the files in this patch.
+3. Commit and push the two files together.
+4. Reboot the Streamlit application.
+5. Perform a hard refresh in the browser using `Ctrl + F5`.
 
-1. `app.py`
-2. `iars_auth.py`
-
-Then commit the changes, reboot the Streamlit app, and perform a hard refresh (`Ctrl + F5`).
-
-No Supabase SQL, requirements, database, or asset update is required. The transition continues to use the existing `assets/edl_logo.png`; when that file is unavailable, the built-in EDL text emblem is used safely.
+No SQL migration is required for this patch.

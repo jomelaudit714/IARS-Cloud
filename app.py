@@ -5,7 +5,7 @@ import os
 # Prevent PyArrow threaded mimalloc crashes before pandas/Streamlit data operations.
 os.environ.setdefault("ARROW_DEFAULT_MEMORY_POOL", "system")
 from io import BytesIO
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import base64
 import hashlib
 import html
@@ -22,7 +22,6 @@ import streamlit as st
 from iars_pdf_editor import pdf_textbox_editor
 from iars_theme import (
     apply_iars_theme,
-    render_app_header,
     render_feature_cards,
     render_metric_cards,
     render_section_header,
@@ -1026,8 +1025,9 @@ def _apply_v4485_table_and_clear_refinements() -> None:
     )
 
 
-IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_5_00"
-IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_5_00"
+IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_5_01"
+IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_5_01"
+PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8), name="PHT")
 
 
 def _transition_logo_data_uri() -> str:
@@ -1041,8 +1041,8 @@ def _transition_logo_data_uri() -> str:
         return ""
 
 
-def _apply_v4500_transition_refinements() -> None:
-    """Keep every module aligned and show the EDL loader only for slower transitions."""
+def _apply_v4501_transition_refinements() -> None:
+    """Keep the header fixed at the top and reveal the EDL loader only on slower transitions."""
     st.markdown(
         """
         <style>
@@ -1064,34 +1064,26 @@ def _apply_v4500_transition_refinements() -> None:
             100% { transform: translateX(205%); }
         }
 
-        /* Keep the authenticated top bar at one fixed vertical position on every module. */
-        .stApp:has(.edl-topbar) .block-container {
+        /* Keep the authenticated top bar at exactly one vertical position on every module. */
+        .stApp:has(.edl-topbar) .block-container,
+        .stApp:has(.edl-topbar) [data-testid="stMainBlockContainer"] {
             padding-top: 0 !important;
         }
         .stApp:has(.edl-topbar) .edl-topbar {
-            margin-top: -25px !important;
+            margin-top: -37px !important;
         }
 
-        /* The transition HTML must never become a normal Streamlit layout row. */
-        div[data-testid="stElementContainer"]:has(.iars-transition-detached) {
-            position: fixed !important;
-            inset: 0 auto auto 0 !important;
+        /* Transition overlays are fully detached from Streamlit's vertical flow. */
+        [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > div:has(.iars-transition-standalone),
+        div[data-testid="stElementContainer"]:has(.iars-transition-standalone),
+        div[data-testid="stMarkdown"]:has(.iars-transition-standalone),
+        div[data-testid="stMarkdownContainer"]:has(.iars-transition-standalone) {
+            display: contents !important;
             width: 0 !important;
             height: 0 !important;
             min-height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: visible !important;
-            z-index: 2147483000 !important;
-        }
-        div[data-testid="stMarkdown"]:has(.iars-transition-detached),
-        div[data-testid="stMarkdownContainer"]:has(.iars-transition-detached) {
-            width: 0 !important;
-            height: 0 !important;
-            min-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
         }
 
         .iars-v4500-transition-mask,
@@ -1198,8 +1190,8 @@ def _apply_v4500_transition_refinements() -> None:
         }
 
         /* Preserve the approved full-width Sign Out treatment with a native callback. */
-        .st-key-iars_profile_signout_v4_5_00 .stButton > button,
-        .st-key-iars_profile_signout_v4_5_00 button {
+        .st-key-iars_profile_signout_v4_5_01 .stButton > button,
+        .st-key-iars_profile_signout_v4_5_01 button {
             width: 100% !important;
             min-height: 44px !important;
             border-radius: 10px !important;
@@ -1209,7 +1201,7 @@ def _apply_v4500_transition_refinements() -> None:
             box-shadow: 0 8px 18px rgba(6,26,54,.16) !important;
             font-weight: 800 !important;
         }
-        .st-key-iars_profile_signout_v4_5_00 button:hover {
+        .st-key-iars_profile_signout_v4_5_01 button:hover {
             filter: brightness(1.05) !important;
             color: #FFFFFF !important;
         }
@@ -1252,6 +1244,7 @@ def _apply_v4500_transition_refinements() -> None:
 
 
 def _render_workspace_transition(target_page: str, transition_token: int) -> None:
+    """Render a fixed module overlay without creating a layout row above the header."""
     logo_uri = _transition_logo_data_uri()
     if logo_uri:
         logo_html = (
@@ -1271,12 +1264,57 @@ def _render_workspace_transition(target_page: str, transition_token: int) -> Non
         '}'
         f'@media (prefers-reduced-motion:reduce){{.stApp:has(.{ready_class}) .{mask_class},.stApp:has(.iars-auth-ready-marker) .{mask_class}{{display:none!important;}}}}'
         '</style>'
-        f'<div class="iars-transition-detached iars-v4500-transition-mask {mask_class}">'
+        f'<div class="iars-transition-detached iars-transition-standalone iars-v4500-transition-mask {mask_class}">'
         '<div class="iars-v4500-transition-card">'
         f'{logo_html}<strong>Opening {target}</strong>'
         '<span>Preparing your audit workspace…</span>'
         '<div class="iars-v4500-transition-line"></div>'
         '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_app_header_v4501(
+    user: dict,
+    *,
+    version: str,
+    page_title: str = "Dashboard",
+) -> None:
+    """Render the normal EDL header using Philippine Standard Time."""
+    name_raw = str(user.get("full_name") or user.get("username") or "IARS User")
+    name = html.escape(name_raw)
+    role = "Administrator" if str(user.get("role", "")).lower() == "admin" else "Auditor"
+    initials = "".join(part[:1].upper() for part in name_raw.split()[:2]) or "IA"
+    date_text = datetime.now(PHILIPPINE_TIMEZONE).strftime("%b %d, %Y · %I:%M %p PHT")
+    subtitles = {
+        "Dashboard": "Overview of the Internal Audit Report System",
+        "Generate Extraction": "Upload audit reports, extract data and prepare import-ready records",
+        "PDF Tagging": "Review, tag and archive audit-report PDFs",
+        "Shared PDF Archive": "Browse shared audit reports uploaded by all authorized auditors",
+        "Weekly Itinerary": "Upload and review weekly auditor itineraries",
+        "Audit Workpapers": "Access reusable count sheets, working papers and audit workpapers",
+        "Policies & Memoranda": "Access controlled policies, memoranda, procedures and manuals",
+        "User Management": "Manage authorized accounts and account approvals",
+        "Master Data": "Maintain the reference workbook used across IARS",
+        "Settings": "Review system configuration, security and storage controls",
+    }
+    subtitle = subtitles.get(page_title, "EDL GROUP OF COMPANIES Internal Audit workspace")
+    picture = str(user.get("profile_picture_data") or "").strip()
+    if picture.startswith("data:image/"):
+        avatar_html = (
+            f'<div class="edl-user-avatar"><img src="{html.escape(picture, quote=True)}" '
+            'alt="Profile picture"></div>'
+        )
+    else:
+        avatar_html = f'<div class="edl-user-avatar">{html.escape(initials)}</div>'
+
+    st.markdown(
+        '<div class="edl-topbar iars-fixed-header-v4501">'
+        f'<div class="edl-topbar-title"><h1>{html.escape(page_title)}</h1><p>{html.escape(subtitle)}</p></div>'
+        '<div class="edl-topbar-spacer"></div>'
+        f'<div class="edl-topbar-date">{html.escape(date_text)} · v{html.escape(version)}</div>'
+        f'<div class="edl-user-chip" aria-label="Edit Profile" title="Edit Profile">{avatar_html}'
+        f'<div><strong>{name}</strong><span>{role}</span></div><div class="edl-user-chevron">⌄</div></div></div>',
         unsafe_allow_html=True,
     )
 
@@ -1550,9 +1588,9 @@ _apply_v4479_readability_and_library_refinements()
 _apply_v4481_full_document_refinements()
 _install_v4490_persistent_dialog_close()
 _apply_v4485_table_and_clear_refinements()
-_apply_v4500_transition_refinements()
-# V4.5.00 uses a lightweight native-CSS transition mask only for login, logout,
-# and module navigation. It avoids the retired Components v1 loading guard.
+_apply_v4501_transition_refinements()
+# V4.5.01 detaches module overlays from Streamlit layout flow, so the top bar
+# stays at the same position while the transition appears immediately.
 
 _pending_page_transition = st.session_state.pop(IARS_PAGE_TRANSITION_KEY, None)
 _active_page_transition_token = 0
@@ -4449,7 +4487,11 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.5.00", page_title=page_key)
+_render_app_header_v4501(
+    auth_user,
+    version="4.5.01",
+    page_title=page_key,
+)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -5439,7 +5481,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.00", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.01", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

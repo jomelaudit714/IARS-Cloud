@@ -65,7 +65,7 @@ def _render_auth_transition_mask(*, mode: str, title: str, message: str) -> None
     else:
         logo_html = f'<div class="{prefix}-fallback">EDL</div>'
     st.markdown(
-        f'<div class="iars-transition-detached {prefix}-mask"><div class="{prefix}-card">'
+        f'<div class="iars-transition-detached iars-transition-standalone {prefix}-mask"><div class="{prefix}-card">'
         f'{logo_html}<strong>{title}</strong><span>{message}</span>'
         f'<div class="{prefix}-line"></div></div></div>',
         unsafe_allow_html=True,
@@ -74,7 +74,7 @@ def _render_auth_transition_mask(*, mode: str, title: str, message: str) -> None
 
 def _request_sign_out() -> None:
     """Set the sign-out query before rerun so the transition starts at the top of the next run."""
-    st.session_state["iars_logout_transition_v4_5_00"] = True
+    st.session_state["iars_logout_transition_v4_5_01"] = True
     try:
         st.query_params[SIGN_OUT_PARAM] = "1"
     except Exception:
@@ -1242,7 +1242,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
             st.divider()
             st.button(
                 "Sign Out",
-                key="iars_profile_signout_v4_5_00",
+                key="iars_profile_signout_v4_5_01",
                 use_container_width=True,
                 on_click=_request_sign_out,
             )
@@ -1944,7 +1944,7 @@ def render_auth_gate(config: AuthConfig):
             message="Loading your audit workspace…",
         )
     if sign_out_requested:
-        st.session_state["iars_logout_transition_v4_5_00"] = True
+        st.session_state["iars_logout_transition_v4_5_01"] = True
         _render_auth_transition_mask(
             mode="logout",
             title="Signing out",
@@ -2078,14 +2078,14 @@ def render_auth_gate(config: AuthConfig):
                 args=("sign_in",),
             )
 
-    if st.session_state.get("iars_logout_transition_v4_5_00") and not sign_out_requested:
+    if st.session_state.get("iars_logout_transition_v4_5_01") and not sign_out_requested:
         _render_auth_transition_mask(
             mode="logout",
             title="Signing out",
             message="Closing your audit workspace securely…",
         )
     _render_native_shell(_auth_panel)
-    st.session_state.pop("iars_logout_transition_v4_5_00", None)
+    st.session_state.pop("iars_logout_transition_v4_5_01", None)
     st.stop()
 
 def _user_label(user: dict[str, Any]) -> str:
