@@ -1,10 +1,11 @@
-# Patch Instructions — IARS V4.5.02
+# Installation — IARS V4.5.03
 
-1. Back up the current repository files.
-2. Copy `app.py` and `iars_auth.py` from this patch into the repository root.
-3. Replace the existing files when prompted.
-4. Commit and push the changes to the deployed Streamlit repository.
-5. Allow Streamlit Community Cloud to rebuild the app.
-6. Hard-refresh the browser after deployment using `Ctrl + F5` to clear previously cached CSS.
+Replace these files in the current IARS repository:
 
-No database migration or Supabase SQL change is required for this patch.
+1. `app.py`
+2. `iars_auth.py`
+3. `assets/login_left_panel.png`
+
+Keep the folder name exactly as `assets` and replace the existing `login_left_panel.png`.
+
+After committing and redeploying Streamlit Cloud, perform one hard refresh using **Ctrl + F5** so the browser does not reuse the V4.5.02 CSS or login artwork.

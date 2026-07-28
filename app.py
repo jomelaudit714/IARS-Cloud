@@ -1025,8 +1025,8 @@ def _apply_v4485_table_and_clear_refinements() -> None:
     )
 
 
-IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_5_02"
-IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_5_02"
+IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_5_03"
+IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_5_03"
 PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8), name="PHT")
 
 
@@ -1090,7 +1090,7 @@ def _apply_v4502_transition_refinements() -> None:
 
         /* Hidden first submit control: pressing Enter in the password field
            must submit Sign In, never the later Forgot password action. */
-        .st-key-auth_signin_enter_submit_v4_5_02 {
+        .st-key-auth_signin_enter_submit_v4_5_03 {
             position: absolute !important;
             left: -10000px !important;
             top: auto !important;
@@ -1223,8 +1223,8 @@ def _apply_v4502_transition_refinements() -> None:
         }
 
         /* Preserve the approved full-width Sign Out treatment with a native callback. */
-        .st-key-iars_profile_signout_v4_5_02 .stButton > button,
-        .st-key-iars_profile_signout_v4_5_02 button {
+        .st-key-iars_profile_signout_v4_5_03 .stButton > button,
+        .st-key-iars_profile_signout_v4_5_03 button {
             width: 100% !important;
             min-height: 44px !important;
             border-radius: 10px !important;
@@ -1234,7 +1234,7 @@ def _apply_v4502_transition_refinements() -> None:
             box-shadow: 0 8px 18px rgba(6,26,54,.16) !important;
             font-weight: 800 !important;
         }
-        .st-key-iars_profile_signout_v4_5_02 button:hover {
+        .st-key-iars_profile_signout_v4_5_03 button:hover {
             filter: brightness(1.05) !important;
             color: #FFFFFF !important;
         }
@@ -1276,6 +1276,173 @@ def _apply_v4502_transition_refinements() -> None:
     )
 
 
+
+def _apply_v4503_root_cause_fixes() -> None:
+    """Lock the header to one viewport position and align its real click targets."""
+    st.markdown(
+        """
+        <style>
+        /*
+         * V4.5.03 ROOT FIX — the header is viewport-fixed instead of being
+         * moved with module-specific negative margins and transforms. Every
+         * page now uses exactly the same top/left/right coordinates.
+         */
+        #iars-fixed-header-v4503,
+        .stApp:has(.edl-topbar) #iars-fixed-header-v4503 {
+            position: fixed !important;
+            top: 6px !important;
+            left: 266px !important;
+            right: 24px !important;
+            width: auto !important;
+            max-width: none !important;
+            margin: 0 !important;
+            transform: none !important;
+            z-index: 99900 !important;
+            box-sizing: border-box !important;
+        }
+        .stApp:has(.edl-topbar) .iars-fixed-header-spacer-v4503 {
+            display: block !important;
+            width: 100% !important;
+            height: 88px !important;
+            min-height: 88px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            pointer-events: none !important;
+        }
+        .stApp:has(.edl-topbar) .block-container,
+        .stApp:has(.edl-topbar) [data-testid="stMainBlockContainer"] {
+            padding-top: 0 !important;
+        }
+
+        /* The invisible Streamlit popover button exactly covers the visual
+           user card. It stays clickable on Dashboard and every other module. */
+        .st-key-profile_menu_trigger {
+            position: fixed !important;
+            top: 16px !important;
+            right: 36px !important;
+            width: 196px !important;
+            height: 60px !important;
+            min-width: 196px !important;
+            min-height: 60px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            z-index: 100020 !important;
+            pointer-events: auto !important;
+        }
+        .st-key-profile_menu_trigger [data-testid="stPopover"],
+        .st-key-profile_menu_trigger [data-testid="stPopover"] > div {
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .st-key-profile_menu_trigger [data-testid="stPopover"] > button,
+        .st-key-profile_menu_trigger button {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            border-radius: 12px !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            color: transparent !important;
+            font-size: 0 !important;
+            opacity: 0 !important;
+            cursor: pointer !important;
+            pointer-events: auto !important;
+        }
+        .st-key-profile_menu_trigger button:hover,
+        .st-key-profile_menu_trigger button:focus,
+        .st-key-profile_menu_trigger button:active {
+            background: transparent !important;
+            box-shadow: none !important;
+            transform: none !important;
+            outline: none !important;
+        }
+
+        /* Forgot Password is now a link, not a form submit control. Therefore
+           Enter in Username/Password can only submit the single Sign In button. */
+        .iars-forgot-link-v4503 {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
+            min-height: 38px !important;
+            width: 100% !important;
+        }
+        .iars-forgot-link-v4503 a {
+            color: #175CD3 !important;
+            font-size: .78rem !important;
+            font-weight: 720 !important;
+            text-decoration: none !important;
+            white-space: nowrap !important;
+        }
+        .iars-forgot-link-v4503 a:hover {
+            color: #0A2C59 !important;
+            text-decoration: underline !important;
+        }
+
+        /* The replacement login artwork covers the whole left panel. Never
+           translate the complete image just to move the logo. */
+        .stApp:has(.iars-login-marker) .st-key-edl_login_hero_panel,
+        .stApp:has(.iars-login-marker) .st-key-edl_login_hero_panel > div,
+        .stApp:has(.iars-login-marker) .st-key-edl_login_hero_panel [data-testid="stImage"],
+        .stApp:has(.iars-login-marker) .st-key-edl_login_hero_panel [data-testid="stImage"] figure,
+        .stApp:has(.iars-login-marker) .st-key-edl_login_hero_panel [data-testid="stImage"] > div {
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+        .stApp:has(.iars-login-marker) .st-key-edl_login_hero_panel [data-testid="stImage"] img {
+            display: block !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            object-fit: cover !important;
+            object-position: center center !important;
+            transform: none !important;
+            transform-origin: center center !important;
+        }
+
+        @media (max-width: 900px) {
+            #iars-fixed-header-v4503,
+            .stApp:has(.edl-topbar) #iars-fixed-header-v4503 {
+                left: 16px !important;
+                right: 16px !important;
+                top: 6px !important;
+            }
+            .st-key-profile_menu_trigger {
+                right: 28px !important;
+                top: 16px !important;
+                width: 176px !important;
+                min-width: 176px !important;
+                height: 56px !important;
+                min-height: 56px !important;
+            }
+            .stApp:has(.edl-topbar) .iars-fixed-header-spacer-v4503 {
+                height: 84px !important;
+                min-height: 84px !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _render_workspace_transition(target_page: str, transition_token: int) -> None:
     """Render a fixed module overlay without creating a layout row above the header."""
     logo_uri = _transition_logo_data_uri()
@@ -1307,13 +1474,13 @@ def _render_workspace_transition(target_page: str, transition_token: int) -> Non
     )
 
 
-def _render_app_header_v4502(
+def _render_app_header_v4503(
     user: dict,
     *,
     version: str,
     page_title: str = "Dashboard",
 ) -> None:
-    """Render the sticky EDL header using Philippine Standard Time."""
+    """Render the fixed EDL header using Philippine Standard Time."""
     name_raw = str(user.get("full_name") or user.get("username") or "IARS User")
     name = html.escape(name_raw)
     role = "Administrator" if str(user.get("role", "")).lower() == "admin" else "Auditor"
@@ -1342,12 +1509,13 @@ def _render_app_header_v4502(
         avatar_html = f'<div class="edl-user-avatar">{html.escape(initials)}</div>'
 
     st.markdown(
-        '<div class="edl-topbar iars-fixed-header-v4502">'
+        '<div id="iars-fixed-header-v4503" class="edl-topbar iars-fixed-header-v4503">'
         f'<div class="edl-topbar-title"><h1>{html.escape(page_title)}</h1><p>{html.escape(subtitle)}</p></div>'
         '<div class="edl-topbar-spacer"></div>'
         f'<div class="edl-topbar-date">{html.escape(date_text)} · v{html.escape(version)}</div>'
         f'<div class="edl-user-chip" aria-label="Edit Profile" title="Edit Profile">{avatar_html}'
-        f'<div><strong>{name}</strong><span>{role}</span></div><div class="edl-user-chevron">⌄</div></div></div>',
+        f'<div><strong>{name}</strong><span>{role}</span></div><div class="edl-user-chevron">⌄</div></div></div>'
+        '<div class="iars-fixed-header-spacer-v4503" aria-hidden="true"></div>',
         unsafe_allow_html=True,
     )
 
@@ -1622,7 +1790,8 @@ _apply_v4481_full_document_refinements()
 _install_v4490_persistent_dialog_close()
 _apply_v4485_table_and_clear_refinements()
 _apply_v4502_transition_refinements()
-# V4.5.02 keeps module overlays from Streamlit layout flow, so the top bar
+_apply_v4503_root_cause_fixes()
+# V4.5.03 keeps module overlays from Streamlit layout flow, so the top bar
 # at the Dashboard position while the transition appears immediately.
 
 _pending_page_transition = st.session_state.pop(IARS_PAGE_TRANSITION_KEY, None)
@@ -4520,9 +4689,9 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-_render_app_header_v4502(
+_render_app_header_v4503(
     auth_user,
-    version="4.5.02",
+    version="4.5.03",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -5514,7 +5683,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.02", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.03", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
