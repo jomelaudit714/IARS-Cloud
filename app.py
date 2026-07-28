@@ -477,7 +477,7 @@ def _apply_v4479_readability_and_library_refinements() -> None:
             width: 100% !important;
             margin: 0 auto !important;
             object-position: center center !important;
-            transform: translateX(2.6%) scale(1.012) !important;
+            transform: translateX(6.5%) scale(1.012) !important;
             transform-origin: center center !important;
         }
         </style>
@@ -1025,8 +1025,8 @@ def _apply_v4485_table_and_clear_refinements() -> None:
     )
 
 
-IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_5_01"
-IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_5_01"
+IARS_PAGE_TRANSITION_KEY = "iars_page_transition_v4_5_02"
+IARS_PAGE_TRANSITION_COUNTER_KEY = "iars_page_transition_counter_v4_5_02"
 PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8), name="PHT")
 
 
@@ -1041,8 +1041,8 @@ def _transition_logo_data_uri() -> str:
         return ""
 
 
-def _apply_v4501_transition_refinements() -> None:
-    """Keep the header fixed at the top and reveal the EDL loader only on slower transitions."""
+def _apply_v4502_transition_refinements() -> None:
+    """Keep every module header at the Dashboard position, make it sticky, and reveal the EDL loader only on slower transitions."""
     st.markdown(
         """
         <style>
@@ -1071,6 +1071,39 @@ def _apply_v4501_transition_refinements() -> None:
         }
         .stApp:has(.edl-topbar) .edl-topbar {
             margin-top: -37px !important;
+            position: sticky !important;
+            top: 4px !important;
+            z-index: 1000 !important;
+        }
+
+        /*
+         * The Dashboard already receives a 29px top-space recovery from the
+         * approved dashboard layout. Apply the same visual recovery to every
+         * other authenticated module so the header never drops during module
+         * changes. The negative bottom margin keeps the following content in
+         * the same relative position instead of leaving a blank band.
+         */
+        .stApp:has(.edl-topbar):not(:has(.iars-dashboard-v4477-marker)) .edl-topbar {
+            transform: translateY(-29px) !important;
+            margin-bottom: -29px !important;
+        }
+
+        /* Hidden first submit control: pressing Enter in the password field
+           must submit Sign In, never the later Forgot password action. */
+        .st-key-auth_signin_enter_submit_v4_5_02 {
+            position: absolute !important;
+            left: -10000px !important;
+            top: auto !important;
+            width: 1px !important;
+            height: 1px !important;
+            min-width: 1px !important;
+            min-height: 1px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            clip-path: inset(50%) !important;
         }
 
         /* Transition overlays are fully detached from Streamlit's vertical flow. */
@@ -1190,8 +1223,8 @@ def _apply_v4501_transition_refinements() -> None:
         }
 
         /* Preserve the approved full-width Sign Out treatment with a native callback. */
-        .st-key-iars_profile_signout_v4_5_01 .stButton > button,
-        .st-key-iars_profile_signout_v4_5_01 button {
+        .st-key-iars_profile_signout_v4_5_02 .stButton > button,
+        .st-key-iars_profile_signout_v4_5_02 button {
             width: 100% !important;
             min-height: 44px !important;
             border-radius: 10px !important;
@@ -1201,7 +1234,7 @@ def _apply_v4501_transition_refinements() -> None:
             box-shadow: 0 8px 18px rgba(6,26,54,.16) !important;
             font-weight: 800 !important;
         }
-        .st-key-iars_profile_signout_v4_5_01 button:hover {
+        .st-key-iars_profile_signout_v4_5_02 button:hover {
             filter: brightness(1.05) !important;
             color: #FFFFFF !important;
         }
@@ -1274,13 +1307,13 @@ def _render_workspace_transition(target_page: str, transition_token: int) -> Non
     )
 
 
-def _render_app_header_v4501(
+def _render_app_header_v4502(
     user: dict,
     *,
     version: str,
     page_title: str = "Dashboard",
 ) -> None:
-    """Render the normal EDL header using Philippine Standard Time."""
+    """Render the sticky EDL header using Philippine Standard Time."""
     name_raw = str(user.get("full_name") or user.get("username") or "IARS User")
     name = html.escape(name_raw)
     role = "Administrator" if str(user.get("role", "")).lower() == "admin" else "Auditor"
@@ -1309,7 +1342,7 @@ def _render_app_header_v4501(
         avatar_html = f'<div class="edl-user-avatar">{html.escape(initials)}</div>'
 
     st.markdown(
-        '<div class="edl-topbar iars-fixed-header-v4501">'
+        '<div class="edl-topbar iars-fixed-header-v4502">'
         f'<div class="edl-topbar-title"><h1>{html.escape(page_title)}</h1><p>{html.escape(subtitle)}</p></div>'
         '<div class="edl-topbar-spacer"></div>'
         f'<div class="edl-topbar-date">{html.escape(date_text)} · v{html.escape(version)}</div>'
@@ -1588,9 +1621,9 @@ _apply_v4479_readability_and_library_refinements()
 _apply_v4481_full_document_refinements()
 _install_v4490_persistent_dialog_close()
 _apply_v4485_table_and_clear_refinements()
-_apply_v4501_transition_refinements()
-# V4.5.01 detaches module overlays from Streamlit layout flow, so the top bar
-# stays at the same position while the transition appears immediately.
+_apply_v4502_transition_refinements()
+# V4.5.02 keeps module overlays from Streamlit layout flow, so the top bar
+# at the Dashboard position while the transition appears immediately.
 
 _pending_page_transition = st.session_state.pop(IARS_PAGE_TRANSITION_KEY, None)
 _active_page_transition_token = 0
@@ -4487,9 +4520,9 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-_render_app_header_v4501(
+_render_app_header_v4502(
     auth_user,
-    version="4.5.01",
+    version="4.5.02",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -5481,7 +5514,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.01", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.02", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

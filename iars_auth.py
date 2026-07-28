@@ -74,7 +74,7 @@ def _render_auth_transition_mask(*, mode: str, title: str, message: str) -> None
 
 def _request_sign_out() -> None:
     """Set the sign-out query before rerun so the transition starts at the top of the next run."""
-    st.session_state["iars_logout_transition_v4_5_01"] = True
+    st.session_state["iars_logout_transition_v4_5_02"] = True
     try:
         st.query_params[SIGN_OUT_PARAM] = "1"
     except Exception:
@@ -1242,7 +1242,7 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
             st.divider()
             st.button(
                 "Sign Out",
-                key="iars_profile_signout_v4_5_01",
+                key="iars_profile_signout_v4_5_02",
                 use_container_width=True,
                 on_click=_request_sign_out,
             )
@@ -1650,6 +1650,16 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
             key="auth_signin_password",
         )
 
+        # Keep a real submit control first in the form's DOM. Browsers activate
+        # the first submit button when Enter is pressed in a password field.
+        # It is visually hidden by app.py CSS but behaves exactly like Sign In.
+        enter_submitted = st.form_submit_button(
+            "Sign In",
+            key="auth_signin_enter_submit_v4_5_02",
+            type="primary",
+            width="stretch",
+        )
+
         remember_col, forgot_col = st.columns([1, 1], vertical_alignment="center")
         with remember_col:
             remember = st.checkbox("Remember me", key="auth_remember_me")
@@ -1661,13 +1671,14 @@ def _render_sign_in(client: Any, config: AuthConfig) -> None:
                 width="stretch",
             )
 
-        submitted = st.form_submit_button(
+        sign_in_clicked = st.form_submit_button(
             "Sign In",
             key="auth_signin_submit",
             type="primary",
             icon=":material/lock:",
             width="stretch",
         )
+        submitted = bool(enter_submitted or sign_in_clicked)
 
     if forgot_clicked:
         _set_auth_view("forgot")
@@ -1944,7 +1955,7 @@ def render_auth_gate(config: AuthConfig):
             message="Loading your audit workspace…",
         )
     if sign_out_requested:
-        st.session_state["iars_logout_transition_v4_5_01"] = True
+        st.session_state["iars_logout_transition_v4_5_02"] = True
         _render_auth_transition_mask(
             mode="logout",
             title="Signing out",
@@ -2078,14 +2089,14 @@ def render_auth_gate(config: AuthConfig):
                 args=("sign_in",),
             )
 
-    if st.session_state.get("iars_logout_transition_v4_5_01") and not sign_out_requested:
+    if st.session_state.get("iars_logout_transition_v4_5_02") and not sign_out_requested:
         _render_auth_transition_mask(
             mode="logout",
             title="Signing out",
             message="Closing your audit workspace securely…",
         )
     _render_native_shell(_auth_panel)
-    st.session_state.pop("iars_logout_transition_v4_5_01", None)
+    st.session_state.pop("iars_logout_transition_v4_5_02", None)
     st.stop()
 
 def _user_label(user: dict[str, Any]) -> str:

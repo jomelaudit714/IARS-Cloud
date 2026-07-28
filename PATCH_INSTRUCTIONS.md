@@ -1,9 +1,10 @@
-# Patch Instructions
+# Patch Instructions — IARS V4.5.02
 
 1. Back up the current repository files.
-2. Replace the repository's `app.py` and `iars_auth.py` with the files in this patch.
-3. Commit and push the two files together.
-4. Reboot the Streamlit application.
-5. Perform a hard refresh in the browser using `Ctrl + F5`.
+2. Copy `app.py` and `iars_auth.py` from this patch into the repository root.
+3. Replace the existing files when prompted.
+4. Commit and push the changes to the deployed Streamlit repository.
+5. Allow Streamlit Community Cloud to rebuild the app.
+6. Hard-refresh the browser after deployment using `Ctrl + F5` to clear previously cached CSS.
 
-No SQL migration is required for this patch.
+No database migration or Supabase SQL change is required for this patch.
