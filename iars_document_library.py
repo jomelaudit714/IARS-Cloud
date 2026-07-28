@@ -285,6 +285,61 @@ def create_document_folder(
         raise DocumentLibraryError(f"Unable to create the company folder: {exc}") from exc
 
 
+def update_document_folder(
+    client: Any,
+    config: DocumentLibraryConfig,
+    folder: dict[str, Any],
+    *,
+    folder_name: str,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Rename an existing company/group folder without moving stored files."""
+    folder_id = folder.get("id")
+    if not folder_id:
+        raise DocumentLibraryError("The selected folder record is incomplete.")
+
+    clean_name = normalize_folder_name(folder_name)
+    if not clean_name:
+        raise DocumentLibraryError("Folder name is required.")
+
+    existing = find_folder_by_name(
+        client,
+        config,
+        collection=str(folder.get("collection") or COLLECTION_POLICIES),
+        folder_name=clean_name,
+    )
+    if existing and str(existing.get("id") or "") != str(folder_id):
+        raise DuplicateFolderError(
+            f'A folder named "{existing.get("folder_name", clean_name)}" already exists.',
+            existing,
+        )
+
+    payload: dict[str, Any] = {"folder_name": clean_name}
+    if description is not None:
+        payload["description"] = _clean_text(description, 1000)
+
+    try:
+        response = (
+            client.table(config.folders_table)
+            .update(payload)
+            .eq("id", folder_id)
+            .execute()
+        )
+        rows = _response_data(response)
+        updated = dict(folder)
+        updated.update(payload)
+        if rows:
+            updated.update(rows[0])
+        return updated
+    except Exception as exc:
+        message = _exception_text(exc)
+        if "duplicate" in message or "unique" in message:
+            raise DuplicateFolderError(
+                f'A folder named "{clean_name}" already exists.'
+            ) from exc
+        raise DocumentLibraryError(f"Unable to rename the company folder: {exc}") from exc
+
+
 def validate_filename(filename: str) -> tuple[str, str, str]:
     safe_name = Path(str(filename or "")).name
     extension = Path(safe_name).suffix.lower()

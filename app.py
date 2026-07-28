@@ -83,6 +83,7 @@ from iars_document_library import (
     read_document_library_config,
     upload_document,
     update_document_metadata,
+    update_document_folder,
 )
 
 from iars_parser import (
@@ -922,6 +923,23 @@ def _apply_v4485_table_and_clear_refinements() -> None:
             min-height: 2.05rem !important;
             padding: .22rem .30rem !important;
             white-space: nowrap !important;
+        }
+        .iars-policy-grid-cell-v4496 {
+            width: 100% !important;
+            min-height: 2.30rem !important;
+            display: flex !important;
+            align-items: center !important;
+            box-sizing: border-box !important;
+            line-height: 1.20 !important;
+            overflow-wrap: anywhere !important;
+        }
+        .iars-policy-grid-cell-v4496.is-centered {
+            justify-content: center !important;
+            text-align: center !important;
+        }
+        .iars-policy-grid-cell-v4496.is-left {
+            justify-content: flex-start !important;
+            text-align: left !important;
         }
         </style>
         """,
@@ -1961,6 +1979,24 @@ def _safe_library_key(value: object) -> str:
     return cleaned[:90] or "item"
 
 
+def _render_policy_grid_text(
+    column,
+    value: object,
+    *,
+    short_limit: int = 28,
+    force_center: bool = False,
+) -> None:
+    """Center concise policy-table values while keeping long text readable."""
+    display = str(value or "—").strip() or "—"
+    centered = force_center or len(display) <= short_limit
+    alignment_class = "is-centered" if centered else "is-left"
+    column.markdown(
+        '<div class="iars-policy-grid-cell-v4496 '
+        f'{alignment_class}">{html.escape(display)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _docx_preview_text(file_bytes: bytes, *, max_characters: int = 30000) -> str:
     """Extract readable paragraph text from a DOCX without extra dependencies."""
     import zipfile
@@ -2401,6 +2437,7 @@ def render_policy_folder_documents_dialog(
     *,
     admin: bool,
     records_cache_key: str,
+    folders_cache_key: str,
 ) -> None:
     """Show a searchable company-folder table with persistent actions."""
     folder_name = str(folder.get("folder_name", "") or "Unfiled / General")
@@ -2410,6 +2447,47 @@ def render_policy_folder_documents_dialog(
     st.markdown(f"### 📁 {folder_name}")
     if folder_description:
         st.caption(folder_description)
+
+    folder_flash = st.session_state.pop(
+        "iars_policy_folder_admin_flash_v4_4_96", ""
+    )
+    if folder_flash:
+        st.success(folder_flash)
+
+    if admin and folder.get("id") and not folder.get("_system_folder"):
+        with st.expander("Edit Folder Name — Administrator Only", expanded=False):
+            renamed_folder = st.text_input(
+                "Folder Name",
+                value=folder_name,
+                key=(
+                    f"policy_folder_rename_input_{folder_key}_"
+                    f"{_safe_library_key(folder_name)}_v4_4_96"
+                ),
+            )
+            if st.button(
+                "Save Folder Name",
+                type="primary",
+                use_container_width=True,
+                key=f"policy_folder_rename_save_{folder_key}_v4_4_96",
+            ):
+                try:
+                    updated_folder = update_document_folder(
+                        client,
+                        config,
+                        folder,
+                        folder_name=renamed_folder,
+                    )
+                    _invalidate_session_cache(folders_cache_key)
+                    st.session_state[
+                        "iars_policy_folder_admin_flash_v4_4_96"
+                    ] = (
+                        f'Folder renamed to "{updated_folder.get("folder_name", renamed_folder)}".'
+                    )
+                    st.rerun()
+                except DuplicateFolderError as exc:
+                    st.warning(str(exc))
+                except Exception as exc:
+                    st.error(str(exc))
 
     if not folder_records:
         st.info("No policies or memoranda have been uploaded to this folder yet.")
@@ -2510,14 +2588,24 @@ def render_policy_folder_documents_dialog(
                 or record.get("original_filename")
                 or "Untitled"
             )
-            row_cols[0].write(title)
-            row_cols[1].write(str(record.get("category", "") or "General"))
-            row_cols[2].write(
-                str(record.get("subject_category", "") or "Uncategorized")
+            _render_policy_grid_text(row_cols[0], title, short_limit=30)
+            _render_policy_grid_text(
+                row_cols[1], record.get("category", "") or "General", force_center=True
             )
-            row_cols[3].write(str(record.get("version_label", "") or "—"))
-            row_cols[4].write(str(record.get("effective_date", "") or "—"))
-            row_cols[5].write(str(record.get("uploaded_by", "") or "—"))
+            _render_policy_grid_text(
+                row_cols[2],
+                record.get("subject_category", "") or "Uncategorized",
+                short_limit=24,
+            )
+            _render_policy_grid_text(
+                row_cols[3], record.get("version_label", "") or "—", force_center=True
+            )
+            _render_policy_grid_text(
+                row_cols[4], record.get("effective_date", "") or "—", force_center=True
+            )
+            _render_policy_grid_text(
+                row_cols[5], record.get("uploaded_by", "") or "—", short_limit=24
+            )
             with row_cols[6]:
                 if st.button(
                     "👁️",
@@ -2972,6 +3060,7 @@ def render_policy_folder_library_page(
             config,
             admin=admin,
             records_cache_key=records_cache_key,
+            folders_cache_key=folders_cache_key,
         )
 
 
@@ -3371,6 +3460,8 @@ if not auditor_options:
 ARCHIVE_PREVIEW_OPEN_KEY = "iars_archive_preview_open_v4_4_81"
 ARCHIVE_PREVIEW_RECORD_ID_KEY = "iars_archive_preview_record_id_v4_4_81"
 ARCHIVE_PREVIEW_BYTES_KEY = "iars_archive_preview_bytes_v4_4_81"
+ARCHIVE_DELETE_OPEN_KEY = "iars_archive_delete_open_v4_4_96"
+ARCHIVE_DELETE_RECORD_ID_KEY = "iars_archive_delete_record_id_v4_4_96"
 PDF_TAGGING_DIALOG_OPEN_KEY = "iars_pdf_tagging_dialog_open_v4_4_81"
 
 
@@ -3382,6 +3473,65 @@ def _dismiss_archive_preview_dialog() -> None:
 
 def _dismiss_pdf_tagging_dialog() -> None:
     st.session_state.pop(PDF_TAGGING_DIALOG_OPEN_KEY, None)
+
+
+def _dismiss_archive_delete_dialog() -> None:
+    st.session_state.pop(ARCHIVE_DELETE_OPEN_KEY, None)
+    st.session_state.pop(ARCHIVE_DELETE_RECORD_ID_KEY, None)
+
+
+@st.dialog(
+    "Delete Archived PDF",
+    width="small",
+    on_dismiss=_dismiss_archive_delete_dialog,
+)
+def render_archive_delete_dialog(
+    selected_record: dict,
+    archive_client,
+    archive_config: ArchiveConfig,
+) -> None:
+    """Give administrators a direct, confirmed archive-table delete action."""
+    filename = str(
+        selected_record.get("original_filename")
+        or selected_record.get("audit_reference")
+        or "Archived PDF"
+    )
+    st.warning(
+        "This permanently deletes the stored PDF and its Shared PDF Archive record."
+    )
+    st.markdown(f"**File:** {html.escape(filename)}")
+    st.markdown(
+        f"**Audit Reference:** {html.escape(str(selected_record.get('audit_reference', '') or '—'))}"
+    )
+    record_key = _safe_library_key(selected_record.get("id") or filename)
+    confirmation = st.text_input(
+        "Type DELETE to confirm",
+        key=f"archive_table_delete_confirm_{record_key}_v4_4_96",
+    )
+    if st.button(
+        "Delete Archived PDF",
+        type="primary",
+        disabled=confirmation.strip().upper() != "DELETE",
+        use_container_width=True,
+        key=f"archive_table_delete_execute_{record_key}_v4_4_96",
+    ):
+        try:
+            delete_archived_pdf(archive_client, archive_config, selected_record)
+            _invalidate_session_cache(
+                "iars_archive_records_cache_v4_4_19",
+                "iars_archive_duplicate_check_cache_v4_4_19",
+            )
+            if str(st.session_state.get(ARCHIVE_PREVIEW_RECORD_ID_KEY, "") or "") == str(
+                selected_record.get("id", "") or ""
+            ):
+                _dismiss_archive_preview_dialog()
+            _dismiss_archive_delete_dialog()
+            st.session_state[
+                "iars_archive_dialog_flash_v4_4_81"
+            ] = "Archived PDF deleted successfully."
+            st.rerun()
+        except Exception as exc:
+            st.error(str(exc))
 
 
 @st.dialog(
@@ -3863,7 +4013,7 @@ with st.sidebar:
 
 selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
-render_app_header(auth_user, version="4.4.95", page_title=page_key)
+render_app_header(auth_user, version="4.4.96", page_title=page_key)
 render_profile_menu(auth_client, auth_user, auth_config)
 
 
@@ -4227,7 +4377,10 @@ if page_key == "Shared PDF Archive":
                     "record(s) from all auditors."
                 )
                 if filtered:
+                    archive_admin = is_admin_user(auth_user)
                     archive_column_widths = [1.35, 2.15, 1.15, 1.72, .62, .82]
+                    if archive_admin:
+                        archive_column_widths.append(.72)
                     archive_download_id_key = (
                         "archive_table_download_record_id_v4_4_85"
                     )
@@ -4251,7 +4404,7 @@ if page_key == "Shared PDF Archive":
                                 "Uploaded By",
                                 "View",
                                 "Download",
-                            ],
+                            ] + (["Delete"] if archive_admin else []),
                         ):
                             column.markdown(
                                 f'<div class="iars-grid-header-v4485">{html.escape(label)}</div>',
@@ -4339,6 +4492,21 @@ if page_key == "Shared PDF Archive":
                                         st.rerun()
                                     except Exception as exc:
                                         st.error(str(exc))
+                            if archive_admin:
+                                with row_cols[6]:
+                                    if st.button(
+                                        "🗑️",
+                                        help=f"Delete {filename}",
+                                        use_container_width=True,
+                                        key=(
+                                            f"archive_table_delete_{record_key}_v4_4_96"
+                                        ),
+                                    ):
+                                        st.session_state[
+                                            ARCHIVE_DELETE_RECORD_ID_KEY
+                                        ] = record_id
+                                        st.session_state[ARCHIVE_DELETE_OPEN_KEY] = True
+                                        st.rerun()
 
                     prepared_archive_id = str(
                         st.session_state.get(archive_download_id_key, "") or ""
@@ -4396,6 +4564,28 @@ if page_key == "Shared PDF Archive":
                             )
                         else:
                             _dismiss_archive_preview_dialog()
+
+                    if archive_admin and st.session_state.get(ARCHIVE_DELETE_OPEN_KEY):
+                        delete_record_id = str(
+                            st.session_state.get(ARCHIVE_DELETE_RECORD_ID_KEY, "") or ""
+                        )
+                        delete_record = next(
+                            (
+                                record
+                                for record in records
+                                if str(record.get("id", "") or record.get("storage_path", ""))
+                                == delete_record_id
+                            ),
+                            None,
+                        )
+                        if delete_record is not None:
+                            render_archive_delete_dialog(
+                                delete_record,
+                                archive_client,
+                                archive_config,
+                            )
+                        else:
+                            _dismiss_archive_delete_dialog()
                 else:
                     st.info("No archived PDFs match the selected filters.")
 
@@ -4813,7 +5003,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.4.95", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.4.96", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

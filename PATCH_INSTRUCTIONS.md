@@ -1,12 +1,10 @@
-# Deployment
+# Patch Instructions
 
-1. Open Supabase → SQL Editor.
-2. Run `SUPABASE_POLICY_SUBJECT_CATEGORY_FIX.sql` once.
-3. Confirm the final verification query returns `subject_category`.
-4. Replace these GitHub files:
-   - `app.py`
-   - `iars_document_library.py`
-5. Commit and reboot Streamlit.
-6. Wait a few seconds, press `Ctrl + F5`, then upload the policy again.
+Replace these files in the current IARS repository:
 
-No requirements update is needed.
+1. `app.py`
+2. `iars_document_library.py`
+
+Commit the changes, reboot the Streamlit app, and perform a hard browser refresh (`Ctrl + F5`).
+
+No new SQL or package installation is required for V4.4.96. If the earlier Policies upload error still appears, run the V4.4.95 `subject_category` Supabase migration once.
