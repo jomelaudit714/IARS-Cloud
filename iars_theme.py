@@ -185,7 +185,7 @@ section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] .stButton>but
 .edl-sidebar-logo-shell {{display:inline-flex;background:#FFF;border-radius:14px;padding:.35rem;box-shadow:0 12px 28px rgba(0,0,0,.22);}}
 .edl-sidebar-brand img {{width:118px;height:118px;object-fit:contain;border-radius:10px;}}
 .edl-sidebar-brand h3 {{margin:.7rem 0 .08rem;color:#FFF;font-size:1.02rem;line-height:1.15;letter-spacing:.035em;}}
-.edl-sidebar-brand p {{margin:0;color:rgba(255,255,255,.58)!important;font-size:.68rem;letter-spacing:.10em;text-transform:uppercase;}}
+.edl-sidebar-brand p {{margin:0;color:#F7E7B2!important;font-size:.68rem;font-weight:700;letter-spacing:.10em;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.28);}}
 .edl-sidebar-section {{margin:.3rem 0 .35rem;color:rgba(255,255,255,.42)!important;font-size:.64rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;}}
 .edl-user-card {{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.72rem .78rem;margin:.35rem 0 .55rem;}}
 .edl-user-card strong {{display:block;color:#FFF;font-size:.88rem;}}
@@ -536,8 +536,9 @@ body:has(.iars-login-marker),
   height:100%!important;
   min-height:0!important;
   max-height:100%!important;
-  object-fit:cover!important;
+  object-fit:contain!important;
   object-position:center center!important;
+  background:#061A36!important;
   border-radius:16px!important;
   clip-path:inset(0 round 16px)!important;
 }}
