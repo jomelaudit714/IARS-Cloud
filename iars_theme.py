@@ -1105,15 +1105,31 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
 
 
 def render_login_hero() -> None:
-    """Render the approved login artwork without browser cropping or zooming."""
+    """Render the complete approved login artwork inside the available panel.
+
+    The image is applied as the keyed container's background instead of as a
+    Markdown image element. This avoids Streamlit wrapper heights reverting the
+    image to width-based sizing, which previously caused the lower artwork to be
+    clipped on 1366x768 screens.
+    """
     panel_uri = _asset_data_uri("login_left_panel.png")
     with st.container(key="edl_login_hero_panel"):
         if panel_uri:
+            safe_uri = html.escape(panel_uri, quote=True)
             _render_html(
-                '<div class="iars-login-artwork-shell">'
-                f'<img class="iars-login-artwork-image" src="{html.escape(panel_uri, quote=True)}" '
-                'alt="Internal Audit Report System">'
-                '</div>'
+                '<style>'
+                '.st-key-edl_login_hero_panel {'
+                f'background-image:url("{safe_uri}")!important;'
+                'background-size:contain!important;'
+                'background-position:center center!important;'
+                'background-repeat:no-repeat!important;'
+                'background-color:#061A36!important;'
+                '}'
+                '.st-key-edl_login_hero_panel .iars-login-artwork-loaded {'
+                'display:none!important;'
+                '}'
+                '</style>'
+                '<div class="iars-login-artwork-loaded" aria-hidden="true"></div>'
             )
         else:
             logo_uri = _asset_data_uri("edl_logo.png")
