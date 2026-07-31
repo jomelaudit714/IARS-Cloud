@@ -182,9 +182,9 @@ section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] {{padding:0 .
 section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] .stButton>button {{padding-left:1rem!important;}}
 
 .edl-sidebar-brand {{text-align:center;padding:0 .15rem .55rem;}}
-.edl-sidebar-logo-shell {{display:inline-flex;background:#FFF;border-radius:14px;padding:.35rem;box-shadow:0 12px 28px rgba(0,0,0,.22);}}
-.edl-sidebar-brand img {{width:118px;height:118px;object-fit:contain;border-radius:10px;}}
-.edl-sidebar-brand h3 {{margin:.7rem 0 .08rem;color:#FFF;font-size:1.02rem;line-height:1.15;letter-spacing:.035em;}}
+.edl-sidebar-logo-shell {{display:flex;align-items:center;justify-content:center;width:100%;margin:0 auto .18rem;background:transparent;border:0;padding:0;box-shadow:none;}}
+.edl-sidebar-brand-logo {{display:block;width:156px;max-width:88%;height:auto;object-fit:contain;object-position:center center;margin:0 auto;background:transparent;border:0;border-radius:0;box-shadow:none;}}
+.edl-sidebar-brand h3 {{margin:.42rem 0 .08rem;color:#FFF;font-size:1.02rem;line-height:1.15;letter-spacing:.035em;}}
 .edl-sidebar-brand p {{margin:0;color:#F7E7B2!important;font-size:.68rem;font-weight:800;letter-spacing:.10em;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.35);}}
 .edl-sidebar-section {{margin:.3rem 0 .35rem;color:rgba(255,255,255,.42)!important;font-size:.64rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;}}
 .edl-user-card {{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.72rem .78rem;margin:.35rem 0 .55rem;}}
@@ -541,6 +541,34 @@ body:has(.iars-login-marker),
   background:#061A36!important;
   border-radius:16px!important;
   clip-path:inset(0 round 16px)!important;
+}}
+
+.iars-login-artwork-shell {{
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  overflow:hidden!important;
+  background:#061A36!important;
+  border-radius:16px!important;
+}}
+.iars-login-artwork-image {{
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  max-width:100%!important;
+  max-height:100%!important;
+  object-fit:contain!important;
+  object-position:center center!important;
+  background:#061A36!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:16px!important;
 }}
 
 .st-key-iars_auth_card {{
@@ -1024,14 +1052,19 @@ def render_brand_stripe() -> None:
 
 
 def render_sidebar_brand() -> None:
-    """Render the centered sidebar EDL logo with readable company lettering."""
-    logo_path = _asset_path("sidebar_edl_logo.png")
-    if not logo_path.exists():
-        logo_path = _asset_path("edl_logo.png")
-    if logo_path.exists():
-        st.image(str(logo_path), width=146)
+    """Render the exact approved sidebar logo with readable company lettering."""
+    logo_uri = _asset_data_uri("sidebar_edl_logo.png") or _asset_data_uri("edl_logo.png")
+    logo_html = ""
+    if logo_uri:
+        logo_html = (
+            '<div class="edl-sidebar-logo-shell">'
+            f'<img class="edl-sidebar-brand-logo" src="{html.escape(logo_uri, quote=True)}" '
+            'alt="EDL Group of Companies">'
+            '</div>'
+        )
     _render_html(
         '<div class="edl-sidebar-brand" style="padding-top:.02rem">'
+        f'{logo_html}'
         '<h3>INTERNAL AUDIT<br>REPORT SYSTEM</h3>'
         '<p>EDL GROUP OF COMPANIES</p>'
         '</div>'
@@ -1072,21 +1105,30 @@ def render_app_header(user: dict[str, Any], *, version: str, page_title: str = "
 
 
 def render_login_hero() -> None:
-    """Render the approved left-side login artwork at full panel height."""
-    panel_path = _asset_path("login_left_panel.png")
+    """Render the approved login artwork without browser cropping or zooming."""
+    panel_uri = _asset_data_uri("login_left_panel.png")
     with st.container(key="edl_login_hero_panel"):
-        if panel_path.exists():
-            st.image(str(panel_path), use_container_width=True)
+        if panel_uri:
+            _render_html(
+                '<div class="iars-login-artwork-shell">'
+                f'<img class="iars-login-artwork-image" src="{html.escape(panel_uri, quote=True)}" '
+                'alt="Internal Audit Report System">'
+                '</div>'
+            )
         else:
-            logo_path = _asset_path("edl_logo.png")
-            if logo_path.exists():
-                st.image(str(logo_path), width=180)
+            logo_uri = _asset_data_uri("edl_logo.png")
+            if logo_uri:
+                _render_html(
+                    f'<img class="edl-sidebar-brand-logo" src="{html.escape(logo_uri, quote=True)}" '
+                    'alt="EDL Group of Companies">'
+                )
             _render_html(
                 '<div class="edl-native-login-copy">'
                 '<h1>INTERNAL AUDIT<br>REPORT SYSTEM</h1>'
                 '<p>A secure and centralized workspace for managing internal audit reports, archives, templates, and compliance documents.</p>'
                 '</div>'
             )
+
 
 def render_dashboard_hero() -> None:
     """Render the dashboard hero with a guaranteed visible audit image."""
