@@ -226,7 +226,7 @@ def _apply_v4477_layout_refinements() -> None:
             display: block !important;
             margin: 0 auto !important;
             /* The supplied EDL PNG has asymmetric transparent padding. */
-            transform: translateX(28px) !important;
+            transform: none !important;
         }
         section[data-testid="stSidebar"] .edl-sidebar-brand {
             margin-top: -.30rem !important;
@@ -262,8 +262,8 @@ def _apply_v4477_layout_refinements() -> None:
             margin-bottom: .42rem !important;
         }
         .stApp:has(.iars-dashboard-v4477-marker) .iars-dashboard-welcome {
-            margin-top: -.05rem !important;
-            margin-bottom: .38rem !important;
+            margin-top: -1.55rem !important;
+            margin-bottom: .30rem !important;
             align-items: flex-end !important;
         }
         .stApp:has(.iars-dashboard-v4477-marker) .iars-dashboard-welcome h2 {
@@ -4692,7 +4692,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.05",
+    version="4.5.07",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -5684,7 +5684,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.05", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.07", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
