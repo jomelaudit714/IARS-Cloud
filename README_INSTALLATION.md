@@ -1,12 +1,25 @@
-# IARS V4.5.10 Approved Login Panel Final
+# IARS V4.5.11 — Warehouse Excel Conversion Module
 
-Replace these project files:
+This package is based directly on `IARS_V4_5_10_APPROVED_LOGIN_PANEL_FINAL` and retains its approved login/sidebar artwork and authentication/theme files.
+
+## New sidebar structure
+
+- Excel Conversion
+  - Warehouse
+  - Sales Personnel
+    - LOGP — disabled placeholder for the next project
+    - Invoice — disabled placeholder for the next project
+
+## Files to apply
+
+Replace/add these files in the current IARS repository:
 
 - `app.py`
-- `iars_auth.py`
-- `iars_theme.py`
-- the included files inside `assets/`
+- `iars_excel_conversion.py`
+- `assets/warehouse_conversion_template.xlsx`
 
-After pushing to the repository, wait for Streamlit Cloud to finish redeploying and use `Ctrl + F5`.
+The ZIP also includes the unchanged V4.5.10 approved files for safe full-package replacement.
 
-The approved recomposed login artwork is included as `assets/login_left_panel.png`.
+After pushing to the deployment branch, wait for Streamlit Cloud to complete the rebuild and use `Ctrl + F5`.
+
+Expected visible version: `4.5.11`.
