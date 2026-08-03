@@ -4,6 +4,7 @@ from copy import copy
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO
+import base64
 from pathlib import Path
 import hashlib
 import re
@@ -31,6 +32,85 @@ WAREHOUSE_OUTPUT_HEADERS = [
 
 WAREHOUSE_TEMPLATE_PATH = (
     Path(__file__).resolve().parent / "assets" / "warehouse_conversion_template.xlsx"
+)
+# Embedded approved template fallback. This keeps the module operational even when
+# deployment tools copy Python files but omit the assets folder.
+WAREHOUSE_TEMPLATE_XLSX_BASE64 = (
+    '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'
 )
 PHILIPPINE_ZONE = ZoneInfo("Asia/Manila")
 
@@ -269,12 +349,13 @@ def _safe_output_filename(metadata: WarehouseFilenameMetadata, auditor_name: str
 
 def _load_template(template_path: Path | None = None):
     path = Path(template_path or WAREHOUSE_TEMPLATE_PATH)
-    if not path.exists():
-        raise WarehouseConversionError(
-            f"Warehouse conversion template is missing: {path.name}"
-        )
     try:
-        workbook = load_workbook(path)
+        if path.exists():
+            workbook = load_workbook(path)
+        else:
+            # Self-contained fallback: use the embedded approved workbook.
+            template_bytes = base64.b64decode(WAREHOUSE_TEMPLATE_XLSX_BASE64)
+            workbook = load_workbook(BytesIO(template_bytes))
     except Exception as exc:
         raise WarehouseConversionError(
             "The Warehouse conversion template could not be opened."
@@ -448,7 +529,7 @@ def render_warehouse_conversion_page(user: dict[str, Any]) -> None:
         uploaded_file = st.file_uploader(
             "SAP Warehouse Excel",
             type=["xlsx"],
-            key="warehouse_sap_excel_uploader_v4_5_11",
+            key="warehouse_sap_excel_uploader_v4_5_12",
             help="The original SAP file remains unchanged.",
         )
 
