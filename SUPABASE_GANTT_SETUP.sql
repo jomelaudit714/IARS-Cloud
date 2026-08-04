@@ -1,4 +1,4 @@
--- IARS V4.5.16 — Yearly Audit Gantt tables
+-- IARS V4.5.17 — Yearly Audit Gantt tables
 -- Run this script once in the same Supabase project used by IARS.
 
 create extension if not exists pgcrypto;
@@ -9,7 +9,6 @@ create table if not exists public.iars_gantt_master (
     custodian text not null,
     audit_task text not null,
     accountability text not null default '',
-    frequency integer not null default 1 check (frequency >= 1 and frequency <= 366),
     active boolean not null default true,
     created_by text not null default '',
     updated_by text not null default '',
@@ -49,10 +48,14 @@ create index if not exists iars_gantt_schedule_auditor_idx
 create index if not exists iars_gantt_schedule_status_idx
     on public.iars_gantt_schedule (status);
 
--- IARS uses the configured service-role key inside Streamlit Secrets. The
--- application enforces Admin versus Auditor visibility before rendering data.
+-- Existing V4.5.16 databases may still contain the old frequency column in
+-- iars_gantt_master. It can remain safely. V4.5.17 ignores it and calculates
+-- frequency from the number of Done audit schedules for each custodian/year.
+
 alter table public.iars_gantt_master enable row level security;
 alter table public.iars_gantt_schedule enable row level security;
 
--- No anon/authenticated policies are created intentionally. The Streamlit
--- service-role connection remains the only database access path.
+-- IARS connects through the service-role key configured in Streamlit Secrets.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.iars_gantt_master to service_role;
+grant select, insert, update, delete on table public.iars_gantt_schedule to service_role;

@@ -162,11 +162,6 @@ def _master_payload(row: dict[str, Any], actor: str) -> dict[str, Any]:
     custodian = _clean_text(row.get("custodian") or row.get("Custodian"))
     task = _clean_text(row.get("audit_task") or row.get("Audit Task"))
     accountability = _clean_text(row.get("accountability") or row.get("Accountability"))
-    frequency_raw = row.get("frequency", row.get("Frequency", 1))
-    try:
-        frequency = int(float(frequency_raw))
-    except (TypeError, ValueError):
-        frequency = 1
     active_raw = row.get("active", row.get("Active", True))
     if isinstance(active_raw, str):
         active = active_raw.strip().casefold() not in {"no", "n", "false", "0", "inactive"}
@@ -174,14 +169,11 @@ def _master_payload(row: dict[str, Any], actor: str) -> dict[str, Any]:
         active = bool(active_raw)
     if not company or not custodian or not task:
         raise GanttError("Company / Department, Custodian, and Audit Task are required.")
-    if frequency < 1:
-        raise GanttError("Frequency must be at least 1.")
     return {
         "company_department": company,
         "custodian": custodian,
         "audit_task": task,
         "accountability": accountability,
-        "frequency": frequency,
         "active": active,
         "updated_by": actor,
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -314,7 +306,6 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
         "custodian": ["custodian", "name of custodian"],
         "audit_task": ["audit task", "type of fund", "task"],
         "accountability": ["accountability", "accountable amount"],
-        "frequency": ["frequency", "audit frequency"],
         "active": ["active", "status"],
     }
     selected: dict[str, str] = {}
@@ -323,7 +314,7 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
             if option in normalized:
                 selected[target] = normalized[option]
                 break
-    required = ["company_department", "custodian", "audit_task", "accountability", "frequency"]
+    required = ["company_department", "custodian", "audit_task", "accountability"]
     missing = [name for name in required if name not in selected]
     if missing:
         friendly = {
@@ -331,7 +322,6 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
             "custodian": "Custodian",
             "audit_task": "Audit Task",
             "accountability": "Accountability",
-            "frequency": "Frequency",
         }
         raise GanttError("Missing required column(s): " + ", ".join(friendly[name] for name in missing))
 
@@ -344,12 +334,8 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
     output["custodian"] = output["custodian"].map(_clean_text)
     output["audit_task"] = output["audit_task"].map(_clean_text)
     output["accountability"] = output["accountability"].map(_clean_text)
-    output["frequency"] = pd.to_numeric(output["frequency"], errors="coerce")
     if output[["company_department", "custodian", "audit_task"]].eq("").any(axis=None):
         raise GanttError("Every row must contain Company / Department, Custodian, and Audit Task.")
-    if output["frequency"].isna().any() or (output["frequency"] < 1).any():
-        raise GanttError("Frequency must be a whole number of at least 1 for every row.")
-    output["frequency"] = output["frequency"].astype(int)
     output["active"] = output["active"].map(
         lambda value: _clean_text(value).casefold() not in {"no", "n", "false", "0", "inactive"}
         if isinstance(value, str)
@@ -374,6 +360,26 @@ def _format_accountability(value: Any) -> str:
         return f"₱{number:,.2f}"
     except ValueError:
         return text
+
+
+def done_frequency_by_custodian(
+    masters: list[dict[str, Any]],
+    entries: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Count Done audit schedules per custodian for the loaded schedule year."""
+    master_custodians = {
+        str(master.get("id") or ""): _name_key(master.get("custodian"))
+        for master in masters
+        if master.get("id") and _name_key(master.get("custodian"))
+    }
+    counts: dict[str, int] = {}
+    for entry in entries:
+        if effective_status(entry) != "Done":
+            continue
+        custodian_key = master_custodians.get(str(entry.get("master_id") or ""))
+        if custodian_key:
+            counts[custodian_key] = counts.get(custodian_key, 0) + 1
+    return counts
 
 
 def _entry_lookup(entries: list[dict[str, Any]]) -> dict[tuple[str, int], dict[str, Any]]:
@@ -458,6 +464,7 @@ def _render_matrix(
     sort_desc: bool,
 ) -> list[dict[str, Any]]:
     lookup = _entry_lookup(entries)
+    done_counts = done_frequency_by_custodian(masters, entries)
     current_key = _name_key(current_user_name)
     filtered: list[dict[str, Any]] = []
     for master in masters:
@@ -522,7 +529,7 @@ def _render_matrix(
             f'<td class="custodian">{html.escape(_clean_text(master.get("custodian")))}</td>',
             f'<td class="task">{html.escape(_clean_text(master.get("audit_task")))}</td>',
             f'<td class="accountability">{html.escape(_format_accountability(master.get("accountability")))}</td>',
-            f'<td class="frequency">{html.escape(str(master.get("frequency") or 1))}×</td>',
+            f'<td class="frequency">{done_counts.get(_name_key(master.get("custodian")), 0)}×</td>',
         ]
         for month in MONTHS:
             entry = lookup.get((master_id, month))
@@ -603,7 +610,7 @@ def render_yearly_gantt_page(
     current_name = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Yearly Audit Gantt Schedule</h2>'
-        '<p>One custodian per row with January through December displayed in separate monthly columns.</p></div>',
+        '<p>One custodian per row with January through December displayed in separate monthly columns. Frequency is the automatic count of Done audits for the custodian in the selected year.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
@@ -816,7 +823,7 @@ def render_gantt_master_data_page(
     actor = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Gantt Master Data</h2>'
-        '<p>Admin-only maintenance for Company / Department, Custodian, Audit Task, Accountability, and Frequency.</p></div>',
+        '<p>Admin-only maintenance for Company / Department, Custodian, Audit Task, and Accountability. Frequency is calculated automatically from Done audits.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
@@ -844,13 +851,13 @@ def render_gantt_master_data_page(
         try:
             parsed = parse_master_upload(uploaded.getvalue())
             st.success(f"Validation passed: {len(parsed):,} master-data row(s) detected.")
-            preview = parsed.rename(columns={
+            preview = parsed[[
+                "company_department", "custodian", "audit_task", "accountability"
+            ]].rename(columns={
                 "company_department": "Company / Department",
                 "custodian": "Custodian",
                 "audit_task": "Audit Task",
                 "accountability": "Accountability",
-                "frequency": "Frequency",
-                "active": "Active",
             })
             st.dataframe(preview, use_container_width=True, hide_index=True)
             if st.button("Import / Update Master Data", type="primary", use_container_width=True):
@@ -892,11 +899,11 @@ def render_gantt_master_data_page(
         col1, col2 = st.columns(2)
         company = col1.text_input("Company / Department", value=_clean_text(selected.get("company_department")))
         custodian = col2.text_input("Custodian", value=_clean_text(selected.get("custodian")))
-        col3, col4, col5 = st.columns([2, 1, 1])
+        col3, col4 = st.columns([2, 1])
         task = col3.text_input("Audit Task", value=_clean_text(selected.get("audit_task")))
         accountability = col4.text_input("Accountability", value=_clean_text(selected.get("accountability")))
-        frequency = col5.number_input("Frequency", min_value=1, max_value=366, value=int(selected.get("frequency") or 1))
         active = st.checkbox("Active record", value=bool(selected.get("active", True)))
+        st.caption("Frequency is read-only and is calculated from the number of Done audits for the custodian in the selected year.")
         save_record = st.form_submit_button("Save Master Record", type="primary", use_container_width=True)
     if save_record:
         data = {
@@ -904,7 +911,6 @@ def render_gantt_master_data_page(
             "custodian": custodian,
             "audit_task": task,
             "accountability": accountability,
-            "frequency": frequency,
             "active": active,
         }
         try:
@@ -935,7 +941,6 @@ def render_gantt_master_data_page(
                 "Custodian": _clean_text(row.get("custodian")),
                 "Audit Task": _clean_text(row.get("audit_task")),
                 "Accountability": _format_accountability(row.get("accountability")),
-                "Frequency": int(row.get("frequency") or 1),
                 "Status": "Active" if bool(row.get("active", True)) else "Inactive",
             }
             for row in masters

@@ -1,38 +1,23 @@
 # Yearly Audit Gantt Module
 
-## Admin access
+## Master Data upload
+Use the Excel template in `assets/gantt_master_data_template.xlsx` and retain these exact headers:
 
-Admin can:
+1. Company / Department
+2. Custodian
+3. Audit Task
+4. Accountability
 
-- Upload Gantt Master Data from Excel.
-- Add or edit Company / Department, Custodian, Audit Task, Accountability and Frequency.
-- Activate or deactivate master records.
-- View the complete yearly Gantt schedule.
-- Assign auditors using full names while displaying nicknames in the Gantt cells.
-- Create, edit or delete monthly assignments.
-- Filter and sort by Auditor, Status, Month and Custodian.
+Do not add Frequency to the upload. Frequency is calculated automatically from Done schedules for the custodian in the selected schedule year.
 
-## Auditor access
+## Frequency rule
+- Done with Date Accomplished: counted
+- Planned: not counted
+- In Progress: not counted
+- Overdue: not counted
+- Reverting Done to another status reduces the count
 
-Auditors can:
-
-- See only schedules assigned to the full name linked to their IARS account.
-- View their own January-to-December schedule.
-- Update Status, Date Accomplished and Accomplishment Remarks.
-- Receive a red dashboard notification when an assigned planned date is overdue.
-
-Auditors cannot:
-
-- View another auditor's assignments.
-- Reassign auditors.
-- Change planned audit dates.
-- Access Gantt Master Data.
-
-## Overdue rule
-
-A schedule displays as **Overdue** when:
-
-- Status is not Done; and
-- Planned Audit Date is earlier than the current Philippine date.
-
-Overdue cells use a solid red background.
+## Access
+- Admin sees and edits the complete annual schedule and Gantt Master Data.
+- Auditors see only schedules assigned to their account.
+- Auditor dashboards show overdue notifications.
