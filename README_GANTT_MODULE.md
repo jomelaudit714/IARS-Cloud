@@ -1,31 +1,30 @@
-# Yearly Audit Gantt Module
+# IARS Yearly Audit Gantt — V4.5.20
 
-## Master Data upload
-Use the Excel template in `assets/gantt_master_data_template.xlsx` and retain these exact headers:
+## Roles
 
-1. Company / Department
-2. Custodian
-3. Audit Task
-4. Accountability
+### Admin/Supervisor
+- Views all schedules.
+- Clicks a month box to assign an auditor.
+- Planned due date is automatically the last day of the month.
+- Receives For FRS and FRS Overdue notifications.
+- Clicks the month box to record **FRS — Final Report Submitted**.
+- Maintains custodian master data and the holiday calendar.
 
-Do not add Frequency to the upload. Frequency is calculated automatically from Done schedules for the custodian in the selected schedule year.
+### Auditor
+- Sees only assigned schedules.
+- Clicks a month box to mark the audit Done and records Date of Audit.
+- Receives For IRS and IRS Overdue notifications.
+- Clicks the same month box to record **IRS — Initial Report Submitted**.
 
-## Frequency rule
-- Done with Date Accomplished: counted
-- Planned: not counted
-- In Progress: not counted
-- Overdue: not counted
-- Reverting Done to another status reduces the count
+## Deadline rules
+- IRS: 5 working days after Date of Audit.
+- FRS: 5 working days after IRS submission.
+- The starting date is not counted.
+- Overdue begins the day after the fifth valid working day.
+- Weekends and active non-working holidays are excluded.
+- Special Working holidays are not excluded.
 
-## Access
-- Admin sees and edits the complete annual schedule and Gantt Master Data.
-- Auditors see only schedules assigned to their account.
-- Auditor dashboards show overdue notifications.
-
-
-## Duplicate-rule behavior (V4.5.18)
-
-- The same custodian may appear more than once.
-- Rows are separate when Audit Task or Accountability differs.
-- Only an exact match of Company / Department, Custodian, Audit Task, and Accountability is treated as a duplicate.
-- Automatic Frequency is counted separately for each exact master-data record.
+## Required Supabase objects
+- `iars_gantt_master`
+- `iars_gantt_schedule`
+- `iars_gantt_holiday`
