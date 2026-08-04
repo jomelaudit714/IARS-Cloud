@@ -1,4 +1,4 @@
--- IARS V4.5.17 — Gantt permission repair
+-- IARS V4.5.18 — Gantt permission repair
 -- Safe for existing Gantt tables. This does not delete or recreate any data.
 
 begin;

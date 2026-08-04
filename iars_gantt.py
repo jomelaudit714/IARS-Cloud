@@ -192,7 +192,7 @@ def upsert_master_records(client: Any, rows: Iterable[dict[str, Any]], actor: st
         client.table(GANTT_MASTER_TABLE)
         .upsert(
             payloads,
-            on_conflict="company_department,custodian,audit_task",
+            on_conflict="company_department,custodian,audit_task,accountability",
         )
         .execute()
     )
@@ -342,10 +342,14 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
         else bool(value)
     )
     duplicates = output.duplicated(
-        subset=["company_department", "custodian", "audit_task"], keep=False
+        subset=["company_department", "custodian", "audit_task", "accountability"],
+        keep=False,
     )
     if duplicates.any():
-        raise GanttError("Duplicate Company / Department + Custodian + Audit Task rows were found in the upload.")
+        raise GanttError(
+            "Exact duplicate master-data rows were found. Company / Department, "
+            "Custodian, Audit Task, and Accountability must not all be identical."
+        )
     return output.reset_index(drop=True)
 
 
@@ -362,23 +366,28 @@ def _format_accountability(value: Any) -> str:
         return text
 
 
-def done_frequency_by_custodian(
+def done_frequency_by_master(
     masters: list[dict[str, Any]],
     entries: list[dict[str, Any]],
 ) -> dict[str, int]:
-    """Count Done audit schedules per custodian for the loaded schedule year."""
-    master_custodians = {
-        str(master.get("id") or ""): _name_key(master.get("custodian"))
+    """Count Done schedules separately for each exact master-data record.
+
+    A master record is the unique combination of Company / Department,
+    Custodian, Audit Task, and Accountability.  This prevents two funds or
+    accountability amounts under the same custodian from sharing one frequency.
+    """
+    valid_master_ids = {
+        str(master.get("id") or "")
         for master in masters
-        if master.get("id") and _name_key(master.get("custodian"))
+        if master.get("id")
     }
     counts: dict[str, int] = {}
     for entry in entries:
         if effective_status(entry) != "Done":
             continue
-        custodian_key = master_custodians.get(str(entry.get("master_id") or ""))
-        if custodian_key:
-            counts[custodian_key] = counts.get(custodian_key, 0) + 1
+        master_id = str(entry.get("master_id") or "")
+        if master_id in valid_master_ids:
+            counts[master_id] = counts.get(master_id, 0) + 1
     return counts
 
 
@@ -464,7 +473,7 @@ def _render_matrix(
     sort_desc: bool,
 ) -> list[dict[str, Any]]:
     lookup = _entry_lookup(entries)
-    done_counts = done_frequency_by_custodian(masters, entries)
+    done_counts = done_frequency_by_master(masters, entries)
     current_key = _name_key(current_user_name)
     filtered: list[dict[str, Any]] = []
     for master in masters:
@@ -529,7 +538,7 @@ def _render_matrix(
             f'<td class="custodian">{html.escape(_clean_text(master.get("custodian")))}</td>',
             f'<td class="task">{html.escape(_clean_text(master.get("audit_task")))}</td>',
             f'<td class="accountability">{html.escape(_format_accountability(master.get("accountability")))}</td>',
-            f'<td class="frequency">{done_counts.get(_name_key(master.get("custodian")), 0)}×</td>',
+            f'<td class="frequency">{done_counts.get(master_id, 0)}×</td>',
         ]
         for month in MONTHS:
             entry = lookup.get((master_id, month))
@@ -610,7 +619,7 @@ def render_yearly_gantt_page(
     current_name = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Yearly Audit Gantt Schedule</h2>'
-        '<p>One custodian per row with January through December displayed in separate monthly columns. Frequency is the automatic count of Done audits for the custodian in the selected year.</p></div>',
+        '<p>One custodian per row with January through December displayed in separate monthly columns. Frequency is the automatic count of Done audits for that exact Company / Department, Custodian, Audit Task, and Accountability record in the selected year.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
@@ -700,7 +709,12 @@ def render_yearly_gantt_page(
         selected_master_id = st.selectbox(
             "Company / Custodian / Audit Task",
             master_ids,
-            format_func=lambda item: f"{_clean_text(master_map[item].get('company_department'))} — {_clean_text(master_map[item].get('custodian'))} — {_clean_text(master_map[item].get('audit_task'))}",
+            format_func=lambda item: (
+                f"{_clean_text(master_map[item].get('company_department'))} — "
+                f"{_clean_text(master_map[item].get('custodian'))} — "
+                f"{_clean_text(master_map[item].get('audit_task'))} — "
+                f"{_format_accountability(master_map[item].get('accountability'))}"
+            ),
             key="iars_gantt_edit_master",
         )
         selected_month = st.selectbox(
@@ -779,7 +793,8 @@ def render_yearly_gantt_page(
             format_func=lambda item: (
                 f"{month_name[int(entry_map[item].get('schedule_month') or 1)]} — "
                 f"{_clean_text(master_map.get(str(entry_map[item].get('master_id')), {}).get('custodian'))} — "
-                f"{_clean_text(master_map.get(str(entry_map[item].get('master_id')), {}).get('audit_task'))}"
+                f"{_clean_text(master_map.get(str(entry_map[item].get('master_id')), {}).get('audit_task'))} — "
+                f"{_format_accountability(master_map.get(str(entry_map[item].get('master_id')), {}).get('accountability'))}"
             ),
             key="iars_gantt_auditor_entry",
         )
@@ -823,7 +838,7 @@ def render_gantt_master_data_page(
     actor = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Gantt Master Data</h2>'
-        '<p>Admin-only maintenance for Company / Department, Custodian, Audit Task, and Accountability. Frequency is calculated automatically from Done audits.</p></div>',
+        '<p>Admin-only maintenance for Company / Department, Custodian, Audit Task, and Accountability. Frequency is calculated automatically per exact Company / Department, Custodian, Audit Task, and Accountability record.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
@@ -890,7 +905,8 @@ def render_gantt_master_data_page(
         format_func=lambda item: "Add a new record" if not item else (
             f"{_clean_text(record_map[item].get('company_department'))} — "
             f"{_clean_text(record_map[item].get('custodian'))} — "
-            f"{_clean_text(record_map[item].get('audit_task'))}"
+            f"{_clean_text(record_map[item].get('audit_task'))} — "
+            f"{_format_accountability(record_map[item].get('accountability'))}"
         ),
         key="iars_gantt_master_record_select",
     )
@@ -903,7 +919,7 @@ def render_gantt_master_data_page(
         task = col3.text_input("Audit Task", value=_clean_text(selected.get("audit_task")))
         accountability = col4.text_input("Accountability", value=_clean_text(selected.get("accountability")))
         active = st.checkbox("Active record", value=bool(selected.get("active", True)))
-        st.caption("Frequency is read-only and is calculated from the number of Done audits for the custodian in the selected year.")
+        st.caption("Frequency is read-only and is calculated from Done audits for this exact Company / Department, Custodian, Audit Task, and Accountability record in the selected year.")
         save_record = st.form_submit_button("Save Master Record", type="primary", use_container_width=True)
     if save_record:
         data = {

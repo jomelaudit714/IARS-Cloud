@@ -21,3 +21,11 @@ Do not add Frequency to the upload. Frequency is calculated automatically from D
 - Admin sees and edits the complete annual schedule and Gantt Master Data.
 - Auditors see only schedules assigned to their account.
 - Auditor dashboards show overdue notifications.
+
+
+## Duplicate-rule behavior (V4.5.18)
+
+- The same custodian may appear more than once.
+- Rows are separate when Audit Task or Accountability differs.
+- Only an exact match of Company / Department, Custodian, Audit Task, and Accountability is treated as a duplicate.
+- Automatic Frequency is counted separately for each exact master-data record.

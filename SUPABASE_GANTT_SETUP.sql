@@ -1,4 +1,4 @@
--- IARS V4.5.17 — Yearly Audit Gantt tables
+-- IARS V4.5.18 — Yearly Audit Gantt tables
 -- Run this script once in the same Supabase project used by IARS.
 
 create extension if not exists pgcrypto;
@@ -14,8 +14,27 @@ create table if not exists public.iars_gantt_master (
     updated_by text not null default '',
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    constraint iars_gantt_master_unique_record unique (company_department, custodian, audit_task)
+    constraint iars_gantt_master_unique_record unique (company_department, custodian, audit_task, accountability)
 );
+
+-- V4.5.18 duplicate rule migration for existing installations.
+-- A custodian may have multiple rows when Audit Task or Accountability differs.
+alter table public.iars_gantt_master
+    drop constraint if exists iars_gantt_master_unique_record;
+
+do $$
+begin
+    if not exists (
+        select 1
+        from pg_constraint
+        where conname = 'iars_gantt_master_unique_record'
+          and conrelid = 'public.iars_gantt_master'::regclass
+    ) then
+        alter table public.iars_gantt_master
+            add constraint iars_gantt_master_unique_record
+            unique (company_department, custodian, audit_task, accountability);
+    end if;
+end $$;
 
 create table if not exists public.iars_gantt_schedule (
     id uuid primary key default gen_random_uuid(),
@@ -48,9 +67,9 @@ create index if not exists iars_gantt_schedule_auditor_idx
 create index if not exists iars_gantt_schedule_status_idx
     on public.iars_gantt_schedule (status);
 
--- Existing V4.5.16 databases may still contain the old frequency column in
--- iars_gantt_master. It can remain safely. V4.5.17 ignores it and calculates
--- frequency from the number of Done audit schedules for each custodian/year.
+-- Existing V4.5.16 and V4.5.17 databases may still contain the old frequency column in
+-- iars_gantt_master. It can remain safely. V4.5.18 ignores it and calculates
+-- frequency from Done schedules for each exact master-data record/year.
 
 alter table public.iars_gantt_master enable row level security;
 alter table public.iars_gantt_schedule enable row level security;
