@@ -1839,6 +1839,45 @@ def _normalize_invoice_number(value: Any) -> Any:
     return text
 
 
+def _divide_invoice_quantity_by_ten(value: Any, source_row: int) -> Any:
+    """Convert a blister quantity to boxes while retaining its sign."""
+    if isinstance(value, bool) or value in (None, ""):
+        raise InvoiceConversionError(
+            f"Invoice quantity in column F is blank or invalid at source row {source_row}; "
+            "a blister UOM requires a numeric quantity."
+        )
+
+    if isinstance(value, (int, float)):
+        numeric_value = float(value)
+    else:
+        text = "".join(str(value).split()).replace(",", "")
+        try:
+            numeric_value = float(text)
+        except (TypeError, ValueError) as exc:
+            raise InvoiceConversionError(
+                f"Invoice quantity in column F is not numeric at source row {source_row}; "
+                "a blister UOM requires a numeric quantity."
+            ) from exc
+
+    converted = numeric_value / 10
+    if converted.is_integer():
+        return int(converted)
+    return converted
+
+
+def _normalize_invoice_uom_and_quantity(
+    uom_value: Any, quantity_value: Any, source_row: int
+) -> tuple[Any, Any]:
+    """Convert blister/blisters to box and divide quantity by 10."""
+    if uom_value in (None, ""):
+        return None, quantity_value
+
+    normalized_uom = " ".join(str(uom_value).split()).strip()
+    if normalized_uom.casefold() in {"blister", "blisters"}:
+        return "box", _divide_invoice_quantity_by_ten(quantity_value, source_row)
+    return uom_value, quantity_value
+
+
 def extract_invoice_records(
     excel_bytes: bytes,
 ) -> tuple[str, tuple[InvoiceSourceRecord, ...]]:
@@ -1876,6 +1915,11 @@ def extract_invoice_records(
             raise InvoiceConversionError(
                 f"Invoice number in column J is blank at source row {row_index}."
             )
+        prod_uom, inv_qty = _normalize_invoice_uom_and_quantity(
+            worksheet.cell(row_index, 7).value,
+            worksheet.cell(row_index, 6).value,
+            row_index,
+        )
         records.append(
             InvoiceSourceRecord(
                 source_row=row_index,
@@ -1884,12 +1928,8 @@ def extract_invoice_records(
                 ),
                 inv_no=inv_no,
                 product_name=_remove_apostrophes(product_raw),
-                prod_uom=(
-                    None
-                    if worksheet.cell(row_index, 7).value in (None, "")
-                    else worksheet.cell(row_index, 7).value
-                ),
-                inv_qty=worksheet.cell(row_index, 6).value,
+                prod_uom=prod_uom,
+                inv_qty=inv_qty,
             )
         )
 
@@ -2132,7 +2172,7 @@ def render_invoice_conversion_page(
           <div class="iars-invoice-route">
             <div><strong>1. SAP Invoice Excel</strong><span>Upload the original Invoice file with remarks in its filename.</span></div>
             <b>→</b>
-            <div><strong>2. IARS Mapping</strong><span>Capture INV rows, resolve the employee and retain each Invoice date.</span></div>
+            <div><strong>2. IARS Mapping</strong><span>Capture INV rows, retain each Invoice date and convert blister quantities to boxes.</span></div>
             <b>→</b>
             <div><strong>3. Compatible Output</strong><span>Download the approved 18-column Invoice template.</span></div>
           </div>
@@ -2150,7 +2190,7 @@ def render_invoice_conversion_page(
         uploaded_file = st.file_uploader(
             "SAP Sales Personnel Invoice Excel",
             type=["xlsx"],
-            key="sales_invoice_excel_uploader_v4_5_14",
+            key="sales_invoice_excel_uploader_v4_5_15",
             help=(
                 "Only rows marked INV in column A are converted. The source file remains unchanged."
             ),
@@ -2159,7 +2199,7 @@ def render_invoice_conversion_page(
     if uploaded_file is None:
         st.info(
             "Upload an Invoice .xlsx file. IARS will capture each INV row's date from column C, "
-            "product from E, quantity from F, UOM from G and invoice number from J."
+            "product from E, quantity from F, UOM from G and invoice number from J. Blister UOM is converted to box and quantity is divided by 10."
         )
         return
 
@@ -2199,7 +2239,7 @@ def render_invoice_conversion_page(
     st.success(
         f"Conversion completed for {result.row_count:,} INV rows. "
         "Each row retained its own Invoice date from column C, negative quantities were retained, "
-        "product apostrophes were removed, and the output passed the workbook integrity check."
+        "product apostrophes were removed, blister UOM quantities were converted to boxes, and the output passed the workbook integrity check."
     )
 
     with st.expander("Conversion Details", expanded=True):
@@ -2238,5 +2278,6 @@ def render_invoice_conversion_page(
     st.caption(
         "Output format: approved 18 columns · dates in yyyy-mm-dd · each docu_date comes from "
         "its own INV source row in column C · quantity/UOM come from columns F/G · "
+        "blister or blisters is converted to box and quantity is divided by 10 · "
         "trans_id, sold_no, pd_no, prod_code, disc_qty, record_qty and count_qty remain blank."
     )
