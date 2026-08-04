@@ -1369,3 +1369,874 @@ def render_logp_conversion_page(
         "transaction, sales, invoice, product-code, invoice-quantity, "
         "discount-quantity and count fields remain blank."
     )
+
+
+# ---------------------------------------------------------------------------
+# Sales Personnel - Invoice Excel Conversion
+# ---------------------------------------------------------------------------
+
+INVOICE_OUTPUT_HEADERS = [
+    "trans_id",
+    "login_date",
+    "logp_no",
+    "employee_name",
+    "docu_date",
+    "docu_name",
+    "sold_no",
+    "inv_no",
+    "pd_no",
+    "prod_code",
+    "prod_name",
+    "prod_uom",
+    "inv_qty",
+    "disc_qty",
+    "record_qty",
+    "count_qty",
+    "remarks",
+    "auditor_name",
+]
+
+INVOICE_TEMPLATE_PATH = (
+    Path(__file__).resolve().parent / "assets" / "invoice_conversion_template.xlsx"
+)
+# Embedded approved output-template fallback. This prevents deployment failures
+# when a partial file replacement omits the assets directory.
+INVOICE_TEMPLATE_XLSX_BASE64 = (
+    'UEsDBBQABgAIAAAAIQBi7p1oXgEAAJAEAAATAAgCW0NvbnRlbnRfVHlwZXNdLnhtbCCiBAIooAACAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACslMtOwzAQRfdI/EPkLUrcskAINe2CxxIqUT7AxJPG'
+    'qmNbnmlp/56J+xBCoRVqN7ESz9x7MvHNaLJubbaCiMa7UgyLgcjAVV4bNy/Fx+wlvxcZknJaWe+gFBtAMRlfX41mmwCYcbfDUjRE'
+    '4UFKrBpoFRY+gOOd2sdWEd/GuQyqWqg5yNvB4E5W3hE4yqnTEOPRE9RqaSl7XvPjLUkEiyJ73BZ2XqVQIVhTKWJSuXL6l0u+cyi4'
+    'M9VgYwLeMIaQvQ7dzt8Gu743Hk00GrKpivSqWsaQayu/fFx8er8ojov0UPq6NhVoXy1bnkCBIYLS2ABQa4u0Fq0ybs99xD8Vo0zL'
+    '8MIg3fsl4RMcxN8bZLqej5BkThgibSzgpceeRE85NyqCfqfIybg4wE/tYxx8bqbRB+QERfj/FPYR6brzwEIQycAhJH2H7eDI6Tt7'
+    '7NDlW4Pu8ZbpfzL+BgAA//8DAFBLAwQUAAYACAAAACEAtVUwI/QAAABMAgAACwAIAl9yZWxzLy5yZWxzIKIEAiigAAIAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKySTU/DMAyG70j8h8j31d2QEEJL'
+    'd0FIuyFUfoBJ3A+1jaMkG92/JxwQVBqDA0d/vX78ytvdPI3qyCH24jSsixIUOyO2d62Gl/pxdQcqJnKWRnGs4cQRdtX11faZR0p5'
+    'KHa9jyqruKihS8nfI0bT8USxEM8uVxoJE6UchhY9mYFaxk1Z3mL4rgHVQlPtrYawtzeg6pPPm3/XlqbpDT+IOUzs0pkVyHNiZ9mu'
+    'fMhsIfX5GlVTaDlpsGKecjoieV9kbMDzRJu/E/18LU6cyFIiNBL4Ms9HxyWg9X9atDTxy515xDcJw6vI8MmCix+o3gEAAP//AwBQ'
+    'SwMEFAAGAAgAAAAhAPHF0KLpAgAAeQYAAA8AAAB4bC93b3JrYm9vay54bWykVdtu4jAQfV9p/8Hye5oYQoCIUEGAXSS6i3p9QVqZ'
+    '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'
+    '3zIvFS+4b5k3L1285hNLrxs/nV+uGBX3M/Py7YgbyqT5e6B3Pwa9Kd02v4XeKDfNj0RdsN9Cbyj+0vx8ywQW1uYHeBX7M/Ty236s'
+    'Ke73DHr3Y8ib0q37Fnmj3LiPPF1w3yJvKP7iPl9zgIXVfUBXcT8jr2w9FnhxxcrWs4wBb0p37ocEs/VEed19Kq7uo5yfu3np4gsH'
+    'UIr7GGX3c91wt5yIC2Xc/Bit2T8GvEsLeEOCs98CLxUv2G+BNy9d3Plj6ZfPnf809ArRWezPY161H5BW7O8B3mUMeFO67X4LvFFu'
+    'ur8FvCiX7t/MeSl2AeWecPgKUbU/Ay+/bEaVuN8z513GeDelW/ct70a5cb8150W5uL+Z8/LrBlCq+8Cm0vzPc17eekAl7vfw7jLG'
+    'uynduu//HtfyLhUvbD12yhvkz89d9vcSS69bj/Q+sKm4/3y1md0Hlbjfw7vLGO+mdOu+5d0oN73f4l2US+8b3gUlXzu/QlQulodo'
+    'etsgL5pRJvb38O4yxrsp3dpveTfKjf0t3kW52L/5U13y4gJKtR/Ild/zB21+0ynnHku8sObmuyfguxeWMeJN6dZ/S7xRbvxHnC5s'
+    'PpZ4Q/GXzYe/9AIW5pdBV4jy5aynXHcnD1475cWatVPnGPAurSlvSHCnTgu8VLzgvgXevHTxcmcsvW79dP3qClF1PwOvXu5Enew+'
+    'Pci7jCFvSrfdb5E3yk33t5AX5bL7mL/mBaV2v53yBm3afehTu0HNWdyHmpXuP4whb0p37ocE0/1RXnefimv3o5zdz0sXmQuU4j5E'
+    'pftz3d3E16tQxvZjtGb/GPIeWsgbEpz9FnmpeMF+i7x56eIVk1i6vvlAVO3PyCvuW+LFmjX3x4j3gFCqXzQVEpz7lnipeMF9kEvz'
+    'mxFvLG3cBzrlGWP+lXbivp3wwoq1Y89hjHhTut16LPFGudl6WsSLcnF/JV5hLlDu+XIbROXUH6LlUz/KZOvpQd7DGPKmdGu/Rd4o'
+    'N/a3RrwoF/s3I16+WA7KPbXxFaP0SvkpRJP9/KIfVPLcxWht6xlD3gNSaWHr8d9GZZGXihe2HpCL+5t7zcxcsfS69fD1Bohq82fk'
+    '5evQN5RJ8/cg72EMeVO6bX6LvFFumr+FvCgX+zcjXrF/u/Be7LfIG1a9Iy+974GfRpsfataafwx4D60Rb0hwz10LvFS80PwWePPS'
+    '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'
+    'LnhtbFBLBQYAAAAACgAKAIACAADENQAAAAA='
+)
+
+
+class InvoiceConversionError(ValueError):
+    """Raised when an uploaded workbook does not match the approved Invoice format."""
+
+
+@dataclass(frozen=True)
+class InvoiceFilenameMetadata:
+    source_stem: str
+    employee_query: str
+    docu_name: str
+    remarks: str
+
+
+@dataclass(frozen=True)
+class InvoiceSourceRecord:
+    source_row: int
+    docu_date: date
+    inv_no: Any
+    product_name: str
+    prod_uom: Any
+    inv_qty: Any
+
+
+@dataclass(frozen=True)
+class InvoiceConversionResult:
+    output_bytes: bytes
+    output_filename: str
+    metadata: InvoiceFilenameMetadata
+    process_date: date
+    logp_no: str
+    employee_name: str
+    auditor_name: str
+    records: tuple[InvoiceSourceRecord, ...]
+    source_signature: str
+
+    @property
+    def row_count(self) -> int:
+        return len(self.records)
+
+    @property
+    def first_invoice_date(self) -> date:
+        return min(record.docu_date for record in self.records)
+
+    @property
+    def last_invoice_date(self) -> date:
+        return max(record.docu_date for record in self.records)
+
+    def preview_rows(self, limit: int = 200) -> list[dict[str, Any]]:
+        shown = self.records[: max(0, int(limit))]
+        return [
+            {
+                "trans_id": None,
+                "login_date": self.process_date.isoformat(),
+                "logp_no": self.logp_no,
+                "employee_name": self.employee_name,
+                "docu_date": record.docu_date.isoformat(),
+                "docu_name": self.metadata.docu_name,
+                "sold_no": None,
+                "inv_no": record.inv_no,
+                "pd_no": None,
+                "prod_code": None,
+                "prod_name": record.product_name,
+                "prod_uom": record.prod_uom,
+                "inv_qty": record.inv_qty,
+                "disc_qty": None,
+                "record_qty": None,
+                "count_qty": None,
+                "remarks": self.metadata.remarks,
+                "auditor_name": self.auditor_name,
+            }
+            for record in shown
+        ]
+
+
+def _clean_invoice_uploaded_stem(filename: str) -> str:
+    raw_name = Path(str(filename or "").strip()).name
+    if not raw_name:
+        raise InvoiceConversionError("The uploaded Invoice Excel filename is missing.")
+    stem = Path(raw_name).stem
+    stem = re.sub(r"\s*\(\d+\)\s*$", "", stem).strip()
+    stem = re.sub(r"\s+", " ", stem)
+    if not stem:
+        raise InvoiceConversionError("The uploaded Invoice Excel filename is invalid.")
+    return stem
+
+
+def parse_invoice_filename(filename: str) -> InvoiceFilenameMetadata:
+    stem = _clean_invoice_uploaded_stem(filename)
+    docu_name_match = re.match(r"\s*(Invoice)\b", stem, flags=re.I)
+    if not docu_name_match:
+        raise InvoiceConversionError(
+            "The filename must begin with Invoice, for example: "
+            "Invoice Davido Good.xlsx."
+        )
+
+    normalized_stem = re.sub(r"[_-]+", " ", stem).casefold()
+    normalized_stem = re.sub(r"\s+", " ", normalized_stem).strip()
+    if re.search(r"\bsold\s*out\b", normalized_stem):
+        remarks = "Sold Out"
+    elif re.search(r"\bsotex\b", normalized_stem):
+        remarks = "Sotex"
+    elif re.search(r"\bgood\b", normalized_stem):
+        remarks = "Good"
+    elif re.search(r"\bregular\b", normalized_stem):
+        remarks = "Good"
+    else:
+        raise InvoiceConversionError(
+            "The filename must contain Good, Regular, Sotex, or Sold Out for remarks."
+        )
+
+    employee_part = stem[docu_name_match.end():]
+    employee_part = re.sub(r"\bsold[\s_-]*out\b", " ", employee_part, flags=re.I)
+    employee_part = re.sub(r"\b(?:good|regular|sotex)\b", " ", employee_part, flags=re.I)
+    employee_part = re.sub(
+        r"(?<!\d)(?:0?[1-9]|1[0-2])[-_/](?:0?[1-9]|[12]\d|3[01])[-_/]\d{4}(?!\d)",
+        " ",
+        employee_part,
+    )
+    employee_part = re.sub(r"[_-]+", " ", employee_part)
+    employee_query = " ".join(employee_part.split()).strip(" ,")
+    if not employee_query:
+        raise InvoiceConversionError(
+            "The employee name was not found in the Invoice filename."
+        )
+
+    return InvoiceFilenameMetadata(
+        source_stem=stem,
+        employee_query=employee_query,
+        docu_name="Invoice",
+        remarks=remarks,
+    )
+
+
+def _resolve_invoice_employee_name(
+    source_name: str,
+    employee_records: Iterable[dict[str, Any]],
+) -> str:
+    source_text = " ".join(str(source_name or "").split()).strip()
+    if not source_text:
+        raise InvoiceConversionError("The employee name in the filename is blank.")
+
+    records = list(employee_records or [])
+    if not records:
+        raise InvoiceConversionError(
+            "Master Data Employees is required to resolve the Invoice employee name."
+        )
+
+    source_tokens_list = _person_tokens(source_text)
+    source_tokens = set(source_tokens_list)
+    scored: list[tuple[int, str]] = []
+    for record in records:
+        official_name = " ".join(str(record.get("name") or "").split()).strip()
+        if not official_name:
+            continue
+        variants = [official_name, *(record.get("aliases") or [])]
+        best_score = -1
+        for variant in variants:
+            variant_tokens_list = _person_tokens(variant)
+            variant_tokens = set(variant_tokens_list)
+            if not variant_tokens:
+                continue
+            source_norm = " ".join(source_tokens_list)
+            variant_norm = " ".join(variant_tokens_list)
+            if source_norm == variant_norm:
+                best_score = max(best_score, 1000)
+                continue
+            if source_tokens and source_tokens.issubset(variant_tokens):
+                score = 500 + len(source_tokens) * 10
+                if source_tokens_list[-1:] == variant_tokens_list[-1:]:
+                    score += 25
+                best_score = max(best_score, score)
+        if best_score >= 0:
+            scored.append((best_score, official_name))
+
+    if not scored:
+        raise InvoiceConversionError(
+            f'Employee "{source_text}" from the filename could not be matched to Master Data Employees.'
+        )
+
+    top_score = max(score for score, _ in scored)
+    top_names = sorted(
+        {name for score, name in scored if score == top_score}, key=str.casefold
+    )
+    if len(top_names) != 1:
+        raise InvoiceConversionError(
+            f'Employee "{source_text}" matched multiple Master Data employees: '
+            + ", ".join(top_names)
+        )
+    return top_names[0]
+
+
+def _coerce_invoice_date(value: Any, workbook: Any, source_row: int) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            from openpyxl.utils.datetime import from_excel
+
+            converted = from_excel(value, workbook.epoch)
+            return converted.date() if isinstance(converted, datetime) else converted
+        except Exception as exc:
+            raise InvoiceConversionError(
+                f"Invoice date in column C is invalid at source row {source_row}."
+            ) from exc
+    text = " ".join(str(value or "").split()).strip()
+    for pattern in ("%Y-%m-%d", "%m-%d-%Y", "%m/%d/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(text, pattern).date()
+        except ValueError:
+            continue
+    raise InvoiceConversionError(
+        f"Invoice date in column C is blank or invalid at source row {source_row}."
+    )
+
+
+def _normalize_logp_number(value: Any) -> str:
+    if isinstance(value, bool) or value in (None, ""):
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return " ".join(str(value).split()).strip()
+
+
+
+
+def _normalize_invoice_number(value: Any) -> Any:
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    text = " ".join(str(value).split()).strip()
+    if re.fullmatch(r"[+-]?\d+", text):
+        return int(text)
+    return text
+
+
+def extract_invoice_records(
+    excel_bytes: bytes,
+) -> tuple[str, tuple[InvoiceSourceRecord, ...]]:
+    if not excel_bytes:
+        raise InvoiceConversionError("The uploaded Invoice Excel file is empty.")
+
+    try:
+        workbook = load_workbook(BytesIO(excel_bytes), data_only=True, read_only=False)
+    except Exception as exc:
+        raise InvoiceConversionError(
+            "The uploaded file could not be opened as a valid .xlsx workbook."
+        ) from exc
+
+    worksheet = workbook.active
+    logp_numbers: list[str] = []
+    records: list[InvoiceSourceRecord] = []
+
+    for row_index in range(1, worksheet.max_row + 1):
+        marker = " ".join(str(worksheet.cell(row_index, 1).value or "").split()).upper()
+        if marker == "LOGP":
+            logp_number = _normalize_logp_number(worksheet.cell(row_index, 2).value)
+            if logp_number:
+                logp_numbers.append(logp_number)
+            continue
+        if marker != "INV":
+            continue
+
+        product_raw = str(worksheet.cell(row_index, 5).value or "").strip()
+        if not product_raw:
+            raise InvoiceConversionError(
+                f"Product name in column E is blank at source row {row_index}."
+            )
+        inv_no = _normalize_invoice_number(worksheet.cell(row_index, 10).value)
+        if inv_no in (None, ""):
+            raise InvoiceConversionError(
+                f"Invoice number in column J is blank at source row {row_index}."
+            )
+        records.append(
+            InvoiceSourceRecord(
+                source_row=row_index,
+                docu_date=_coerce_invoice_date(
+                    worksheet.cell(row_index, 3).value, workbook, row_index
+                ),
+                inv_no=inv_no,
+                product_name=_remove_apostrophes(product_raw),
+                prod_uom=(
+                    None
+                    if worksheet.cell(row_index, 7).value in (None, "")
+                    else worksheet.cell(row_index, 7).value
+                ),
+                inv_qty=worksheet.cell(row_index, 6).value,
+            )
+        )
+
+    unique_logp_numbers = list(dict.fromkeys(logp_numbers))
+    if not unique_logp_numbers:
+        raise InvoiceConversionError(
+            "No LOGP number was found in column B beside a LOGP marker in column A."
+        )
+    if len(unique_logp_numbers) != 1:
+        raise InvoiceConversionError(
+            "Multiple LOGP numbers were found in the source file: "
+            + ", ".join(unique_logp_numbers)
+        )
+    if not records:
+        raise InvoiceConversionError(
+            "No Invoice rows were captured. Column A must contain INV for convertible rows."
+        )
+    return unique_logp_numbers[0], tuple(records)
+
+
+def _load_invoice_template(template_path: Path | None = None):
+    path = Path(template_path or INVOICE_TEMPLATE_PATH)
+    try:
+        if path.exists():
+            workbook = load_workbook(path)
+        else:
+            template_bytes = base64.b64decode(INVOICE_TEMPLATE_XLSX_BASE64)
+            workbook = load_workbook(BytesIO(template_bytes))
+    except Exception as exc:
+        raise InvoiceConversionError(
+            "The Invoice conversion template could not be opened."
+        ) from exc
+
+    worksheet = workbook.active
+    headers = [worksheet.cell(1, column).value for column in range(1, 19)]
+    if headers != INVOICE_OUTPUT_HEADERS:
+        raise InvoiceConversionError(
+            "The Invoice conversion template headers do not match the approved format."
+        )
+    return workbook, worksheet
+
+
+def _write_invoice_output_rows(
+    worksheet: Any,
+    records: Iterable[InvoiceSourceRecord],
+    metadata: InvoiceFilenameMetadata,
+    process_date: date,
+    logp_no: str,
+    employee_name: str,
+    auditor_name: str,
+) -> int:
+    records = tuple(records)
+    style_prototypes = [copy(worksheet.cell(2, column)._style) for column in range(1, 19)]
+    alignment_prototypes = [
+        copy(worksheet.cell(2, column).alignment) for column in range(1, 19)
+    ]
+    protection_prototypes = [
+        copy(worksheet.cell(2, column).protection) for column in range(1, 19)
+    ]
+
+    clear_through = max(worksheet.max_row, len(records) + 1)
+    for row_index in range(2, clear_through + 1):
+        for column_index in range(1, 19):
+            worksheet.cell(row_index, column_index).value = None
+
+    login_date = datetime.combine(process_date, datetime.min.time())
+    logp_value: Any = int(logp_no) if logp_no.isdigit() else logp_no
+
+    for row_index, record in enumerate(records, start=2):
+        values = [
+            None,
+            login_date,
+            logp_value,
+            employee_name,
+            datetime.combine(record.docu_date, datetime.min.time()),
+            metadata.docu_name,
+            None,
+            record.inv_no,
+            None,
+            None,
+            record.product_name,
+            record.prod_uom,
+            record.inv_qty,
+            None,
+            None,
+            None,
+            metadata.remarks,
+            auditor_name,
+        ]
+        for column_index, value in enumerate(values, start=1):
+            cell = worksheet.cell(row_index, column_index)
+            cell._style = copy(style_prototypes[column_index - 1])
+            cell.alignment = copy(alignment_prototypes[column_index - 1])
+            cell.protection = copy(protection_prototypes[column_index - 1])
+            cell.value = value
+            cell.number_format = r"yyyy\-mm\-dd" if column_index in (2, 5) else "General"
+
+    target_last_row = len(records) + 1
+    if worksheet.max_row > target_last_row:
+        worksheet.delete_rows(target_last_row + 1, worksheet.max_row - target_last_row)
+    return len(records)
+
+
+def _safe_invoice_output_filename(
+    metadata: InvoiceFilenameMetadata, employee_name: str
+) -> str:
+    surname = _person_tokens(employee_name)[-1] if _person_tokens(employee_name) else "EMPLOYEE"
+    raw = f"Invoice for upload {surname.title()} {metadata.remarks}.xlsx"
+    return re.sub(r'[<>:"/\\|?*]+', "_", raw)
+
+
+def build_invoice_conversion(
+    excel_bytes: bytes,
+    filename: str,
+    auditor_name: str,
+    employee_records: Iterable[dict[str, Any]],
+    *,
+    process_date: date | None = None,
+    template_path: Path | None = None,
+) -> InvoiceConversionResult:
+    conversion_date = process_date or philippine_today()
+    clean_auditor_name = " ".join(str(auditor_name or "").split()).strip()
+    if not clean_auditor_name:
+        raise InvoiceConversionError(
+            "The signed-in user's full name is required for auditor_name."
+        )
+
+    metadata = parse_invoice_filename(filename)
+    employee_name = _resolve_invoice_employee_name(
+        metadata.employee_query, employee_records
+    )
+    logp_no, records = extract_invoice_records(excel_bytes)
+    workbook, worksheet = _load_invoice_template(template_path)
+    _write_invoice_output_rows(
+        worksheet,
+        records,
+        metadata,
+        conversion_date,
+        logp_no,
+        employee_name,
+        clean_auditor_name,
+    )
+
+    if workbook.calculation is not None:
+        workbook.calculation.fullCalcOnLoad = True
+        workbook.calculation.forceFullCalc = True
+    buffer = BytesIO()
+    workbook.save(buffer)
+    output_bytes = buffer.getvalue()
+
+    try:
+        verification_book = load_workbook(
+            BytesIO(output_bytes), data_only=False, read_only=True
+        )
+        verification_sheet = verification_book.active
+        if verification_sheet.max_row != len(records) + 1:
+            raise InvoiceConversionError(
+                "Converted row count did not match the captured Invoice row count."
+            )
+        verified_headers = [
+            verification_sheet.cell(1, column).value for column in range(1, 19)
+        ]
+        if verified_headers != INVOICE_OUTPUT_HEADERS:
+            raise InvoiceConversionError(
+                "The converted Invoice headers failed the final integrity check."
+            )
+        for output_row, source_record in enumerate(records, start=2):
+            converted_date = verification_sheet.cell(output_row, 5).value
+            if isinstance(converted_date, datetime):
+                converted_date = converted_date.date()
+            if converted_date != source_record.docu_date:
+                raise InvoiceConversionError(
+                    "An Invoice document date did not match its own source row in column C."
+                )
+    except InvoiceConversionError:
+        raise
+    except Exception as exc:
+        raise InvoiceConversionError(
+            "The converted Invoice Excel file failed the final workbook integrity check."
+        ) from exc
+
+    return InvoiceConversionResult(
+        output_bytes=output_bytes,
+        output_filename=_safe_invoice_output_filename(metadata, employee_name),
+        metadata=metadata,
+        process_date=conversion_date,
+        logp_no=logp_no,
+        employee_name=employee_name,
+        auditor_name=clean_auditor_name,
+        records=records,
+        source_signature=hashlib.sha256(excel_bytes).hexdigest(),
+    )
+
+
+def render_invoice_conversion_page(
+    user: dict[str, Any],
+    employee_records: Iterable[dict[str, Any]],
+) -> None:
+    import pandas as pd
+    import streamlit as st
+
+    st.markdown(
+        """
+        <style>
+        .iars-invoice-hero {
+            border: 1px solid #DDE5EF;
+            border-radius: 16px;
+            padding: 1.05rem 1.15rem;
+            margin: 0 0 .9rem 0;
+            background: linear-gradient(135deg, #F8FAFD 0%, #FFFFFF 58%, #FFF9EB 100%);
+            box-shadow: 0 8px 24px rgba(6,26,54,.06);
+        }
+        .iars-invoice-hero h2 { margin: 0; color: #061A36; font-size: 1.35rem; }
+        .iars-invoice-hero p { margin: .28rem 0 0; color: #667085; font-size: .88rem; }
+        .iars-invoice-route {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr auto 1fr;
+            align-items: center;
+            gap: .55rem;
+            margin-top: .85rem;
+        }
+        .iars-invoice-route div {
+            min-height: 64px;
+            border: 1px solid #E4EAF2;
+            border-radius: 12px;
+            padding: .65rem .72rem;
+            background: rgba(255,255,255,.9);
+        }
+        .iars-invoice-route strong { display:block; color:#061A36; font-size:.86rem; }
+        .iars-invoice-route span { color:#667085; font-size:.74rem; line-height:1.25; }
+        .iars-invoice-route b { color:#C78B12; font-size:1.1rem; }
+        @media (max-width: 760px) {
+            .iars-invoice-route { grid-template-columns: 1fr; }
+            .iars-invoice-route b { display:none; }
+        }
+        </style>
+        <div class="iars-invoice-hero">
+          <h2>Sales Personnel Invoice Conversion</h2>
+          <p>Convert SAP Invoice rows into the approved Sales Personnel upload template.</p>
+          <div class="iars-invoice-route">
+            <div><strong>1. SAP Invoice Excel</strong><span>Upload the original Invoice file with remarks in its filename.</span></div>
+            <b>→</b>
+            <div><strong>2. IARS Mapping</strong><span>Capture INV rows, resolve the employee and retain each Invoice date.</span></div>
+            <b>→</b>
+            <div><strong>3. Compatible Output</strong><span>Download the approved 18-column Invoice template.</span></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.container(border=True):
+        st.markdown("### Upload SAP Invoice File")
+        st.caption(
+            "Filename examples: Invoice Davido Good.xlsx · Invoice Davido Sotex.xlsx · "
+            "Invoice Davido Sold Out.xlsx"
+        )
+        uploaded_file = st.file_uploader(
+            "SAP Sales Personnel Invoice Excel",
+            type=["xlsx"],
+            key="sales_invoice_excel_uploader_v4_5_14",
+            help=(
+                "Only rows marked INV in column A are converted. The source file remains unchanged."
+            ),
+        )
+
+    if uploaded_file is None:
+        st.info(
+            "Upload an Invoice .xlsx file. IARS will capture each INV row's date from column C, "
+            "product from E, quantity from F, UOM from G and invoice number from J."
+        )
+        return
+
+    auditor_name = str(user.get("full_name") or user.get("username") or "").strip()
+    process_date = philippine_today()
+
+    try:
+        with st.spinner("Validating and converting the Sales Personnel Invoice file…"):
+            result = build_invoice_conversion(
+                uploaded_file.getvalue(),
+                uploaded_file.name,
+                auditor_name,
+                employee_records,
+                process_date=process_date,
+            )
+    except InvoiceConversionError as exc:
+        st.error(str(exc))
+        return
+    except Exception as exc:
+        st.error(f"Invoice conversion failed: {exc}")
+        return
+
+    metadata = result.metadata
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Invoice Rows", f"{result.row_count:,}")
+    metric_columns[1].metric("LOGP No.", result.logp_no)
+    metric_columns[2].metric(
+        "Invoice Dates",
+        (
+            result.first_invoice_date.isoformat()
+            if result.first_invoice_date == result.last_invoice_date
+            else f"{result.first_invoice_date.isoformat()} to {result.last_invoice_date.isoformat()}"
+        ),
+    )
+    metric_columns[3].metric("Remarks", metadata.remarks)
+
+    st.success(
+        f"Conversion completed for {result.row_count:,} INV rows. "
+        "Each row retained its own Invoice date from column C, negative quantities were retained, "
+        "product apostrophes were removed, and the output passed the workbook integrity check."
+    )
+
+    with st.expander("Conversion Details", expanded=True):
+        details = pd.DataFrame(
+            [
+                ["Login Date", result.process_date.isoformat()],
+                ["Source Filename", uploaded_file.name],
+                ["LOGP No.", result.logp_no],
+                ["Document Name", metadata.docu_name],
+                ["Invoice Date Range", f"{result.first_invoice_date.isoformat()} to {result.last_invoice_date.isoformat()}"],
+                ["Remarks", metadata.remarks],
+                ["Employee Name", result.employee_name],
+                ["Auditor Name", result.auditor_name],
+            ],
+            columns=["Field", "Generated Value"],
+        )
+        st.dataframe(details, hide_index=True, width="stretch")
+
+    st.markdown("### Converted Data Preview")
+    preview = pd.DataFrame(result.preview_rows(limit=200))
+    st.dataframe(preview, hide_index=True, width="stretch", height=390)
+    if result.row_count > len(preview):
+        st.caption(
+            f"Showing the first {len(preview):,} of {result.row_count:,} converted rows."
+        )
+
+    st.download_button(
+        "⬇️ Download Converted Invoice Excel",
+        data=result.output_bytes,
+        file_name=result.output_filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key=f"invoice_download_{result.source_signature[:16]}",
+        type="primary",
+        width="stretch",
+    )
+    st.caption(
+        "Output format: approved 18 columns · dates in yyyy-mm-dd · each docu_date comes from "
+        "its own INV source row in column C · quantity/UOM come from columns F/G · "
+        "trans_id, sold_no, pd_no, prod_code, disc_qty, record_qty and count_qty remain blank."
+    )

@@ -102,6 +102,7 @@ from iars_weekly_itinerary import (
 )
 
 from iars_excel_conversion import (
+    render_invoice_conversion_page,
     render_logp_conversion_page,
     render_warehouse_conversion_page,
 )
@@ -1500,6 +1501,7 @@ def _render_app_header_v4503(
         "Weekly Itinerary": "Upload and review weekly auditor itineraries",
         "Warehouse": "Convert SAP Warehouse stock data into the approved upload template",
         "LOGP": "Convert Sales Personnel LOGP data into the approved upload template",
+        "Invoice": "Convert Sales Personnel Invoice data into the approved upload template",
         "Audit Workpapers": "Access reusable count sheets, working papers and audit workpapers",
         "Policies & Memoranda": "Access controlled policies, memoranda, procedures and manuals",
         "User Management": "Manage authorized accounts and account approvals",
@@ -4628,6 +4630,7 @@ audit_report_nav = [
 excel_conversion_nav = [
     "📦 Warehouse",
     "↳ LOGP",
+    "↳ Invoice",
 ]
 nav_options.extend(excel_conversion_nav)
 standalone_nav = [
@@ -4693,12 +4696,14 @@ with st.sidebar:
         )
         sales_logp_label = "↳ LOGP"
         sales_logp_selected = selected_page == sales_logp_label
+        sales_invoice_label = "↳ Invoice"
+        sales_invoice_selected = selected_page == sales_invoice_label
         st.markdown(
             '<div style="margin:.42rem .18rem .18rem;padding:.48rem .58rem;'
             'border-left:3px solid #C78B12;background:rgba(255,255,255,.06);'
             'border-radius:0 8px 8px 0;color:#F7E7B2;font-weight:700;'
             'font-size:.82rem;">👥 Sales Personnel'
-            '<div style="color:#B8C3D3;font-size:.67rem;font-weight:500;margin-top:.08rem;">LOGP active · Invoice next project</div></div>',
+            '<div style="color:#B8C3D3;font-size:.67rem;font-weight:500;margin-top:.08rem;">LOGP and Invoice active</div></div>',
             unsafe_allow_html=True,
         )
         st.button(
@@ -4710,11 +4715,12 @@ with st.sidebar:
             args=(sales_logp_label,),
         )
         st.button(
-            "↳ Invoice",
-            key="excel_conversion_nav_invoice_placeholder",
+            sales_invoice_label,
+            key="excel_conversion_nav_invoice",
             use_container_width=True,
-            disabled=True,
-            help="Invoice conversion will be developed after LOGP approval.",
+            type="primary" if sales_invoice_selected else "secondary",
+            on_click=_navigate_to_page,
+            args=(sales_invoice_label,),
         )
 
     remaining_nav = [label for label in standalone_nav if label != dashboard_label]
@@ -4742,7 +4748,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.13",
+    version="4.5.14",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -4851,6 +4857,10 @@ if page_key == "Warehouse":
 
 if page_key == "LOGP":
     render_logp_conversion_page(auth_user, employee_records)
+
+
+if page_key == "Invoice":
+    render_invoice_conversion_page(auth_user, employee_records)
 
 
 if page_key == "Weekly Itinerary":
@@ -5742,7 +5752,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.13", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.14", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
