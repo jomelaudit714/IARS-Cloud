@@ -106,6 +106,11 @@ from iars_excel_conversion import (
     render_logp_conversion_page,
     render_warehouse_conversion_page,
 )
+from iars_gantt import (
+    render_gantt_dashboard_alert,
+    render_gantt_master_data_page,
+    render_yearly_gantt_page,
+)
 
 
 SIDEBAR_EXPAND_ONCE_KEY = "iars_force_sidebar_expand_once"
@@ -1502,6 +1507,8 @@ def _render_app_header_v4503(
         "Warehouse": "Convert SAP Warehouse stock data into the approved upload template",
         "LOGP": "Convert Sales Personnel LOGP data into the approved upload template",
         "Invoice": "Convert Sales Personnel Invoice data into the approved upload template",
+        "Yearly Audit Gantt": "Plan annual audits, assign auditors and monitor monthly accomplishments",
+        "Gantt Master Data": "Upload and maintain yearly audit planning reference records",
         "Audit Workpapers": "Access reusable count sheets, working papers and audit workpapers",
         "Policies & Memoranda": "Access controlled policies, memoranda, procedures and manuals",
         "User Management": "Manage authorized accounts and account approvals",
@@ -4633,6 +4640,8 @@ excel_conversion_nav = [
     "↳ Invoice",
 ]
 nav_options.extend(excel_conversion_nav)
+audit_planning_nav = ["📅 Yearly Audit Gantt"]
+nav_options.extend(audit_planning_nav)
 standalone_nav = [
     "🏠 Dashboard",
     "🗓️ Weekly Itinerary",
@@ -4640,6 +4649,8 @@ standalone_nav = [
     "📜 Policies & Memoranda",
 ]
 if is_admin_user(auth_user):
+    audit_planning_nav.append("🧰 Gantt Master Data")
+    nav_options.append("🧰 Gantt Master Data")
     nav_options.extend([
         "👥 User Management",
         "🗃️ Master Data",
@@ -4680,6 +4691,28 @@ with st.sidebar:
                 type="primary" if is_selected else "secondary",
                 on_click=_navigate_to_page,
                 args=(nav_label,),
+            )
+
+    audit_planning_expanded = selected_page in audit_planning_nav
+    with st.expander("🗓️ Audit Planning", expanded=audit_planning_expanded):
+        gantt_label = "📅 Yearly Audit Gantt"
+        st.button(
+            gantt_label,
+            key="audit_planning_nav_yearly_gantt",
+            use_container_width=True,
+            type="primary" if selected_page == gantt_label else "secondary",
+            on_click=_navigate_to_page,
+            args=(gantt_label,),
+        )
+        if is_admin_user(auth_user):
+            gantt_master_label = "🧰 Gantt Master Data"
+            st.button(
+                gantt_master_label,
+                key="audit_planning_nav_master_data",
+                use_container_width=True,
+                type="primary" if selected_page == gantt_master_label else "secondary",
+                on_click=_navigate_to_page,
+                args=(gantt_master_label,),
             )
 
     excel_conversion_expanded = selected_page in excel_conversion_nav
@@ -4748,7 +4781,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.15",
+    version="4.5.16",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -4800,6 +4833,11 @@ if page_key == "Dashboard":
         '<p>Here is what is happening across the Internal Audit Report System.</p>'
         f'</div><div class="edl-section-badge">{html.escape(role_label)}</div></div>',
         unsafe_allow_html=True,
+    )
+    render_gantt_dashboard_alert(
+        auth_client,
+        auth_user,
+        admin=is_admin_user(auth_user),
     )
     render_metric_cards(
         [
@@ -4861,6 +4899,23 @@ if page_key == "LOGP":
 
 if page_key == "Invoice":
     render_invoice_conversion_page(auth_user, employee_records)
+
+
+if page_key == "Yearly Audit Gantt":
+    render_yearly_gantt_page(
+        auth_client,
+        auth_user,
+        admin=is_admin_user(auth_user),
+        auditor_options=auditor_options,
+    )
+
+
+if page_key == "Gantt Master Data" and is_admin_user(auth_user):
+    render_gantt_master_data_page(
+        auth_client,
+        auth_user,
+        template_path=Path(__file__).resolve().parent / "assets" / "gantt_master_data_template.xlsx",
+    )
 
 
 if page_key == "Weekly Itinerary":
@@ -5752,7 +5807,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.15", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.16", "note": "Exact-Reference EDL Enterprise UI", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
