@@ -347,8 +347,8 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
     )
     if duplicates.any():
         raise GanttError(
-            "Exact duplicate master-data rows were found. Company / Department, "
-            "Custodian, Audit Task, and Accountability must not all be identical."
+            "Exact duplicate master-data rows were found (V4.5.19 validator). "
+            "Company / Department, Custodian, Audit Task, and Accountability must not all be identical."
         )
     return output.reset_index(drop=True)
 
