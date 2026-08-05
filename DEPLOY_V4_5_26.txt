@@ -1,0 +1,33 @@
+IARS V4.5.26 — NATIVE FROZEN GANTT GRID + STATUS WORKFLOW
+
+FILES TO REPLACE IN THE ROOT OF THE EXISTING GITHUB REPOSITORY:
+1. app.py
+2. iars_gantt.py
+
+Do not create a nested folder. Replace the existing root files, commit the changes,
+then reboot the Streamlit app. Confirm that the header shows v4.5.26.
+
+NO SUPABASE SQL MIGRATION IS REQUIRED.
+
+KEY CHANGES
+- Replaced the CSS-based st.columns Gantt matrix with Streamlit's native dataframe grid.
+- Full Company / Department through December header stays frozen inside the grid during vertical scrolling.
+- Company / Department through Frequency remain pinned during horizontal scrolling.
+- Month cells remain clickable and open the monthly editor dialog.
+- Planned is displayed as Scheduled.
+- Due format is Due: MM/DD/YY, e.g. Due: 08/31/26.
+- Status colors:
+  Scheduled = blue
+  In Progress = orange
+  Done = green
+  For FRS = teal
+  FRS = dark green
+  Overdue / Overdue: IRS / Overdue: FRS = red
+- No separate For IRS or IRS display status.
+- Workflow: Scheduled -> In Progress -> Done -> Overdue: IRS (when late)
+  -> For FRS after initial report submission -> Overdue: FRS (when late) -> FRS.
+- Date of Audit defaults to today's Philippine date, remains editable to today or any past date,
+  and rejects future dates.
+- Initial report deadline is 5 working days after Date of Audit.
+- FRS deadline is 5 working days after initial report submission.
+- Weekends and active Regular / Special Non-Working / Local Special Non-Working holidays are excluded.

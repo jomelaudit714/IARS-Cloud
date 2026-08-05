@@ -19,8 +19,9 @@ GANTT_SCHEDULE_TABLE = "iars_gantt_schedule"
 GANTT_HOLIDAY_TABLE = "iars_gantt_holiday"
 
 GANTT_STATUSES = ["Planned", "In Progress", "Done", "Overdue"]
-REPORT_STAGES = ["For IRS", "IRS Overdue", "For FRS", "FRS Overdue", "FRS"]
-DISPLAY_STATUSES = ["Planned", "In Progress", "Overdue"] + REPORT_STAGES
+REPORT_STAGES = ["Overdue: IRS", "For FRS", "Overdue: FRS", "FRS"]
+# The database continues to store "Planned" for backward compatibility, but the UI displays it as "Scheduled".
+DISPLAY_STATUSES = ["Scheduled", "In Progress", "Overdue", "Done"] + REPORT_STAGES
 MONTHS = list(range(1, 13))
 PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8))
 REPORT_WORKING_DAYS = 5
@@ -133,6 +134,18 @@ def _display_date(value: Any) -> str:
     return parsed.strftime("%b %d, %Y") if parsed else "—"
 
 
+def _box_date(value: Any) -> str:
+    """Compact date used inside monthly Gantt boxes: MM/DD/YY."""
+    parsed = _parse_date(value)
+    return parsed.strftime("%m/%d/%y") if parsed else "—"
+
+
+def _display_stage(stage: Any) -> str:
+    """Use Scheduled in the UI without changing the legacy database value Planned."""
+    clean_stage = _clean_text(stage) or "Planned"
+    return "Scheduled" if clean_stage == "Planned" else clean_stage
+
+
 def _today_pht() -> date:
     return datetime.now(PHILIPPINE_TIMEZONE).date()
 
@@ -202,6 +215,14 @@ def report_stage_info(
     *,
     today: date | None = None,
 ) -> ReportStageInfo:
+    """Return the visible workflow stage and its automatic working-day deadline.
+
+    There is intentionally no separate ``For IRS`` or ``IRS`` display stage.
+    A completed audit stays ``Done`` while its five-working-day initial-report
+    period is running, then becomes ``Overdue: IRS`` if no initial report was
+    submitted. After the initial report is recorded, the stage becomes
+    ``For FRS`` and later ``Overdue: FRS`` when applicable.
+    """
     check_date = today or _today_pht()
     audit_status = effective_status(entry, today=check_date)
     if audit_status != "Done":
@@ -209,20 +230,20 @@ def report_stage_info(
 
     holiday_dates = active_non_working_holiday_dates(holiday_rows)
     audit_date = _parse_date(entry.get("accomplished_date"))
-    irs_date = _parse_date(entry.get("initial_report_submitted_at"))
-    frs_date = _parse_date(entry.get("final_report_submitted_at"))
+    initial_date = _parse_date(entry.get("initial_report_submitted_at"))
+    final_date = _parse_date(entry.get("final_report_submitted_at"))
 
-    if frs_date:
-        return ReportStageInfo("FRS", frs_date, False)
-    if irs_date:
-        deadline = add_working_days(irs_date, REPORT_WORKING_DAYS, holidays=holiday_dates)
+    if final_date:
+        return ReportStageInfo("FRS", final_date, False)
+    if initial_date:
+        deadline = add_working_days(initial_date, REPORT_WORKING_DAYS, holidays=holiday_dates)
         overdue = check_date > deadline
-        return ReportStageInfo("FRS Overdue" if overdue else "For FRS", deadline, overdue)
-    if audit_date:
-        deadline = add_working_days(audit_date, REPORT_WORKING_DAYS, holidays=holiday_dates)
-        overdue = check_date > deadline
-        return ReportStageInfo("IRS Overdue" if overdue else "For IRS", deadline, overdue)
-    return ReportStageInfo("For IRS", None, False)
+        return ReportStageInfo("Overdue: FRS" if overdue else "For FRS", deadline, overdue)
+    if not audit_date:
+        return ReportStageInfo("Done", None, False)
+    deadline = add_working_days(audit_date, REPORT_WORKING_DAYS, holidays=holiday_dates)
+    overdue = check_date > deadline
+    return ReportStageInfo("Overdue: IRS" if overdue else "Done", deadline, overdue)
 
 
 def gantt_setup_status(client: Any) -> GanttSetupStatus:
@@ -426,6 +447,24 @@ def upsert_schedule_entry(
     ).execute()
 
 
+def mark_audit_in_progress(
+    client: Any,
+    *,
+    entry_id: str,
+    assigned_auditor: str,
+    current_user_name: str,
+    remarks: str = "",
+) -> None:
+    if _name_key(assigned_auditor) != _name_key(current_user_name):
+        raise GanttError("You can only update audit schedules assigned to your account.")
+    client.table(GANTT_SCHEDULE_TABLE).update({
+        "status": "In Progress",
+        "remarks": _clean_text(remarks),
+        "updated_by": current_user_name,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", entry_id).execute()
+
+
 def update_auditor_accomplishment(
     client: Any,
     *,
@@ -443,6 +482,8 @@ def update_auditor_accomplishment(
         raise GanttError("The auditor action is to mark the audit as Done.")
     if not accomplished_date:
         raise GanttError("Date of Audit is required when status is Done.")
+    if accomplished_date > _today_pht():
+        raise GanttError("Date of Audit cannot be later than today's Philippine date.")
     client.table(GANTT_SCHEDULE_TABLE).update({
         "status": "Done",
         "accomplished_date": accomplished_date.isoformat(),
@@ -462,7 +503,7 @@ def submit_initial_report(
     submitted_date: date | None = None,
 ) -> None:
     if _name_key(assigned_auditor) != _name_key(current_user_name):
-        raise GanttError("You can only submit the IRS for an audit assigned to your account.")
+        raise GanttError("You can only submit the initial report for an audit assigned to your account.")
     actual_date = submitted_date or _today_pht()
     client.table(GANTT_SCHEDULE_TABLE).update({
         "initial_report_submitted_at": actual_date.isoformat(),
@@ -652,19 +693,17 @@ def _stage_slug(stage: str) -> str:
 
 def _month_box_label(entry: dict[str, Any] | None, holiday_rows: list[dict[str, Any]]) -> tuple[str, str]:
     if not entry:
-        return "＋ Plan", "empty"
+        return "＋ Schedule", "empty"
     info = report_stage_info(entry, holiday_rows)
+    display_stage = _display_stage(info.stage)
     nickname = _clean_text(entry.get("auditor_nickname")) or nickname_for(entry.get("auditor_full_name"))
     if info.stage in {"Planned", "In Progress", "Overdue"}:
-        key_date = _parse_date(entry.get("planned_date"))
-        date_label = f"Due {key_date.strftime('%b %d') if key_date else '—'}"
-    elif info.stage in {"For IRS", "IRS Overdue"}:
-        date_label = f"IRS {info.deadline.strftime('%b %d') if info.deadline else '—'}"
-    elif info.stage in {"For FRS", "FRS Overdue"}:
-        date_label = f"FRS {info.deadline.strftime('%b %d') if info.deadline else '—'}"
+        date_label = f"Due: {_box_date(entry.get('planned_date'))}"
+    elif info.stage in {"Done", "Overdue: IRS", "For FRS", "Overdue: FRS"}:
+        date_label = f"Due: {_box_date(info.deadline)}"
     else:
-        date_label = f"{_display_date(entry.get('final_report_submitted_at'))}"
-    return f"{info.stage}\n{nickname}\n{date_label}", _stage_slug(info.stage)
+        date_label = f"Submitted: {_box_date(entry.get('final_report_submitted_at'))}"
+    return f"{display_stage}\n{nickname}\n{date_label}", _stage_slug(display_stage)
 
 
 def _render_gantt_css() -> None:
@@ -679,47 +718,19 @@ def _render_gantt_css() -> None:
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
         .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
-        /* V4.5.25: one dedicated Gantt viewport with the actual Streamlit element wrapper pinned. Vertical wheel events stay inside
-           the table, so the module does not drift down to the sections below it. */
-        .st-key-iars-gantt-scroll-v4525 {height:calc(100dvh - 272px)!important;max-height:calc(100dvh - 272px)!important;min-height:390px!important;overflow:auto!important;overscroll-behavior:contain!important;padding:0 .35rem .45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;scrollbar-gutter:stable both-edges;isolation:isolate!important;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"] {min-width:1880px!important;padding:.18rem 0!important;gap:.25rem!important;align-items:stretch!important;flex-wrap:nowrap!important;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {flex:0 0 104px!important;width:104px!important;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {position:sticky!important;left:0!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {position:sticky!important;left:108px!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {position:sticky!important;left:216px!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {position:sticky!important;left:324px!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {position:sticky!important;left:432px!important;z-index:30!important;box-shadow:2px 0 0 #CBD5E1;}
-
-        /* The previous build nested the header in a short header-only container,
-           which constrained sticky positioning. V4.5.25 pins the actual stElementContainer that owns the header row
-           directly in the full Gantt block and makes that actual row sticky. */
-        /* Critical V4.5.25 fix: Streamlit wraps each st.columns row in an
-           stElementContainer. Sticky must be applied to that real row owner;
-           applying it only to stHorizontalBlock is constrained by the short
-           wrapper and the header scrolls away. */
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stElementContainer"]:has(.iars-gantt-head),
-        .st-key-iars-gantt-scroll-v4525 .stElementContainer:has(.iars-gantt-head),
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stVerticalBlock"] > div:has(.iars-gantt-head) {position:sticky!important;top:0!important;z-index:110!important;background:#fff!important;margin:0!important;padding:.12rem 0 0!important;border-bottom:1px solid #CBD5E1!important;box-shadow:0 3px 7px rgba(15,23,42,.12)!important;overflow:visible!important;align-self:flex-start!important;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head) {position:relative!important;z-index:111!important;background:#fff!important;margin:0!important;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"] {z-index:112!important;background:#fff!important;}
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"]:nth-child(-n+5) {z-index:113!important;}
-        .st-key-iars-gantt-scroll-v4525 .stButton>button,
-        .st-key-iars-gantt-scroll-v4525 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
-        @media (max-height:760px) {
-          .st-key-iars-gantt-scroll-v4525 {height:calc(100dvh - 238px)!important;max-height:calc(100dvh - 238px)!important;min-height:350px!important;}
-        }
-        [class*="st-key-gantt-empty-"] [data-testid="stPopover"]>button {border:1px dashed #CBD5E1!important;background:#FAFBFC!important;color:#667085!important;}
-        [class*="st-key-gantt-planned-"] [data-testid="stPopover"]>button {border:1px solid #D6A129!important;background:#FFF8E6!important;color:#594200!important;}
-        [class*="st-key-gantt-in-progress-"] [data-testid="stPopover"]>button {border:1px solid #2563EB!important;background:#EFF6FF!important;color:#1E3A8A!important;}
-        [class*="st-key-gantt-overdue-"] [data-testid="stPopover"]>button,
-        [class*="st-key-gantt-irs-overdue-"] [data-testid="stPopover"]>button,
-        [class*="st-key-gantt-frs-overdue-"] [data-testid="stPopover"]>button {border:1px solid #991B1B!important;background:#B91C1C!important;color:#FFFFFF!important;}
-        [class*="st-key-gantt-for-irs-"] [data-testid="stPopover"]>button {border:1px solid #D97706!important;background:#FFF7ED!important;color:#7C2D12!important;}
-        [class*="st-key-gantt-for-frs-"] [data-testid="stPopover"]>button {border:1px solid #7C3AED!important;background:#F5F3FF!important;color:#4C1D95!important;}
-        [class*="st-key-gantt-frs-"] [data-testid="stPopover"]>button {border:1px solid #18864B!important;background:#ECFDF3!important;color:#14532D!important;}
-        .iars-gantt-head {font-size:.72rem;font-weight:800;color:#0B2B55;background:#EAF0F8;border-radius:8px;padding:.45rem .25rem;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center;white-space:normal;overflow-wrap:anywhere;word-break:break-word;}
-        .iars-gantt-textcell {font-size:.70rem;line-height:1.15;border-bottom:1px solid #E5E7EB;min-height:78px;padding:.35rem .22rem;display:flex;align-items:center;white-space:normal;overflow-wrap:anywhere;word-break:break-word;}
+        /* V4.5.26 uses Streamlit's native dataframe grid. Its header is frozen by
+           the grid itself, so it no longer depends on fragile CSS selectors for
+           nested st.columns wrappers. */
+        [class*="st-key-iars-gantt-grid-v4526"] [data-testid="stDataFrame"] {border:1px solid #D9E2EE!important;border-radius:14px!important;overflow:hidden!important;}
+        [class*="st-key-iars-gantt-grid-v4526"] canvas {cursor:pointer!important;}
+        .iars-gantt-legend {display:flex;flex-wrap:wrap;gap:.42rem;margin:.35rem 0 .7rem;}
+        .iars-gantt-chip {display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:.28rem .62rem;font-size:.74rem;font-weight:800;border:1px solid transparent;}
+        .iars-gantt-chip.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
+        .iars-gantt-chip.in-progress {background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
+        .iars-gantt-chip.done {background:#DCFCE7;color:#14532D;border-color:#22C55E;}
+        .iars-gantt-chip.for-frs {background:#ECFEFF;color:#164E63;border-color:#0891B2;}
+        .iars-gantt-chip.frs {background:#D1FAE5;color:#064E3B;border-color:#047857;}
+        .iars-gantt-chip.overdue {background:#B91C1C;color:#FFFFFF;border-color:#991B1B;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -749,6 +760,121 @@ def _safe_popover(label: str, *, key: str) -> Iterator[Any]:
         yield ctx
 
 
+def _reset_gantt_grid_selection() -> None:
+    try:
+        st.session_state["iars_gantt_grid_generation_v4526"] = int(
+            st.session_state.get("iars_gantt_grid_generation_v4526", 0)
+        ) + 1
+    except Exception:
+        pass
+
+
+def _finish_month_editor() -> None:
+    _reset_gantt_grid_selection()
+    st.rerun()
+
+
+def _event_cells(event: Any) -> list[tuple[int, str]]:
+    if event is None:
+        return []
+    selection = getattr(event, "selection", None)
+    if selection is None and isinstance(event, dict):
+        selection = event.get("selection")
+    cells = getattr(selection, "cells", None)
+    if cells is None and isinstance(selection, dict):
+        cells = selection.get("cells")
+    output: list[tuple[int, str]] = []
+    for cell in cells or []:
+        if isinstance(cell, (list, tuple)) and len(cell) == 2:
+            try:
+                output.append((int(cell[0]), str(cell[1])))
+            except (TypeError, ValueError):
+                continue
+    return output
+
+
+def _text_column(label: str, *, pinned: bool = False, width: int = 104) -> Any:
+    namespace = getattr(st, "column_config", None)
+    factory = getattr(namespace, "TextColumn", None) if namespace is not None else None
+    if callable(factory):
+        return factory(label, width=width, pinned=pinned, alignment="center")
+    return label
+
+
+def _gantt_cell_style(value: Any) -> str:
+    first_line = str(value or "").splitlines()[0].strip()
+    base = "text-align:center;font-weight:700;white-space:pre-line;border:1px solid #D9E2EE;"
+    if first_line in {"Overdue", "Overdue: IRS", "Overdue: FRS"}:
+        return base + "background-color:#B91C1C;color:#FFFFFF;"
+    palette = {
+        "Scheduled": ("#EAF2FF", "#1E3A8A", "#3B82F6"),
+        "In Progress": ("#FFF4E5", "#7C2D12", "#F59E0B"),
+        "Done": ("#DCFCE7", "#14532D", "#22C55E"),
+        "For FRS": ("#ECFEFF", "#164E63", "#0891B2"),
+        "FRS": ("#D1FAE5", "#064E3B", "#047857"),
+        "＋ Schedule": ("#FAFBFC", "#667085", "#CBD5E1"),
+    }
+    background, foreground, border = palette.get(first_line, ("#FFFFFF", "#344054", "#D9E2EE"))
+    return base + f"background-color:{background};color:{foreground};border-color:{border};"
+
+
+def _open_month_editor_dialog(
+    client: Any,
+    *,
+    master: dict[str, Any],
+    entry: dict[str, Any] | None,
+    year: int,
+    month: int,
+    holiday_rows: list[dict[str, Any]],
+    admin: bool,
+    current_user_name: str,
+    auditor_options: list[str],
+) -> None:
+    dialog_factory = getattr(st, "dialog", None)
+    title = f"{month_name[month]} Audit Schedule"
+    if callable(dialog_factory):
+        try:
+            decorator = dialog_factory(
+                title,
+                width="small",
+                on_dismiss=_reset_gantt_grid_selection,
+            )
+        except TypeError:
+            decorator = dialog_factory(title)
+
+        @decorator
+        def _dialog() -> None:
+            _render_month_editor(
+                client,
+                master=master,
+                entry=entry,
+                year=year,
+                month=month,
+                holiday_rows=holiday_rows,
+                admin=admin,
+                current_user_name=current_user_name,
+                auditor_options=auditor_options,
+            )
+
+        _dialog()
+        return
+
+    # Compatibility fallback for older/test Streamlit environments.
+    with _safe_container(border=True):
+        st.markdown(f"### {title}")
+        _render_month_editor(
+            client,
+            master=master,
+            entry=entry,
+            year=year,
+            month=month,
+            holiday_rows=holiday_rows,
+            admin=admin,
+            current_user_name=current_user_name,
+            auditor_options=auditor_options,
+        )
+
+
 def _render_month_editor(
     client: Any,
     *,
@@ -764,6 +890,7 @@ def _render_month_editor(
     master_id = str(master.get("id") or "")
     unique = re.sub(r"[^a-zA-Z0-9]", "", master_id)[-16:] + f"_{year}_{month}"
     due_date = month_end_date(year, month)
+    today = _today_pht()
     st.markdown(
         f"**{html.escape(_clean_text(master.get('custodian')))}**  \n"
         f"{html.escape(_clean_text(master.get('audit_task')))} · {_format_accountability(master.get('accountability'))}"
@@ -784,9 +911,9 @@ def _render_month_editor(
                 format_func=lambda name: f"{name} — {nickname_for(name)}",
                 key=f"gantt_new_auditor_{unique}",
             )
-            st.text_input("Status", value="Planned", disabled=True, key=f"gantt_new_status_{unique}")
-            st.text_input("Due Date", value=due_date.isoformat(), disabled=True, key=f"gantt_new_due_{unique}")
-            save = st.form_submit_button("Save Planned Audit", type="primary", use_container_width=True)
+            st.text_input("Status", value="Scheduled", disabled=True, key=f"gantt_new_status_{unique}")
+            st.text_input("Due Date", value=_box_date(due_date), disabled=True, key=f"gantt_new_due_{unique}")
+            save = st.form_submit_button("Save Scheduled Audit", type="primary", use_container_width=True)
         if save:
             try:
                 upsert_schedule_entry(
@@ -799,8 +926,8 @@ def _render_month_editor(
                     planned_date=due_date,
                     actor=current_user_name,
                 )
-                st.success("Planned audit saved.")
-                st.rerun()
+                st.success("Scheduled audit saved.")
+                _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
         return
@@ -812,6 +939,9 @@ def _render_month_editor(
     if admin and effective_status(entry) != "Done":
         options = list(dict.fromkeys([name for name in auditor_options if _clean_text(name)] + [assigned]))
         selected_index = options.index(assigned) if assigned in options else 0
+        stored_status = _clean_text(entry.get("status"))
+        if stored_status not in {"Planned", "In Progress"}:
+            stored_status = "Planned"
         with st.form(f"gantt_plan_edit_{unique}"):
             auditor = st.selectbox(
                 "Auditor",
@@ -820,9 +950,9 @@ def _render_month_editor(
                 format_func=lambda name: f"{name} — {nickname_for(name)}",
                 key=f"gantt_edit_auditor_{unique}",
             )
-            st.text_input("Status", value="Planned", disabled=True, key=f"gantt_edit_status_{unique}")
-            st.text_input("Due Date", value=due_date.isoformat(), disabled=True, key=f"gantt_edit_due_{unique}")
-            save = st.form_submit_button("Update Planned Audit", type="primary", use_container_width=True)
+            st.text_input("Status", value=_display_stage(stored_status), disabled=True, key=f"gantt_edit_status_{unique}")
+            st.text_input("Due Date", value=_box_date(due_date), disabled=True, key=f"gantt_edit_due_{unique}")
+            save = st.form_submit_button("Update Assignment", type="primary", use_container_width=True)
         if save:
             try:
                 upsert_schedule_entry(
@@ -831,19 +961,19 @@ def _render_month_editor(
                     schedule_year=year,
                     schedule_month=month,
                     auditor_full_name=auditor,
-                    status="Planned",
+                    status=stored_status,
                     planned_date=due_date,
                     actor=current_user_name,
                 )
-                st.success("Planned audit updated.")
-                st.rerun()
+                st.success("Audit assignment updated.")
+                _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
         if st.button("Delete Monthly Assignment", key=f"gantt_delete_{unique}", use_container_width=True):
             try:
                 delete_schedule_entry(client, str(entry.get("id") or ""))
                 st.success("Monthly assignment deleted.")
-                st.rerun()
+                _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
         return
@@ -854,11 +984,27 @@ def _render_month_editor(
 
     if effective_status(entry) != "Done":
         if admin:
+            st.info("The assigned auditor controls In Progress and Done updates.")
             return
+        if _clean_text(entry.get("status")) != "In Progress":
+            if st.button("Start Audit — In Progress", key=f"gantt_start_{unique}", use_container_width=True):
+                try:
+                    mark_audit_in_progress(
+                        client,
+                        entry_id=str(entry.get("id") or ""),
+                        assigned_auditor=assigned,
+                        current_user_name=current_user_name,
+                        remarks=_clean_text(entry.get("remarks")),
+                    )
+                    st.success("Audit marked In Progress.")
+                    _finish_month_editor()
+                except Exception as exc:
+                    st.error(str(exc))
         with st.form(f"gantt_done_{unique}"):
             audit_date = st.date_input(
                 "Date of Audit",
-                value=_today_pht(),
+                value=today,
+                max_value=today,
                 key=f"gantt_audit_date_{unique}",
             )
             remarks = st.text_area(
@@ -878,32 +1024,64 @@ def _render_month_editor(
                     accomplished_date=audit_date,
                     remarks=remarks,
                 )
-                st.success("Audit marked Done. The IRS five-working-day period has started.")
-                st.rerun()
+                st.success("Audit marked Done. The five-working-day initial-report period has started.")
+                _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
         return
 
-    st.write(f"**Date of Audit:** {_display_date(entry.get('accomplished_date'))}")
-    if stage.stage in {"For IRS", "IRS Overdue"}:
-        st.write(f"**IRS deadline:** {_display_date(stage.deadline)}")
-        if stage.overdue:
-            st.error("IRS is overdue. Submit the initial report now.")
-        elif admin:
-            st.info("Waiting for the assigned auditor to submit the IRS.")
-        if not admin:
-            with st.form(f"gantt_irs_{unique}"):
-                reference = st.text_input(
-                    "IRS Reference / Remarks",
-                    value=_clean_text(entry.get("initial_report_reference")),
-                    key=f"gantt_irs_ref_{unique}",
+    existing_audit_date = _parse_date(entry.get("accomplished_date")) or today
+    if not admin:
+        with st.form(f"gantt_edit_done_date_{unique}"):
+            edited_audit_date = st.date_input(
+                "Date of Audit",
+                value=min(existing_audit_date, today),
+                max_value=today,
+                key=f"gantt_edit_done_date_value_{unique}",
+            )
+            remarks = st.text_area(
+                "Audit Remarks / Reference",
+                value=_clean_text(entry.get("remarks")),
+                key=f"gantt_edit_done_remarks_{unique}",
+            )
+            update_date = st.form_submit_button("Update Date of Audit", use_container_width=True)
+        if update_date:
+            try:
+                update_auditor_accomplishment(
+                    client,
+                    entry_id=str(entry.get("id") or ""),
+                    assigned_auditor=assigned,
+                    current_user_name=current_user_name,
+                    status="Done",
+                    accomplished_date=edited_audit_date,
+                    remarks=remarks,
                 )
-                submit_irs = st.form_submit_button(
-                    "IRS — Initial Report Submitted",
+                st.success("Date of Audit updated.")
+                _finish_month_editor()
+            except Exception as exc:
+                st.error(str(exc))
+    else:
+        st.write(f"**Date of Audit:** {_display_date(entry.get('accomplished_date'))}")
+
+    if stage.stage in {"Done", "Overdue: IRS"}:
+        st.write(f"**Initial report deadline:** {_display_date(stage.deadline)}")
+        if stage.overdue:
+            st.error("Overdue: IRS — submit the initial report now.")
+        elif admin:
+            st.info("The initial-report five-working-day period is running.")
+        if not admin:
+            with st.form(f"gantt_initial_report_{unique}"):
+                reference = st.text_input(
+                    "Initial Report Reference / Remarks",
+                    value=_clean_text(entry.get("initial_report_reference")),
+                    key=f"gantt_initial_ref_{unique}",
+                )
+                submit_initial = st.form_submit_button(
+                    "Submit Initial Report",
                     type="primary",
                     use_container_width=True,
                 )
-            if submit_irs:
+            if submit_initial:
                 try:
                     submit_initial_report(
                         client,
@@ -912,17 +1090,17 @@ def _render_month_editor(
                         current_user_name=current_user_name,
                         reference=reference,
                     )
-                    st.success("IRS recorded using today's Philippine date. The FRS five-working-day period has started.")
-                    st.rerun()
+                    st.success("Initial report submitted. The five-working-day FRS period has started.")
+                    _finish_month_editor()
                 except Exception as exc:
                     st.error(str(exc))
         return
 
-    st.write(f"**IRS:** {_display_date(entry.get('initial_report_submitted_at'))}")
-    if stage.stage in {"For FRS", "FRS Overdue"}:
+    st.write(f"**Initial report submitted:** {_display_date(entry.get('initial_report_submitted_at'))}")
+    if stage.stage in {"For FRS", "Overdue: FRS"}:
         st.write(f"**FRS deadline:** {_display_date(stage.deadline)}")
         if stage.overdue:
-            st.error("FRS is overdue. Finalize and submit the report now.")
+            st.error("Overdue: FRS — finalize and submit the report now.")
         if admin:
             with st.form(f"gantt_frs_{unique}"):
                 reference = st.text_input(
@@ -944,11 +1122,11 @@ def _render_month_editor(
                         reference=reference,
                     )
                     st.success("FRS recorded using today's Philippine date.")
-                    st.rerun()
+                    _finish_month_editor()
                 except Exception as exc:
                     st.error(str(exc))
         else:
-            st.info("IRS submitted. Waiting for the Admin/Supervisor to complete the FRS.")
+            st.info("Initial report submitted. Waiting for the Admin/Supervisor to complete the FRS.")
         return
 
     if stage.stage == "FRS":
@@ -993,7 +1171,7 @@ def _filter_masters(
         ):
             continue
         if status_filter != "All" and not any(
-            report_stage_info(entry, holiday_rows).stage == status_filter
+            _display_stage(report_stage_info(entry, holiday_rows).stage) == status_filter
             for entry in visible_entries
         ):
             continue
@@ -1018,15 +1196,15 @@ def _filter_masters(
         if sort_by == "Status":
             rank = {
                 "Overdue": 0,
-                "IRS Overdue": 1,
-                "FRS Overdue": 2,
-                "For IRS": 3,
-                "For FRS": 4,
-                "Planned": 5,
-                "In Progress": 6,
+                "Overdue: IRS": 1,
+                "Overdue: FRS": 2,
+                "For FRS": 3,
+                "Scheduled": 4,
+                "In Progress": 5,
+                "Done": 6,
                 "FRS": 7,
             }
-            return rank.get(report_stage_info(first, holiday_rows).stage, 9)
+            return rank.get(_display_stage(report_stage_info(first, holiday_rows).stage), 9)
         if sort_by == "Month":
             return int(first.get("schedule_month") or 99)
         return _clean_text(master.get("custodian")).casefold()
@@ -1069,78 +1247,106 @@ def _render_matrix(
         st.info("No schedule matched the selected filters.")
         return []
 
-    # V4.5.25: render every matching custodian record in one dedicated scroll
-    # viewport. The actual Streamlit header element wrapper is sticky, while
-    # overscroll containment prevents the page from drifting to the sections below.
-    shown = filtered
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
-    widths = [1.04] * 17
+    month_headers = [month_name[month] for month in MONTHS]
+    rows: list[dict[str, Any]] = []
+    for master in filtered:
+        master_id = str(master.get("id") or "")
+        row: dict[str, Any] = {
+            "Company / Department": _clean_text(master.get("company_department")),
+            "Custodian": _clean_text(master.get("custodian")),
+            "Audit Task": _clean_text(master.get("audit_task")),
+            "Accountability": _format_accountability(master.get("accountability")),
+            "Frequency": f"{done_counts.get(master_id, 0)}×",
+        }
+        for month in MONTHS:
+            entry = lookup.get((master_id, month))
+            if entry and not admin and _name_key(entry.get("auditor_full_name")) != _name_key(current_user_name):
+                entry = None
+            if entry is None and not admin:
+                row[month_name[month]] = "—"
+            else:
+                row[month_name[month]] = _month_box_label(entry, holiday_rows)[0]
+        rows.append(row)
 
-    with _safe_container(key="iars-gantt-scroll-v4525"):
-        # Keep the header row directly under the full Gantt vertical block. This
-        # avoids the short nested container that prevented CSS sticky positioning.
-        header_cols = st.columns(widths, gap="small")
-        headers = ["Company / Department", "Custodian", "Audit Task", "Accountability", "Frequency"] + [
-            month_name[month] for month in MONTHS
-        ]
-        for idx, label in enumerate(headers):
-            header_cols[idx].markdown(
-                f'<div class="iars-gantt-head">{html.escape(label)}</div>',
-                unsafe_allow_html=True,
-            )
+    frame = pd.DataFrame(rows)
+    try:
+        styled = frame.style.map(_gantt_cell_style, subset=month_headers)
+        styled = styled.set_properties(
+            subset=month_headers,
+            **{"white-space": "pre-line", "text-align": "center", "vertical-align": "middle"},
+        )
+    except AttributeError:
+        styled = frame.style.applymap(_gantt_cell_style, subset=month_headers)
 
-        for master in shown:
+    column_config: dict[str, Any] = {
+        "Company / Department": _text_column("Company / Department", pinned=True),
+        "Custodian": _text_column("Custodian", pinned=True),
+        "Audit Task": _text_column("Audit Task", pinned=True),
+        "Accountability": _text_column("Accountability", pinned=True),
+        "Frequency": _text_column("Frequency", pinned=True),
+    }
+    for header in month_headers:
+        column_config[header] = _text_column(header, pinned=False)
+
+    generation = 0
+    try:
+        generation = int(st.session_state.get("iars_gantt_grid_generation_v4526", 0))
+    except Exception:
+        pass
+    grid_key = f"iars-gantt-grid-v4526-{year}-{generation}"
+    try:
+        event = st.dataframe(
+            styled,
+            width="stretch",
+            height=560,
+            hide_index=True,
+            column_config=column_config,
+            row_height=78,
+            key=grid_key,
+            on_select="rerun",
+            selection_mode="single-cell",
+        )
+    except TypeError:
+        event = st.dataframe(
+            styled,
+            use_container_width=True,
+            height=560,
+            hide_index=True,
+            column_config=column_config,
+            row_height=78,
+            key=grid_key,
+        )
+
+    cells = _event_cells(event)
+    if cells:
+        row_index, column_name = cells[-1]
+        month_by_header = {month_name[month]: month for month in MONTHS}
+        month = month_by_header.get(column_name)
+        if month is not None and 0 <= row_index < len(filtered):
+            master = filtered[row_index]
             master_id = str(master.get("id") or "")
-            row_cols = st.columns(widths, gap="small")
-            row_cols[0].markdown(
-                f'<div class="iars-gantt-textcell"><strong>{html.escape(_clean_text(master.get("company_department")))}</strong></div>',
-                unsafe_allow_html=True,
-            )
-            row_cols[1].markdown(
-                f'<div class="iars-gantt-textcell">{html.escape(_clean_text(master.get("custodian")))}</div>',
-                unsafe_allow_html=True,
-            )
-            row_cols[2].markdown(
-                f'<div class="iars-gantt-textcell">{html.escape(_clean_text(master.get("audit_task")))}</div>',
-                unsafe_allow_html=True,
-            )
-            row_cols[3].markdown(
-                f'<div class="iars-gantt-textcell"><strong>{html.escape(_format_accountability(master.get("accountability")))}</strong></div>',
-                unsafe_allow_html=True,
-            )
-            row_cols[4].markdown(
-                f'<div class="iars-gantt-textcell" style="justify-content:center"><strong>{done_counts.get(master_id, 0)}×</strong></div>',
-                unsafe_allow_html=True,
-            )
-            for month in MONTHS:
-                entry = lookup.get((master_id, month))
-                if entry and not admin and _name_key(entry.get("auditor_full_name")) != _name_key(current_user_name):
-                    entry = None
-                label, slug = _month_box_label(entry, holiday_rows)
-                if entry is None and not admin:
-                    row_cols[month + 4].markdown(
-                        '<div class="iars-gantt-textcell" style="justify-content:center;color:#98A2B3">—</div>',
-                        unsafe_allow_html=True,
-                    )
-                    continue
-                key_id = re.sub(r"[^a-zA-Z0-9]", "", master_id)
-                with row_cols[month + 4]:
-                    with _safe_container(key=f"gantt-{slug}-{key_id}-{year}-{month}"):
-                        with _safe_popover(label, key=f"gantt-popover-{key_id}-{year}-{month}") as popover:
-                            if getattr(popover, "open", None) is not False:
-                                _render_month_editor(
-                                    client,
-                                    master=master,
-                                    entry=entry,
-                                    year=year,
-                                    month=month,
-                                    holiday_rows=holiday_rows,
-                                    admin=admin,
-                                    current_user_name=current_user_name,
-                                    auditor_options=auditor_options,
-                                )
-    st.caption(f"Showing all {len(filtered)} matching custodian record(s) in one scrollable Gantt view. The full header stays visible while scrolling down; scroll sideways for January–December. Click a month box to update it.")
+            entry = lookup.get((master_id, month))
+            if entry and not admin and _name_key(entry.get("auditor_full_name")) != _name_key(current_user_name):
+                entry = None
+            if admin or entry is not None:
+                _open_month_editor_dialog(
+                    client,
+                    master=master,
+                    entry=entry,
+                    year=year,
+                    month=month,
+                    holiday_rows=holiday_rows,
+                    admin=admin,
+                    current_user_name=current_user_name,
+                    auditor_options=auditor_options,
+                )
+
+    st.caption(
+        f"Showing all {len(filtered)} matching custodian record(s) in one Gantt grid. "
+        "The native grid freezes the full Company-to-December header during vertical scrolling and pins Company through Frequency during horizontal scrolling. Click a month cell to update it."
+    )
     return filtered
 
 
@@ -1179,13 +1385,13 @@ def render_gantt_dashboard_alert(client: Any, current_user: dict[str, Any], *, a
 
     infos = [(entry, report_stage_info(entry, holidays)) for entry in entries]
     if admin:
-        red_stages = {"Overdue", "FRS Overdue"}
+        red_stages = {"Overdue", "Overdue: FRS"}
         notice_stage = "For FRS"
         red_title = "⚠ Overdue audit / FRS notification"
     else:
-        red_stages = {"Overdue", "IRS Overdue"}
-        notice_stage = "For IRS"
-        red_title = "⚠ Overdue audit / IRS notification"
+        red_stages = {"Overdue", "Overdue: IRS"}
+        notice_stage = "Done"
+        red_title = "⚠ Overdue audit / initial-report notification"
 
     overdue = [(entry, info) for entry, info in infos if info.stage in red_stages]
     notices = [(entry, info) for entry, info in infos if info.stage == notice_stage]
@@ -1217,7 +1423,7 @@ def render_yearly_gantt_page(
     current_name = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Yearly Audit Gantt Schedule</h2>'
-        '<p>Click a month box to assign the auditor, mark the audit Done, submit IRS, or submit FRS. Planned due dates are automatically set to the last day of the month. IRS and FRS each use five working days, excluding weekends and active non-working holidays.</p></div>',
+        '<p>Click a month cell to assign the auditor, update In Progress or Done, submit the initial report, or submit FRS. Scheduled due dates are automatically set to the last day of the month. Initial-report and FRS deadlines each use five working days, excluding weekends and active non-working holidays.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
@@ -1245,18 +1451,18 @@ def render_yearly_gantt_page(
     metric_cols = st.columns(5)
     metric_cols[0].metric("Assigned" if not admin else "Scheduled", len(visible_entries))
     metric_cols[1].metric("Done", sum(effective_status(entry) == "Done" for entry in visible_entries))
-    metric_cols[2].metric("For IRS", sum(stage == "For IRS" for stage in stages))
-    metric_cols[3].metric("For FRS", sum(stage == "For FRS" for stage in stages))
-    metric_cols[4].metric("Overdue", sum(stage in {"Overdue", "IRS Overdue", "FRS Overdue"} for stage in stages))
+    metric_cols[2].metric("For FRS", sum(stage == "For FRS" for stage in stages))
+    metric_cols[3].metric("FRS", sum(stage == "FRS" for stage in stages))
+    metric_cols[4].metric("Overdue", sum(stage in {"Overdue", "Overdue: IRS", "Overdue: FRS"} for stage in stages))
 
     if admin:
         st.markdown(
-            '<div class="iars-gantt-access-note"><strong>Administrator/Supervisor:</strong> Click any month box to assign an auditor. After IRS, click the box to mark FRS. FRS becomes overdue after five working days from the IRS submission date.</div>',
+            '<div class="iars-gantt-access-note"><strong>Administrator/Supervisor:</strong> Click any month box to assign an auditor. After the initial report is submitted, click the month cell to mark FRS. FRS becomes overdue after five working days from the initial-report submission date.</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            f'<div class="iars-gantt-access-note"><strong>Auditor — {html.escape(nickname_for(current_name))}:</strong> Click your assigned month box to mark Done and later mark IRS. IRS becomes overdue after five working days from the Date of Audit.</div>',
+            f'<div class="iars-gantt-access-note"><strong>Auditor — {html.escape(nickname_for(current_name))}:</strong> Click your assigned month cell to update In Progress or Done and submit the initial report. It becomes Overdue: IRS after five working days from the Date of Audit.</div>',
             unsafe_allow_html=True,
         )
 
@@ -1293,6 +1499,17 @@ def render_yearly_gantt_page(
     sort_desc = st.toggle("Descending order", value=False, key="iars_gantt_sort_desc_v4520")
     month_filter = None if month_label == "All" else list(month_name).index(month_label)
     st.caption("Month filter affects custodian rows only. All January–December columns remain visible for every matching row.")
+    st.markdown(
+        '<div class="iars-gantt-legend" aria-label="Gantt status color legend">'
+        '<span class="iars-gantt-chip scheduled">Scheduled</span>'
+        '<span class="iars-gantt-chip in-progress">In Progress</span>'
+        '<span class="iars-gantt-chip done">Done</span>'
+                '<span class="iars-gantt-chip for-frs">For FRS</span>'
+        '<span class="iars-gantt-chip frs">FRS</span>'
+        '<span class="iars-gantt-chip overdue">Overdue / Overdue: IRS / Overdue: FRS</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     _render_matrix(
         client,
@@ -1336,7 +1553,7 @@ def _render_holiday_admin(
     holiday_template_path: Path,
 ) -> None:
     actor = _user_name(current_user)
-    st.markdown("### Holiday Calendar for IRS / FRS Deadlines")
+    st.markdown("### Holiday Calendar for Initial Report / FRS Deadlines")
     st.caption(
         "Upload official national, Province of Rizal, and San Mateo, Rizal holidays. "
         "Special Working holidays are stored for reference but are not excluded from the count."
@@ -1470,7 +1687,7 @@ def render_gantt_master_data_page(
     actor = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Gantt Master Data</h2>'
-        '<p>Admin-only maintenance for the custodian audit universe and the holiday calendar used by automatic IRS/FRS working-day deadlines.</p></div>',
+        '<p>Admin-only maintenance for the custodian audit universe and the holiday calendar used by automatic initial-report/FRS working-day deadlines.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
