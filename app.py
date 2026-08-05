@@ -1075,7 +1075,7 @@ def _apply_v4502_transition_refinements() -> None:
             100% { transform: translateX(205%); }
         }
 
-        /* Header coordinates are controlled only by the V4.5.27 separated Gantt-header
+        /* Header coordinates are controlled only by the V4.5.28 separated fixed Gantt-header
            block below. Remove the older sticky/negative-transform positioning so
            every module opens at exactly the same top position. */
         .stApp:has(.edl-topbar) .block-container,
@@ -4770,7 +4770,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.27",
+    version="4.5.28",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -5796,7 +5796,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.27", "note": "Separate Scroll-Viewport Gantt Header and Admin Editable Historical Status", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.28", "note": "Fixed Separate Gantt Header, Editable Historical Status, and Stable Cloud Dependencies", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

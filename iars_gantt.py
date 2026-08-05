@@ -13,6 +13,7 @@ import re
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 GANTT_MASTER_TABLE = "iars_gantt_master"
@@ -868,30 +869,34 @@ def _render_gantt_css() -> None:
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
         .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
 
-        /* V4.5.27: one HTML Gantt viewport. The header is part of the table's
-           dedicated scroll viewport instead of a separate Streamlit widget. */
+        /* V4.5.28: the column header is physically separated from the vertically
+           scrolling body. This avoids relying on Streamlit wrapper stickiness. */
         .iars-gantt-table-shell {border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFFFFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}
-        .iars-gantt-table-scroll {overflow:auto;position:relative;scrollbar-gutter:stable;background:#FFFFFF;}
-        .iars-gantt-table {border-collapse:separate;border-spacing:0;table-layout:fixed;width:1768px;min-width:1768px;margin:0!important;font-size:.73rem;color:#23324A;}
-        .iars-gantt-table th,.iars-gantt-table td {box-sizing:border-box;width:104px;min-width:104px;max-width:104px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.34rem .38rem;overflow:hidden;vertical-align:middle;}
-        .iars-gantt-table thead th {position:sticky;top:0;z-index:40;height:54px;background:#EAF0F8;color:#0B2B55;text-align:center;font-weight:800;line-height:1.15;box-shadow:0 2px 0 #C8D4E3;}
-        .iars-gantt-table tbody td {height:82px;background:#FFFFFF;word-break:break-word;line-height:1.22;}
-        .iars-gantt-table tbody tr:hover td {background:#F8FAFC;}
-        .iars-gantt-table th:nth-child(1),.iars-gantt-table td:nth-child(1){position:sticky;left:0;}
-        .iars-gantt-table th:nth-child(2),.iars-gantt-table td:nth-child(2){position:sticky;left:104px;}
-        .iars-gantt-table th:nth-child(3),.iars-gantt-table td:nth-child(3){position:sticky;left:208px;}
-        .iars-gantt-table th:nth-child(4),.iars-gantt-table td:nth-child(4){position:sticky;left:312px;}
-        .iars-gantt-table th:nth-child(5),.iars-gantt-table td:nth-child(5){position:sticky;left:416px;}
-        .iars-gantt-table thead th:nth-child(-n+5){z-index:70;background:#EAF0F8;}
-        .iars-gantt-table tbody td:nth-child(-n+5){z-index:20;background:#FFFFFF;}
-        .iars-gantt-table tbody tr:hover td:nth-child(-n+5){background:#F8FAFC;}
-        .iars-gantt-table .iars-static-cell {text-align:left;font-weight:600;}
-        .iars-gantt-table .iars-accountability,.iars-gantt-table .iars-frequency {text-align:center;font-weight:800;white-space:nowrap;}
-        .iars-gantt-month-box {display:flex;min-height:68px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.16rem;border:1px solid #CBD5E1;border-radius:9px;padding:.35rem .25rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.12;transition:transform .08s ease,border-color .08s ease,box-shadow .08s ease;}
+        .iars-gantt-x-scroll {overflow-x:auto;overflow-y:hidden;position:relative;background:#FFFFFF;scrollbar-gutter:stable;}
+        .iars-gantt-canvas {width:1578px;min-width:1578px;background:#FFFFFF;}
+        .iars-gantt-header-table,.iars-gantt-body-table {border-collapse:separate;border-spacing:0;table-layout:fixed;width:1564px;min-width:1564px;margin:0!important;font-size:.72rem;color:#23324A;}
+        .iars-gantt-header-table th,.iars-gantt-body-table td {box-sizing:border-box;width:92px;min-width:92px;max-width:92px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.32rem .34rem;overflow:hidden;vertical-align:middle;}
+        .iars-gantt-header-strip {position:relative;z-index:90;width:1578px;min-width:1578px;background:#EAF0F8;box-shadow:0 2px 0 #C8D4E3;}
+        .iars-gantt-header-table th {height:54px;background:#EAF0F8;color:#0B2B55;text-align:center!important;font-weight:800;line-height:1.14;word-break:normal;overflow-wrap:anywhere;}
+        .iars-gantt-header-spacer {display:block;position:absolute;right:0;top:0;width:14px;height:54px;background:#EAF0F8;border-bottom:1px solid #D9E2EE;}
+        .iars-gantt-body-scroll {width:1578px;min-width:1578px;overflow-y:auto;overflow-x:clip;scrollbar-gutter:stable;background:#FFFFFF;}
+        .iars-gantt-body-table tbody td {height:82px;background:#FFFFFF;word-break:break-word;line-height:1.20;}
+        .iars-gantt-body-table tbody tr:hover td {background:#F8FAFC;}
+        .iars-gantt-header-table th:nth-child(1),.iars-gantt-body-table td:nth-child(1){position:sticky;left:0;}
+        .iars-gantt-header-table th:nth-child(2),.iars-gantt-body-table td:nth-child(2){position:sticky;left:92px;}
+        .iars-gantt-header-table th:nth-child(3),.iars-gantt-body-table td:nth-child(3){position:sticky;left:184px;}
+        .iars-gantt-header-table th:nth-child(4),.iars-gantt-body-table td:nth-child(4){position:sticky;left:276px;}
+        .iars-gantt-header-table th:nth-child(5),.iars-gantt-body-table td:nth-child(5){position:sticky;left:368px;}
+        .iars-gantt-header-table th:nth-child(-n+5){z-index:120;background:#EAF0F8;}
+        .iars-gantt-body-table td:nth-child(-n+5){z-index:40;background:#FFFFFF;}
+        .iars-gantt-body-table tbody tr:hover td:nth-child(-n+5){background:#F8FAFC;}
+        .iars-gantt-body-table .iars-static-cell {text-align:left;font-weight:600;}
+        .iars-gantt-body-table .iars-accountability,.iars-gantt-body-table .iars-frequency {text-align:center;font-weight:800;white-space:nowrap;}
+        .iars-gantt-month-box {display:flex;min-height:68px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.14rem;border:1px solid #CBD5E1;border-radius:9px;padding:.30rem .18rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.10;transition:transform .08s ease,border-color .08s ease,box-shadow .08s ease;}
         .iars-gantt-month-box:hover {transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);}
-        .iars-gantt-month-stage {font-size:.73rem;font-weight:850;}
-        .iars-gantt-month-auditor {font-size:.72rem;font-weight:800;}
-        .iars-gantt-month-date {font-size:.67rem;font-weight:650;white-space:nowrap;}
+        .iars-gantt-month-stage {font-size:.70rem;font-weight:850;}
+        .iars-gantt-month-auditor {font-size:.69rem;font-weight:800;}
+        .iars-gantt-month-date {font-size:.63rem;font-weight:650;white-space:nowrap;}
         .iars-gantt-month-box.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
         .iars-gantt-month-box.in-progress {background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
         .iars-gantt-month-box.done {background:#DCFCE7;color:#14532D;border-color:#22C55E;}
@@ -1405,8 +1410,12 @@ def _month_cell_html(
     href = html.escape(_gantt_edit_href(master_id, year, month), quote=True)
     return (
         f'<a class="iars-gantt-month-box {html.escape(slug)}" '
-        f'href="{href}" aria-label="Edit {html.escape(month_name[month])} audit schedule">{content}</a>'
+        f'href="{href}" target="_parent" aria-label="Edit {html.escape(month_name[month])} audit schedule">{content}</a>'
     )
+
+
+def _gantt_body_viewport_height(row_count: int) -> int:
+    return min(560, max(190, 20 + int(row_count) * 82))
 
 
 def _build_gantt_table_html(
@@ -1419,16 +1428,23 @@ def _build_gantt_table_html(
     current_user_name: str,
     done_counts: dict[str, int],
 ) -> str:
+    """Build a self-contained Gantt component with a truly separate header.
+
+    The body is the only vertically scrollable element. JavaScript synchronizes
+    its horizontal position with the January-to-December header strip, while
+    Company through Frequency remain sticky inside the body scroller.
+    """
     lookup = _entry_lookup(entries)
-    headers = [
+    fixed_headers = [
         "Company / Department",
         "Custodian",
         "Audit Task",
         "Accountability",
         "Frequency",
-        *[month_name[month] for month in MONTHS],
     ]
-    header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+    month_headers = [month_name[month] for month in MONTHS]
+    fixed_header_html = "".join(f"<th>{html.escape(header)}</th>" for header in fixed_headers)
+    month_header_html = "".join(f"<th>{html.escape(header)}</th>" for header in month_headers)
     body_rows: list[str] = []
     current_key = _name_key(current_user_name)
 
@@ -1464,15 +1480,81 @@ def _build_gantt_table_html(
             )
         body_rows.append("<tr>" + "".join(cells) + "</tr>")
 
-    viewport_height = min(560, max(190, 56 + len(filtered) * 83))
-    return (
-        '<div class="iars-gantt-table-shell">'
-        f'<div class="iars-gantt-table-scroll" style="height:{viewport_height}px">'
-        '<table class="iars-gantt-table">'
-        f'<thead><tr>{header_html}</tr></thead>'
-        f'<tbody>{"".join(body_rows)}</tbody>'
-        '</table></div></div>'
-    )
+    viewport_height = _gantt_body_viewport_height(len(filtered))
+    return f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<base target="_parent">
+<style>
+:root{{--cell:92px;--fixed-width:460px;--month-width:1104px;--table-width:1564px;}}
+*{{box-sizing:border-box;}}
+html,body{{margin:0;padding:0;background:transparent;font-family:Inter,"Segoe UI",Roboto,Arial,sans-serif;color:#23324A;overflow:hidden;}}
+.gantt-shell{{width:100%;border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}}
+.gantt-header{{display:grid;grid-template-columns:var(--fixed-width) minmax(0,1fr);height:54px;background:#EAF0F8;box-shadow:0 2px 0 #C8D4E3;position:relative;z-index:100;}}
+.gantt-header-fixed{{width:var(--fixed-width);overflow:hidden;position:relative;z-index:120;background:#EAF0F8;}}
+.gantt-header-months{{min-width:0;overflow:hidden;background:#EAF0F8;}}
+.gantt-header-months-inner{{width:var(--month-width);will-change:transform;transform:translateX(0);}}
+.gantt-fixed-table,.gantt-month-table,.gantt-body-table{{border-collapse:separate;border-spacing:0;table-layout:fixed;margin:0;width:100%;font-size:.72rem;color:#23324A;}}
+.gantt-fixed-table{{width:var(--fixed-width);min-width:var(--fixed-width);}}
+.gantt-month-table{{width:var(--month-width);min-width:var(--month-width);}}
+.gantt-body-table{{width:var(--table-width);min-width:var(--table-width);}}
+th,td{{width:var(--cell);min-width:var(--cell);max-width:var(--cell);border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.32rem .34rem;overflow:hidden;vertical-align:middle;}}
+th{{height:54px;background:#EAF0F8;color:#0B2B55;text-align:center;font-weight:800;line-height:1.14;overflow-wrap:anywhere;}}
+.gantt-body-scroll{{height:{viewport_height}px;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:#FFF;position:relative;}}
+.gantt-body-table td{{height:82px;background:#FFF;word-break:break-word;line-height:1.20;}}
+.gantt-body-table tr:hover td{{background:#F8FAFC;}}
+.gantt-body-table td:nth-child(1){{position:sticky;left:0;z-index:50;}}
+.gantt-body-table td:nth-child(2){{position:sticky;left:92px;z-index:50;}}
+.gantt-body-table td:nth-child(3){{position:sticky;left:184px;z-index:50;}}
+.gantt-body-table td:nth-child(4){{position:sticky;left:276px;z-index:50;}}
+.gantt-body-table td:nth-child(5){{position:sticky;left:368px;z-index:50;box-shadow:2px 0 0 #C8D4E3;}}
+.gantt-body-table tr:hover td:nth-child(-n+5){{background:#F8FAFC;}}
+.iars-static-cell{{text-align:left;font-weight:600;}}
+.iars-accountability,.iars-frequency{{text-align:center;font-weight:800;white-space:nowrap;}}
+.iars-gantt-month-box{{display:flex;min-height:68px;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:.14rem;border:1px solid #CBD5E1;border-radius:9px;padding:.30rem .18rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.10;transition:transform .08s ease,border-color .08s ease,box-shadow .08s ease;}}
+.iars-gantt-month-box:hover{{transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);}}
+.iars-gantt-month-stage{{font-size:.70rem;font-weight:850;}}
+.iars-gantt-month-auditor{{font-size:.69rem;font-weight:800;}}
+.iars-gantt-month-date{{font-size:.63rem;font-weight:650;white-space:nowrap;}}
+.iars-gantt-month-box.scheduled{{background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}}
+.iars-gantt-month-box.in-progress{{background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}}
+.iars-gantt-month-box.done{{background:#DCFCE7;color:#14532D;border-color:#22C55E;}}
+.iars-gantt-month-box.for-frs{{background:#ECFEFF;color:#164E63;border-color:#0891B2;}}
+.iars-gantt-month-box.frs{{background:#D1FAE5;color:#064E3B;border-color:#047857;}}
+.iars-gantt-month-box.overdue,.iars-gantt-month-box.overdue-irs,.iars-gantt-month-box.overdue-frs{{background:#B91C1C;color:#FFF;border-color:#991B1B;}}
+.iars-gantt-month-box.empty{{background:#FAFBFC;color:#667085;border-color:#CBD5E1;}}
+.iars-gantt-month-na{{display:flex;align-items:center;justify-content:center;min-height:68px;color:#98A2B3;font-weight:700;}}
+</style>
+</head>
+<body>
+<div class="gantt-shell">
+  <div class="gantt-header">
+    <div class="gantt-header-fixed">
+      <table class="gantt-fixed-table"><thead><tr>{fixed_header_html}</tr></thead></table>
+    </div>
+    <div class="gantt-header-months">
+      <div id="ganttHeaderMonths" class="gantt-header-months-inner">
+        <table class="gantt-month-table"><thead><tr>{month_header_html}</tr></thead></table>
+      </div>
+    </div>
+  </div>
+  <div id="ganttBodyScroll" class="gantt-body-scroll">
+    <table class="gantt-body-table"><tbody>{"".join(body_rows)}</tbody></table>
+  </div>
+</div>
+<script>
+(() => {{
+  const body = document.getElementById('ganttBodyScroll');
+  const months = document.getElementById('ganttHeaderMonths');
+  if (!body || !months) return;
+  const sync = () => {{ months.style.transform = `translateX(${{-body.scrollLeft}}px)`; }};
+  body.addEventListener('scroll', sync, {{passive:true}});
+  sync();
+}})();
+</script>
+</body>
+</html>"""
 
 
 def _render_matrix(
@@ -1520,7 +1602,8 @@ def _render_matrix(
         current_user_name=current_user_name,
         done_counts=done_counts,
     )
-    st.markdown(table_html, unsafe_allow_html=True)
+    component_height = _gantt_body_viewport_height(len(filtered)) + 58
+    components.html(table_html, height=component_height, scrolling=False)
 
     selected = _selected_gantt_edit()
     if selected:
@@ -1552,7 +1635,7 @@ def _render_matrix(
 
     st.caption(
         f"Showing all {len(filtered)} matching custodian record(s) in one scrollable Gantt view. "
-        "The Company-to-December header is rendered inside the dedicated table viewport and remains visible while its rows scroll. Company through Frequency remain frozen during horizontal scrolling. Click a month box to update it."
+        "The Company-to-December header is a separate fixed strip above the vertically scrolling rows. Company through Frequency remain frozen during horizontal scrolling. Click a month box to update it."
     )
     return filtered
 
@@ -1664,7 +1747,7 @@ def render_yearly_gantt_page(
 
     if admin:
         st.markdown(
-            '<div class="iars-gantt-access-note"><strong>Administrator/Supervisor:</strong> Click any month box to create or edit its auditor and status. You may encode previous months as Scheduled, In Progress, or Done. A Done record starts the five-working-day initial-report period from the selected Date of Audit; without an initial report, it becomes Overdue: IRS. After initial-report submission, it becomes For FRS; without FRS after five working days, it becomes Overdue: FRS.</div>',
+            '<div class="iars-gantt-access-note"><strong>Administrator/Supervisor:</strong> Click any month box to create or edit the auditor and status. Use Scheduled for upcoming audits, In Progress for ongoing audits, and Done for completed audits, including previous months. Saving Done starts the five-working-day initial-report count from the Date of Audit. Without an initial report, the box becomes Overdue: IRS. After the initial report is submitted, it becomes For FRS; without final submission after another five working days, it becomes Overdue: FRS.</div>',
             unsafe_allow_html=True,
         )
     else:
