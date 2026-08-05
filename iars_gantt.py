@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterable, Iterator
+from urllib.parse import urlencode
 import html
 import re
 
@@ -25,6 +26,7 @@ DISPLAY_STATUSES = ["Scheduled", "In Progress", "Overdue", "Done"] + REPORT_STAG
 MONTHS = list(range(1, 13))
 PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8))
 REPORT_WORKING_DAYS = 5
+GANTT_EDIT_QUERY_PARAM = "iars_gantt_edit"
 
 HOLIDAY_COVERAGES = ["National", "Province of Rizal", "San Mateo, Rizal"]
 HOLIDAY_TYPES = [
@@ -447,6 +449,77 @@ def upsert_schedule_entry(
     ).execute()
 
 
+def admin_save_schedule_entry(
+    client: Any,
+    *,
+    entry: dict[str, Any] | None,
+    master_id: str,
+    schedule_year: int,
+    schedule_month: int,
+    auditor_full_name: str,
+    status: str,
+    accomplished_date: date | None,
+    remarks: str,
+    actor: str,
+) -> None:
+    """Create or edit any monthly schedule from the Admin/Supervisor dialog.
+
+    Admin may backfill previous months as Scheduled, In Progress, or Done. A
+    Done date defaults to today in the UI, may be moved backward, and may never
+    be later than today's Philippine date.
+    """
+    clean_status = _clean_text(status)
+    if clean_status == "Scheduled":
+        clean_status = "Planned"
+    if clean_status not in {"Planned", "In Progress", "Done"}:
+        raise GanttError("Select Scheduled, In Progress, or Done.")
+    auditor = _clean_text(auditor_full_name)
+    if not auditor:
+        raise GanttError("Assigned auditor is required.")
+    if clean_status == "Done":
+        if not accomplished_date:
+            raise GanttError("Date of Audit is required when status is Done.")
+        if accomplished_date > _today_pht():
+            raise GanttError("Date of Audit cannot be later than today's Philippine date.")
+    else:
+        accomplished_date = None
+
+    due_date = month_end_date(schedule_year, schedule_month)
+    payload: dict[str, Any] = {
+        "master_id": master_id,
+        "schedule_year": int(schedule_year),
+        "schedule_month": int(schedule_month),
+        "auditor_full_name": auditor,
+        "auditor_nickname": nickname_for(auditor),
+        "status": clean_status,
+        "planned_date": due_date.isoformat(),
+        "accomplished_date": accomplished_date.isoformat() if accomplished_date else None,
+        "remarks": _clean_text(remarks),
+        "updated_by": actor,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    previous_status = _clean_text((entry or {}).get("status"))
+    if clean_status != "Done" or previous_status != "Done":
+        payload.update({
+            "initial_report_submitted_at": None,
+            "initial_report_reference": None,
+            "final_report_submitted_at": None,
+            "final_report_reference": None,
+        })
+
+    entry_id = _clean_text((entry or {}).get("id"))
+    if entry_id:
+        client.table(GANTT_SCHEDULE_TABLE).update(payload).eq("id", entry_id).execute()
+        return
+
+    payload["created_by"] = actor
+    client.table(GANTT_SCHEDULE_TABLE).upsert(
+        payload,
+        on_conflict="master_id,schedule_year,schedule_month",
+    ).execute()
+
+
 def mark_audit_in_progress(
     client: Any,
     *,
@@ -706,6 +779,82 @@ def _month_box_label(entry: dict[str, Any] | None, holiday_rows: list[dict[str, 
     return f"{display_stage}\n{nickname}\n{date_label}", _stage_slug(display_stage)
 
 
+def _query_params_as_dict() -> dict[str, Any]:
+    """Return current query parameters without assuming one Streamlit version."""
+    try:
+        query_params = getattr(st, "query_params")
+        output: dict[str, Any] = {}
+        for key in query_params:
+            try:
+                values = query_params.get_all(key)
+            except Exception:
+                values = query_params[key]
+            if isinstance(values, (list, tuple)):
+                output[str(key)] = [str(value) for value in values]
+            else:
+                output[str(key)] = str(values)
+        return output
+    except Exception:
+        try:
+            values = st.experimental_get_query_params()
+            return dict(values or {})
+        except Exception:
+            return {}
+
+
+def _query_param_value(name: str) -> str:
+    value = _query_params_as_dict().get(name, "")
+    if isinstance(value, (list, tuple)):
+        return _clean_text(value[-1] if value else "")
+    return _clean_text(value)
+
+
+def _gantt_edit_href(master_id: str, year: int, month: int) -> str:
+    params = _query_params_as_dict()
+    params[GANTT_EDIT_QUERY_PARAM] = f"{master_id}|{int(year)}|{int(month)}"
+    pairs: list[tuple[str, str]] = []
+    for key, value in params.items():
+        if isinstance(value, (list, tuple)):
+            pairs.extend((str(key), str(item)) for item in value)
+        else:
+            pairs.append((str(key), str(value)))
+    return "?" + urlencode(pairs)
+
+
+def _selected_gantt_edit() -> tuple[str, int, int] | None:
+    raw = _query_param_value(GANTT_EDIT_QUERY_PARAM)
+    if not raw:
+        return None
+    parts = raw.split("|")
+    if len(parts) != 3:
+        return None
+    try:
+        master_id = _clean_text(parts[0])
+        year = int(parts[1])
+        month = int(parts[2])
+    except (TypeError, ValueError):
+        return None
+    if not master_id or month not in MONTHS:
+        return None
+    return master_id, year, month
+
+
+def _clear_gantt_edit_query() -> None:
+    try:
+        query_params = getattr(st, "query_params")
+        if GANTT_EDIT_QUERY_PARAM in query_params:
+            del query_params[GANTT_EDIT_QUERY_PARAM]
+        return
+    except Exception:
+        pass
+    try:
+        params = _query_params_as_dict()
+        params.pop(GANTT_EDIT_QUERY_PARAM, None)
+        st.experimental_set_query_params(**params)
+    except Exception:
+        pass
+
+
 def _render_gantt_css() -> None:
     st.markdown(
         """
@@ -718,11 +867,39 @@ def _render_gantt_css() -> None:
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
         .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
-        /* V4.5.26 uses Streamlit's native dataframe grid. Its header is frozen by
-           the grid itself, so it no longer depends on fragile CSS selectors for
-           nested st.columns wrappers. */
-        [class*="st-key-iars-gantt-grid-v4526"] [data-testid="stDataFrame"] {border:1px solid #D9E2EE!important;border-radius:14px!important;overflow:hidden!important;}
-        [class*="st-key-iars-gantt-grid-v4526"] canvas {cursor:pointer!important;}
+
+        /* V4.5.27: one HTML Gantt viewport. The header is part of the table's
+           dedicated scroll viewport instead of a separate Streamlit widget. */
+        .iars-gantt-table-shell {border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFFFFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}
+        .iars-gantt-table-scroll {overflow:auto;position:relative;scrollbar-gutter:stable;background:#FFFFFF;}
+        .iars-gantt-table {border-collapse:separate;border-spacing:0;table-layout:fixed;width:1768px;min-width:1768px;margin:0!important;font-size:.73rem;color:#23324A;}
+        .iars-gantt-table th,.iars-gantt-table td {box-sizing:border-box;width:104px;min-width:104px;max-width:104px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.34rem .38rem;overflow:hidden;vertical-align:middle;}
+        .iars-gantt-table thead th {position:sticky;top:0;z-index:40;height:54px;background:#EAF0F8;color:#0B2B55;text-align:center;font-weight:800;line-height:1.15;box-shadow:0 2px 0 #C8D4E3;}
+        .iars-gantt-table tbody td {height:82px;background:#FFFFFF;word-break:break-word;line-height:1.22;}
+        .iars-gantt-table tbody tr:hover td {background:#F8FAFC;}
+        .iars-gantt-table th:nth-child(1),.iars-gantt-table td:nth-child(1){position:sticky;left:0;}
+        .iars-gantt-table th:nth-child(2),.iars-gantt-table td:nth-child(2){position:sticky;left:104px;}
+        .iars-gantt-table th:nth-child(3),.iars-gantt-table td:nth-child(3){position:sticky;left:208px;}
+        .iars-gantt-table th:nth-child(4),.iars-gantt-table td:nth-child(4){position:sticky;left:312px;}
+        .iars-gantt-table th:nth-child(5),.iars-gantt-table td:nth-child(5){position:sticky;left:416px;}
+        .iars-gantt-table thead th:nth-child(-n+5){z-index:70;background:#EAF0F8;}
+        .iars-gantt-table tbody td:nth-child(-n+5){z-index:20;background:#FFFFFF;}
+        .iars-gantt-table tbody tr:hover td:nth-child(-n+5){background:#F8FAFC;}
+        .iars-gantt-table .iars-static-cell {text-align:left;font-weight:600;}
+        .iars-gantt-table .iars-accountability,.iars-gantt-table .iars-frequency {text-align:center;font-weight:800;white-space:nowrap;}
+        .iars-gantt-month-box {display:flex;min-height:68px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.16rem;border:1px solid #CBD5E1;border-radius:9px;padding:.35rem .25rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.12;transition:transform .08s ease,border-color .08s ease,box-shadow .08s ease;}
+        .iars-gantt-month-box:hover {transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);}
+        .iars-gantt-month-stage {font-size:.73rem;font-weight:850;}
+        .iars-gantt-month-auditor {font-size:.72rem;font-weight:800;}
+        .iars-gantt-month-date {font-size:.67rem;font-weight:650;white-space:nowrap;}
+        .iars-gantt-month-box.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
+        .iars-gantt-month-box.in-progress {background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
+        .iars-gantt-month-box.done {background:#DCFCE7;color:#14532D;border-color:#22C55E;}
+        .iars-gantt-month-box.for-frs {background:#ECFEFF;color:#164E63;border-color:#0891B2;}
+        .iars-gantt-month-box.frs {background:#D1FAE5;color:#064E3B;border-color:#047857;}
+        .iars-gantt-month-box.overdue,.iars-gantt-month-box.overdue-irs,.iars-gantt-month-box.overdue-frs {background:#B91C1C;color:#FFFFFF;border-color:#991B1B;}
+        .iars-gantt-month-box.empty {background:#FAFBFC;color:#667085;border-color:#CBD5E1;}
+        .iars-gantt-month-na {display:flex;align-items:center;justify-content:center;min-height:68px;color:#98A2B3;font-weight:700;}
         .iars-gantt-legend {display:flex;flex-wrap:wrap;gap:.42rem;margin:.35rem 0 .7rem;}
         .iars-gantt-chip {display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:.28rem .62rem;font-size:.74rem;font-weight:800;border:1px solid transparent;}
         .iars-gantt-chip.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
@@ -762,60 +939,22 @@ def _safe_popover(label: str, *, key: str) -> Iterator[Any]:
 
 def _reset_gantt_grid_selection() -> None:
     try:
-        st.session_state["iars_gantt_grid_generation_v4526"] = int(
-            st.session_state.get("iars_gantt_grid_generation_v4526", 0)
+        st.session_state["iars_gantt_grid_generation_v4527"] = int(
+            st.session_state.get("iars_gantt_grid_generation_v4527", 0)
         ) + 1
     except Exception:
         pass
 
 
+def _dismiss_month_editor() -> None:
+    _clear_gantt_edit_query()
+    _reset_gantt_grid_selection()
+
+
 def _finish_month_editor() -> None:
+    _clear_gantt_edit_query()
     _reset_gantt_grid_selection()
     st.rerun()
-
-
-def _event_cells(event: Any) -> list[tuple[int, str]]:
-    if event is None:
-        return []
-    selection = getattr(event, "selection", None)
-    if selection is None and isinstance(event, dict):
-        selection = event.get("selection")
-    cells = getattr(selection, "cells", None)
-    if cells is None and isinstance(selection, dict):
-        cells = selection.get("cells")
-    output: list[tuple[int, str]] = []
-    for cell in cells or []:
-        if isinstance(cell, (list, tuple)) and len(cell) == 2:
-            try:
-                output.append((int(cell[0]), str(cell[1])))
-            except (TypeError, ValueError):
-                continue
-    return output
-
-
-def _text_column(label: str, *, pinned: bool = False, width: int = 104) -> Any:
-    namespace = getattr(st, "column_config", None)
-    factory = getattr(namespace, "TextColumn", None) if namespace is not None else None
-    if callable(factory):
-        return factory(label, width=width, pinned=pinned, alignment="center")
-    return label
-
-
-def _gantt_cell_style(value: Any) -> str:
-    first_line = str(value or "").splitlines()[0].strip()
-    base = "text-align:center;font-weight:700;white-space:pre-line;border:1px solid #D9E2EE;"
-    if first_line in {"Overdue", "Overdue: IRS", "Overdue: FRS"}:
-        return base + "background-color:#B91C1C;color:#FFFFFF;"
-    palette = {
-        "Scheduled": ("#EAF2FF", "#1E3A8A", "#3B82F6"),
-        "In Progress": ("#FFF4E5", "#7C2D12", "#F59E0B"),
-        "Done": ("#DCFCE7", "#14532D", "#22C55E"),
-        "For FRS": ("#ECFEFF", "#164E63", "#0891B2"),
-        "FRS": ("#D1FAE5", "#064E3B", "#047857"),
-        "＋ Schedule": ("#FAFBFC", "#667085", "#CBD5E1"),
-    }
-    background, foreground, border = palette.get(first_line, ("#FFFFFF", "#344054", "#D9E2EE"))
-    return base + f"background-color:{background};color:{foreground};border-color:{border};"
 
 
 def _open_month_editor_dialog(
@@ -837,7 +976,7 @@ def _open_month_editor_dialog(
             decorator = dialog_factory(
                 title,
                 width="small",
-                on_dismiss=_reset_gantt_grid_selection,
+                on_dismiss=_dismiss_month_editor,
             )
         except TypeError:
             decorator = dialog_factory(title)
@@ -896,79 +1035,81 @@ def _render_month_editor(
         f"{html.escape(_clean_text(master.get('audit_task')))} · {_format_accountability(master.get('accountability'))}"
     )
 
-    if entry is None:
-        if not admin:
-            st.caption("No audit assignment for your account.")
-            return
-        options = list(dict.fromkeys([name for name in auditor_options if _clean_text(name)]))
+    # Admin/Supervisor can create or edit every monthly record, including
+    # backfilling previous months that were already completed.
+    if admin:
+        options = list(dict.fromkeys(
+            [name for name in auditor_options if _clean_text(name)]
+            + ([_clean_text((entry or {}).get("auditor_full_name"))] if entry else [])
+        ))
+        options = [name for name in options if name]
         if not options:
             st.error("No auditor account is available for assignment.")
             return
-        with st.form(f"gantt_plan_new_{unique}"):
-            auditor = st.selectbox(
-                "Auditor",
-                options,
-                format_func=lambda name: f"{name} — {nickname_for(name)}",
-                key=f"gantt_new_auditor_{unique}",
-            )
-            st.text_input("Status", value="Scheduled", disabled=True, key=f"gantt_new_status_{unique}")
-            st.text_input("Due Date", value=_box_date(due_date), disabled=True, key=f"gantt_new_due_{unique}")
-            save = st.form_submit_button("Save Scheduled Audit", type="primary", use_container_width=True)
-        if save:
-            try:
-                upsert_schedule_entry(
-                    client,
-                    master_id=master_id,
-                    schedule_year=year,
-                    schedule_month=month,
-                    auditor_full_name=auditor,
-                    status="Planned",
-                    planned_date=due_date,
-                    actor=current_user_name,
-                )
-                st.success("Scheduled audit saved.")
-                _finish_month_editor()
-            except Exception as exc:
-                st.error(str(exc))
-        return
 
-    stage = report_stage_info(entry, holiday_rows)
-    assigned = _clean_text(entry.get("auditor_full_name"))
-    st.caption(f"Assigned auditor: {assigned} — {nickname_for(assigned)}")
-
-    if admin and effective_status(entry) != "Done":
-        options = list(dict.fromkeys([name for name in auditor_options if _clean_text(name)] + [assigned]))
+        assigned = _clean_text((entry or {}).get("auditor_full_name"))
         selected_index = options.index(assigned) if assigned in options else 0
-        stored_status = _clean_text(entry.get("status"))
-        if stored_status not in {"Planned", "In Progress"}:
+        stored_status = _clean_text((entry or {}).get("status")) or "Planned"
+        if stored_status not in {"Planned", "In Progress", "Done"}:
             stored_status = "Planned"
-        with st.form(f"gantt_plan_edit_{unique}"):
-            auditor = st.selectbox(
-                "Auditor",
-                options,
-                index=selected_index,
-                format_func=lambda name: f"{name} — {nickname_for(name)}",
-                key=f"gantt_edit_auditor_{unique}",
-            )
-            st.text_input("Status", value=_display_stage(stored_status), disabled=True, key=f"gantt_edit_status_{unique}")
-            st.text_input("Due Date", value=_box_date(due_date), disabled=True, key=f"gantt_edit_due_{unique}")
-            save = st.form_submit_button("Update Assignment", type="primary", use_container_width=True)
-        if save:
+        display_status = _display_stage(stored_status)
+        status_options = ["Scheduled", "In Progress", "Done"]
+        status_index = status_options.index(display_status) if display_status in status_options else 0
+        existing_audit_date = _parse_date((entry or {}).get("accomplished_date")) or today
+
+        auditor = st.selectbox(
+            "Auditor",
+            options,
+            index=selected_index,
+            format_func=lambda name: f"{name} — {nickname_for(name)}",
+            key=f"gantt_admin_auditor_{unique}",
+        )
+        selected_status = st.selectbox(
+            "Status",
+            status_options,
+            index=status_index,
+            key=f"gantt_admin_status_{unique}",
+        )
+        audit_date = st.date_input(
+            "Date of Audit",
+            value=min(existing_audit_date, today),
+            max_value=today,
+            key=f"gantt_admin_audit_date_{unique}",
+        )
+        if selected_status != "Done":
+            st.caption("Date of Audit is saved only when Status is Done.")
+        else:
+            st.caption("Default is today. You may choose today or an earlier date; future dates are blocked.")
+        remarks = st.text_area(
+            "Audit Remarks / Reference",
+            value=_clean_text((entry or {}).get("remarks")),
+            key=f"gantt_admin_remarks_{unique}",
+        )
+        save_label = "Create Monthly Record" if entry is None else "Save Monthly Changes"
+        if st.button(save_label, type="primary", key=f"gantt_admin_save_{unique}", use_container_width=True):
             try:
-                upsert_schedule_entry(
+                admin_save_schedule_entry(
                     client,
+                    entry=entry,
                     master_id=master_id,
                     schedule_year=year,
                     schedule_month=month,
                     auditor_full_name=auditor,
-                    status=stored_status,
-                    planned_date=due_date,
+                    status=selected_status,
+                    accomplished_date=audit_date if selected_status == "Done" else None,
+                    remarks=remarks,
                     actor=current_user_name,
                 )
-                st.success("Audit assignment updated.")
+                if selected_status == "Done":
+                    st.success("Monthly audit saved as Done. The five-working-day initial-report period is now based on the selected Date of Audit.")
+                else:
+                    st.success(f"Monthly audit saved as {selected_status}.")
                 _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
+
+        if entry is None:
+            return
         if st.button("Delete Monthly Assignment", key=f"gantt_delete_{unique}", use_container_width=True):
             try:
                 delete_schedule_entry(client, str(entry.get("id") or ""))
@@ -976,16 +1117,70 @@ def _render_month_editor(
                 _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
+
+        stage = report_stage_info(entry, holiday_rows)
+        if effective_status(entry) != "Done":
+            return
+
+        st.divider()
+        st.write(f"**Recorded Date of Audit:** {_display_date(entry.get('accomplished_date'))}")
+        if stage.stage in {"Done", "Overdue: IRS"}:
+            st.write(f"**Initial report deadline:** {_display_date(stage.deadline)}")
+            if stage.overdue:
+                st.error("Overdue: IRS — the assigned auditor has not yet submitted the initial report.")
+            else:
+                st.info("Waiting for the assigned auditor's initial report. The five-working-day period is running.")
+            return
+
+        st.write(f"**Initial report submitted:** {_display_date(entry.get('initial_report_submitted_at'))}")
+        if stage.stage in {"For FRS", "Overdue: FRS"}:
+            st.write(f"**FRS deadline:** {_display_date(stage.deadline)}")
+            if stage.overdue:
+                st.error("Overdue: FRS — finalize and submit the report now.")
+            with st.form(f"gantt_frs_{unique}"):
+                reference = st.text_input(
+                    "FRS Reference / Remarks",
+                    value=_clean_text(entry.get("final_report_reference")),
+                    key=f"gantt_frs_ref_{unique}",
+                )
+                submit_frs = st.form_submit_button(
+                    "FRS — Final Report Submitted",
+                    type="primary",
+                    use_container_width=True,
+                )
+            if submit_frs:
+                try:
+                    submit_final_report(
+                        client,
+                        entry_id=str(entry.get("id") or ""),
+                        actor=current_user_name,
+                        reference=reference,
+                    )
+                    st.success("FRS recorded using today's Philippine date.")
+                    _finish_month_editor()
+                except Exception as exc:
+                    st.error(str(exc))
+            return
+
+        if stage.stage == "FRS":
+            st.success(f"FRS submitted on {_display_date(entry.get('final_report_submitted_at'))}.")
+            if _clean_text(entry.get("final_report_reference")):
+                st.caption(_clean_text(entry.get("final_report_reference")))
         return
 
-    if not admin and _name_key(assigned) != _name_key(current_user_name):
+    # Auditor workflow.
+    if entry is None:
+        st.caption("No audit assignment for your account.")
+        return
+
+    stage = report_stage_info(entry, holiday_rows)
+    assigned = _clean_text(entry.get("auditor_full_name"))
+    st.caption(f"Assigned auditor: {assigned} — {nickname_for(assigned)}")
+    if _name_key(assigned) != _name_key(current_user_name):
         st.info("This audit is assigned to another auditor.")
         return
 
     if effective_status(entry) != "Done":
-        if admin:
-            st.info("The assigned auditor controls In Progress and Done updates.")
-            return
         if _clean_text(entry.get("status")) != "In Progress":
             if st.button("Start Audit — In Progress", key=f"gantt_start_{unique}", use_container_width=True):
                 try:
@@ -1031,100 +1226,70 @@ def _render_month_editor(
         return
 
     existing_audit_date = _parse_date(entry.get("accomplished_date")) or today
-    if not admin:
-        with st.form(f"gantt_edit_done_date_{unique}"):
-            edited_audit_date = st.date_input(
-                "Date of Audit",
-                value=min(existing_audit_date, today),
-                max_value=today,
-                key=f"gantt_edit_done_date_value_{unique}",
+    with st.form(f"gantt_edit_done_date_{unique}"):
+        edited_audit_date = st.date_input(
+            "Date of Audit",
+            value=min(existing_audit_date, today),
+            max_value=today,
+            key=f"gantt_edit_done_date_value_{unique}",
+        )
+        remarks = st.text_area(
+            "Audit Remarks / Reference",
+            value=_clean_text(entry.get("remarks")),
+            key=f"gantt_edit_done_remarks_{unique}",
+        )
+        update_date = st.form_submit_button("Update Date of Audit", use_container_width=True)
+    if update_date:
+        try:
+            update_auditor_accomplishment(
+                client,
+                entry_id=str(entry.get("id") or ""),
+                assigned_auditor=assigned,
+                current_user_name=current_user_name,
+                status="Done",
+                accomplished_date=edited_audit_date,
+                remarks=remarks,
             )
-            remarks = st.text_area(
-                "Audit Remarks / Reference",
-                value=_clean_text(entry.get("remarks")),
-                key=f"gantt_edit_done_remarks_{unique}",
-            )
-            update_date = st.form_submit_button("Update Date of Audit", use_container_width=True)
-        if update_date:
-            try:
-                update_auditor_accomplishment(
-                    client,
-                    entry_id=str(entry.get("id") or ""),
-                    assigned_auditor=assigned,
-                    current_user_name=current_user_name,
-                    status="Done",
-                    accomplished_date=edited_audit_date,
-                    remarks=remarks,
-                )
-                st.success("Date of Audit updated.")
-                _finish_month_editor()
-            except Exception as exc:
-                st.error(str(exc))
-    else:
-        st.write(f"**Date of Audit:** {_display_date(entry.get('accomplished_date'))}")
+            st.success("Date of Audit updated.")
+            _finish_month_editor()
+        except Exception as exc:
+            st.error(str(exc))
 
     if stage.stage in {"Done", "Overdue: IRS"}:
         st.write(f"**Initial report deadline:** {_display_date(stage.deadline)}")
         if stage.overdue:
             st.error("Overdue: IRS — submit the initial report now.")
-        elif admin:
-            st.info("The initial-report five-working-day period is running.")
-        if not admin:
-            with st.form(f"gantt_initial_report_{unique}"):
-                reference = st.text_input(
-                    "Initial Report Reference / Remarks",
-                    value=_clean_text(entry.get("initial_report_reference")),
-                    key=f"gantt_initial_ref_{unique}",
+        with st.form(f"gantt_initial_report_{unique}"):
+            reference = st.text_input(
+                "Initial Report Reference / Remarks",
+                value=_clean_text(entry.get("initial_report_reference")),
+                key=f"gantt_initial_ref_{unique}",
+            )
+            submit_initial = st.form_submit_button(
+                "Submit Initial Report",
+                type="primary",
+                use_container_width=True,
+            )
+        if submit_initial:
+            try:
+                submit_initial_report(
+                    client,
+                    entry_id=str(entry.get("id") or ""),
+                    assigned_auditor=assigned,
+                    current_user_name=current_user_name,
+                    reference=reference,
                 )
-                submit_initial = st.form_submit_button(
-                    "Submit Initial Report",
-                    type="primary",
-                    use_container_width=True,
-                )
-            if submit_initial:
-                try:
-                    submit_initial_report(
-                        client,
-                        entry_id=str(entry.get("id") or ""),
-                        assigned_auditor=assigned,
-                        current_user_name=current_user_name,
-                        reference=reference,
-                    )
-                    st.success("Initial report submitted. The five-working-day FRS period has started.")
-                    _finish_month_editor()
-                except Exception as exc:
-                    st.error(str(exc))
+                st.success("Initial report submitted. The five-working-day FRS period has started.")
+                _finish_month_editor()
+            except Exception as exc:
+                st.error(str(exc))
         return
 
     st.write(f"**Initial report submitted:** {_display_date(entry.get('initial_report_submitted_at'))}")
     if stage.stage in {"For FRS", "Overdue: FRS"}:
         st.write(f"**FRS deadline:** {_display_date(stage.deadline)}")
         if stage.overdue:
-            st.error("Overdue: FRS — finalize and submit the report now.")
-        if admin:
-            with st.form(f"gantt_frs_{unique}"):
-                reference = st.text_input(
-                    "FRS Reference / Remarks",
-                    value=_clean_text(entry.get("final_report_reference")),
-                    key=f"gantt_frs_ref_{unique}",
-                )
-                submit_frs = st.form_submit_button(
-                    "FRS — Final Report Submitted",
-                    type="primary",
-                    use_container_width=True,
-                )
-            if submit_frs:
-                try:
-                    submit_final_report(
-                        client,
-                        entry_id=str(entry.get("id") or ""),
-                        actor=current_user_name,
-                        reference=reference,
-                    )
-                    st.success("FRS recorded using today's Philippine date.")
-                    _finish_month_editor()
-                except Exception as exc:
-                    st.error(str(exc))
+            st.error("Overdue: FRS — waiting for the Admin/Supervisor to submit the final report.")
         else:
             st.info("Initial report submitted. Waiting for the Admin/Supervisor to complete the FRS.")
         return
@@ -1213,6 +1378,103 @@ def _filter_masters(
     return filtered
 
 
+def _month_cell_html(
+    *,
+    master_id: str,
+    year: int,
+    month: int,
+    entry: dict[str, Any] | None,
+    holiday_rows: list[dict[str, Any]],
+    clickable: bool,
+) -> str:
+    if entry is None and not clickable:
+        return '<div class="iars-gantt-month-na">—</div>'
+
+    label, slug = _month_box_label(entry, holiday_rows)
+    lines = label.splitlines()
+    stage = html.escape(lines[0] if lines else "＋ Schedule")
+    auditor = html.escape(lines[1] if len(lines) > 1 else "")
+    date_line = html.escape(lines[2] if len(lines) > 2 else "")
+    content = (
+        f'<span class="iars-gantt-month-stage">{stage}</span>'
+        + (f'<span class="iars-gantt-month-auditor">{auditor}</span>' if auditor else "")
+        + (f'<span class="iars-gantt-month-date">{date_line}</span>' if date_line else "")
+    )
+    if not clickable:
+        return f'<div class="iars-gantt-month-box {html.escape(slug)}">{content}</div>'
+    href = html.escape(_gantt_edit_href(master_id, year, month), quote=True)
+    return (
+        f'<a class="iars-gantt-month-box {html.escape(slug)}" '
+        f'href="{href}" aria-label="Edit {html.escape(month_name[month])} audit schedule">{content}</a>'
+    )
+
+
+def _build_gantt_table_html(
+    filtered: list[dict[str, Any]],
+    entries: list[dict[str, Any]],
+    holiday_rows: list[dict[str, Any]],
+    *,
+    year: int,
+    admin: bool,
+    current_user_name: str,
+    done_counts: dict[str, int],
+) -> str:
+    lookup = _entry_lookup(entries)
+    headers = [
+        "Company / Department",
+        "Custodian",
+        "Audit Task",
+        "Accountability",
+        "Frequency",
+        *[month_name[month] for month in MONTHS],
+    ]
+    header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+    body_rows: list[str] = []
+    current_key = _name_key(current_user_name)
+
+    for master in filtered:
+        master_id = str(master.get("id") or "")
+        static_cells = [
+            ("iars-static-cell", _clean_text(master.get("company_department"))),
+            ("iars-static-cell", _clean_text(master.get("custodian"))),
+            ("iars-static-cell", _clean_text(master.get("audit_task"))),
+            ("iars-accountability", _format_accountability(master.get("accountability"))),
+            ("iars-frequency", f"{done_counts.get(master_id, 0)}×"),
+        ]
+        cells = [
+            f'<td class="{css_class}" title="{html.escape(value, quote=True)}">{html.escape(value)}</td>'
+            for css_class, value in static_cells
+        ]
+        for month in MONTHS:
+            entry = lookup.get((master_id, month))
+            assigned_to_current = bool(entry) and _name_key(entry.get("auditor_full_name")) == current_key
+            visible_entry = entry if (admin or assigned_to_current) else None
+            clickable = admin or assigned_to_current
+            cells.append(
+                "<td>"
+                + _month_cell_html(
+                    master_id=master_id,
+                    year=year,
+                    month=month,
+                    entry=visible_entry,
+                    holiday_rows=holiday_rows,
+                    clickable=clickable,
+                )
+                + "</td>"
+            )
+        body_rows.append("<tr>" + "".join(cells) + "</tr>")
+
+    viewport_height = min(560, max(190, 56 + len(filtered) * 83))
+    return (
+        '<div class="iars-gantt-table-shell">'
+        f'<div class="iars-gantt-table-scroll" style="height:{viewport_height}px">'
+        '<table class="iars-gantt-table">'
+        f'<thead><tr>{header_html}</tr></thead>'
+        f'<tbody>{"".join(body_rows)}</tbody>'
+        '</table></div></div>'
+    )
+
+
 def _render_matrix(
     client: Any,
     masters: list[dict[str, Any]],
@@ -1249,103 +1511,48 @@ def _render_matrix(
 
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
-    month_headers = [month_name[month] for month in MONTHS]
-    rows: list[dict[str, Any]] = []
-    for master in filtered:
-        master_id = str(master.get("id") or "")
-        row: dict[str, Any] = {
-            "Company / Department": _clean_text(master.get("company_department")),
-            "Custodian": _clean_text(master.get("custodian")),
-            "Audit Task": _clean_text(master.get("audit_task")),
-            "Accountability": _format_accountability(master.get("accountability")),
-            "Frequency": f"{done_counts.get(master_id, 0)}×",
-        }
-        for month in MONTHS:
-            entry = lookup.get((master_id, month))
-            if entry and not admin and _name_key(entry.get("auditor_full_name")) != _name_key(current_user_name):
-                entry = None
-            if entry is None and not admin:
-                row[month_name[month]] = "—"
-            else:
-                row[month_name[month]] = _month_box_label(entry, holiday_rows)[0]
-        rows.append(row)
+    table_html = _build_gantt_table_html(
+        filtered,
+        entries,
+        holiday_rows,
+        year=year,
+        admin=admin,
+        current_user_name=current_user_name,
+        done_counts=done_counts,
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
 
-    frame = pd.DataFrame(rows)
-    try:
-        styled = frame.style.map(_gantt_cell_style, subset=month_headers)
-        styled = styled.set_properties(
-            subset=month_headers,
-            **{"white-space": "pre-line", "text-align": "center", "vertical-align": "middle"},
+    selected = _selected_gantt_edit()
+    if selected:
+        selected_master_id, selected_year, selected_month = selected
+        master = next(
+            (row for row in masters if str(row.get("id") or "") == selected_master_id),
+            None,
         )
-    except AttributeError:
-        styled = frame.style.applymap(_gantt_cell_style, subset=month_headers)
-
-    column_config: dict[str, Any] = {
-        "Company / Department": _text_column("Company / Department", pinned=True),
-        "Custodian": _text_column("Custodian", pinned=True),
-        "Audit Task": _text_column("Audit Task", pinned=True),
-        "Accountability": _text_column("Accountability", pinned=True),
-        "Frequency": _text_column("Frequency", pinned=True),
-    }
-    for header in month_headers:
-        column_config[header] = _text_column(header, pinned=False)
-
-    generation = 0
-    try:
-        generation = int(st.session_state.get("iars_gantt_grid_generation_v4526", 0))
-    except Exception:
-        pass
-    grid_key = f"iars-gantt-grid-v4526-{year}-{generation}"
-    try:
-        event = st.dataframe(
-            styled,
-            width="stretch",
-            height=560,
-            hide_index=True,
-            column_config=column_config,
-            row_height=78,
-            key=grid_key,
-            on_select="rerun",
-            selection_mode="single-cell",
-        )
-    except TypeError:
-        event = st.dataframe(
-            styled,
-            use_container_width=True,
-            height=560,
-            hide_index=True,
-            column_config=column_config,
-            row_height=78,
-            key=grid_key,
-        )
-
-    cells = _event_cells(event)
-    if cells:
-        row_index, column_name = cells[-1]
-        month_by_header = {month_name[month]: month for month in MONTHS}
-        month = month_by_header.get(column_name)
-        if month is not None and 0 <= row_index < len(filtered):
-            master = filtered[row_index]
-            master_id = str(master.get("id") or "")
-            entry = lookup.get((master_id, month))
-            if entry and not admin and _name_key(entry.get("auditor_full_name")) != _name_key(current_user_name):
-                entry = None
-            if admin or entry is not None:
+        if selected_year != year or master is None:
+            _clear_gantt_edit_query()
+        else:
+            entry = lookup.get((selected_master_id, selected_month))
+            assigned_to_current = bool(entry) and _name_key(entry.get("auditor_full_name")) == _name_key(current_user_name)
+            if admin or assigned_to_current:
                 _open_month_editor_dialog(
                     client,
                     master=master,
                     entry=entry,
                     year=year,
-                    month=month,
+                    month=selected_month,
                     holiday_rows=holiday_rows,
                     admin=admin,
                     current_user_name=current_user_name,
                     auditor_options=auditor_options,
                 )
+            else:
+                _clear_gantt_edit_query()
+                st.warning("You can open only the monthly audit schedules assigned to your account.")
 
     st.caption(
-        f"Showing all {len(filtered)} matching custodian record(s) in one Gantt grid. "
-        "The native grid freezes the full Company-to-December header during vertical scrolling and pins Company through Frequency during horizontal scrolling. Click a month cell to update it."
+        f"Showing all {len(filtered)} matching custodian record(s) in one scrollable Gantt view. "
+        "The Company-to-December header is rendered inside the dedicated table viewport and remains visible while its rows scroll. Company through Frequency remain frozen during horizontal scrolling. Click a month box to update it."
     )
     return filtered
 
@@ -1423,7 +1630,7 @@ def render_yearly_gantt_page(
     current_name = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Yearly Audit Gantt Schedule</h2>'
-        '<p>Click a month cell to assign the auditor, update In Progress or Done, submit the initial report, or submit FRS. Scheduled due dates are automatically set to the last day of the month. Initial-report and FRS deadlines each use five working days, excluding weekends and active non-working holidays.</p></div>',
+        '<p>Click a month box to create or edit the monthly audit record. Admin/Supervisor may assign the auditor and set Scheduled, In Progress, or Done, including completed audits from previous months. Done starts the five-working-day initial-report period and becomes Overdue: IRS when the report is late. After initial-report submission, the record moves to For FRS and becomes Overdue: FRS when the final report is late.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
@@ -1457,12 +1664,12 @@ def render_yearly_gantt_page(
 
     if admin:
         st.markdown(
-            '<div class="iars-gantt-access-note"><strong>Administrator/Supervisor:</strong> Click any month box to assign an auditor. After the initial report is submitted, click the month cell to mark FRS. FRS becomes overdue after five working days from the initial-report submission date.</div>',
+            '<div class="iars-gantt-access-note"><strong>Administrator/Supervisor:</strong> Click any month box to create or edit its auditor and status. You may encode previous months as Scheduled, In Progress, or Done. A Done record starts the five-working-day initial-report period from the selected Date of Audit; without an initial report, it becomes Overdue: IRS. After initial-report submission, it becomes For FRS; without FRS after five working days, it becomes Overdue: FRS.</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            f'<div class="iars-gantt-access-note"><strong>Auditor — {html.escape(nickname_for(current_name))}:</strong> Click your assigned month cell to update In Progress or Done and submit the initial report. It becomes Overdue: IRS after five working days from the Date of Audit.</div>',
+            f'<div class="iars-gantt-access-note"><strong>Auditor — {html.escape(nickname_for(current_name))}:</strong> Click your assigned month box to update In Progress or Done and submit the initial report. It becomes Overdue: IRS after five working days from the Date of Audit.</div>',
             unsafe_allow_html=True,
         )
 

@@ -1,0 +1,27 @@
+IARS V4.5.27 CLEAN PATCH
+
+FILES IN THIS PATCH
+1. app.py
+2. iars_gantt.py
+3. DEPLOY_V4_5_27.txt
+
+DEPLOYMENT
+1. Extract this ZIP.
+2. Upload app.py and iars_gantt.py directly to the root of the existing GitHub repository.
+3. Replace the existing files with the same names.
+4. Do not delete the repository's existing assets, modules, requirements, or Supabase files.
+5. Reboot the Streamlit app and confirm the header shows v4.5.27.
+
+NO SUPABASE SQL MIGRATION IS REQUIRED.
+
+V4.5.27 CHANGES
+- Replaced the previous native-dataframe Gantt matrix with one dedicated HTML table viewport.
+- Company / Department through December is one fixed table header inside the Gantt viewport.
+- The header remains visible while the Gantt rows scroll vertically.
+- Company / Department through Frequency remain frozen while scrolling horizontally.
+- Month boxes remain clickable and preserve the current iars_session query parameter.
+- Admin/Supervisor can create or edit any month record.
+- Admin/Supervisor can select Scheduled, In Progress, or Done, including completed audits from previous months.
+- For Done, Date of Audit defaults to today's Philippine date, may be edited backward, and cannot be set in the future.
+- Current workflow text now follows: Done -> Overdue: IRS when the initial report is late -> For FRS after initial-report submission -> Overdue: FRS when the final report is late -> FRS.
+- Existing status colors, automatic five-working-day rules, holiday exclusions, filters, centavo formatting, and frequency counting are retained.
