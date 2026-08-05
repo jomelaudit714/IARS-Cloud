@@ -677,11 +677,19 @@ def _render_gantt_css() -> None:
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
         .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
-        .st-key-iars-gantt-scroll-v4520 {overflow-x:auto!important;padding-bottom:.45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;}
-        .st-key-iars-gantt-scroll-v4520 [data-testid="stHorizontalBlock"] {min-width:2260px!important;padding:.18rem .4rem!important;gap:.35rem!important;}
-        .st-key-iars-gantt-scroll-v4520 [data-testid="stColumn"] {min-width:0!important;}
-        .st-key-iars-gantt-scroll-v4520 .stButton>button,
-        .st-key-iars-gantt-scroll-v4520 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
+        .st-key-iars-gantt-scroll-v4521 {overflow-x:auto!important;overflow-y:visible!important;padding-bottom:.45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"] {min-width:2390px!important;padding:.18rem .4rem!important;gap:.35rem!important;align-items:stretch!important;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {flex:0 0 260px!important;width:260px!important;position:sticky!important;left:0!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {flex:0 0 220px!important;width:220px!important;position:sticky!important;left:266px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {flex:0 0 190px!important;width:190px!important;position:sticky!important;left:492px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {flex:0 0 135px!important;width:135px!important;position:sticky!important;left:688px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {flex:0 0 90px!important;width:90px!important;position:sticky!important;left:829px!important;z-index:12!important;box-shadow:2px 0 0 #CBD5E1;}
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(n+6) {flex:0 0 112px!important;width:112px!important;}
+        .st-key-iars-gantt-header-v4521 {position:sticky!important;top:0!important;z-index:30!important;background:#fff!important;border-bottom:1px solid #CBD5E1!important;padding-top:.1rem!important;}
+        .st-key-iars-gantt-header-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {z-index:31!important;background:#fff!important;}
+        .st-key-iars-gantt-scroll-v4521 .stButton>button,
+        .st-key-iars-gantt-scroll-v4521 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
         [class*="st-key-gantt-empty-"] [data-testid="stPopover"]>button {border:1px dashed #CBD5E1!important;background:#FAFBFC!important;color:#667085!important;}
         [class*="st-key-gantt-planned-"] [data-testid="stPopover"]>button {border:1px solid #D6A129!important;background:#FFF8E6!important;color:#594200!important;}
         [class*="st-key-gantt-in-progress-"] [data-testid="stPopover"]>button {border:1px solid #2563EB!important;background:#EFF6FF!important;color:#1E3A8A!important;}
@@ -1043,35 +1051,26 @@ def _render_matrix(
         st.info("No schedule matched the selected filters.")
         return []
 
-    page_size = int(st.selectbox("Rows per page", [5, 10, 20], index=1, key="iars_gantt_page_size_v4520"))
-    total_pages = max(1, (len(filtered) + page_size - 1) // page_size)
-    page_key = "iars_gantt_page_v4520"
-    try:
-        if int(st.session_state.get(page_key, 1) or 1) > total_pages:
-            st.session_state[page_key] = 1
-    except Exception:
-        pass
-    page = int(st.selectbox(
-        "Page",
-        list(range(1, total_pages + 1)),
-        key=page_key,
-    ))
-    shown = filtered[(page - 1) * page_size : page * page_size]
+    # V4.5.21: render every matching custodian record on one page. The browser page
+    # provides vertical scrolling; the month filter changes rows only and never hides
+    # the January-to-December columns.
+    shown = filtered
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
     widths = [2.7, 2.25, 1.95, 1.35, .85] + [1.12] * 12
 
-    with _safe_container(key="iars-gantt-scroll-v4520"):
-        header_cols = st.columns(widths, gap="small")
-        headers = ["Company / Department", "Custodian", "Audit Task", "Accountability", "Frequency"] + [
-            month_name[month] for month in MONTHS
-        ]
-        for idx, label in enumerate(headers):
-            left_class = " iars-gantt-left" if idx < 3 else ""
-            header_cols[idx].markdown(
-                f'<div class="iars-gantt-head{left_class}">{html.escape(label)}</div>',
-                unsafe_allow_html=True,
-            )
+    with _safe_container(key="iars-gantt-scroll-v4521"):
+        with _safe_container(key="iars-gantt-header-v4521"):
+            header_cols = st.columns(widths, gap="small")
+            headers = ["Company / Department", "Custodian", "Audit Task", "Accountability", "Frequency"] + [
+                month_name[month] for month in MONTHS
+            ]
+            for idx, label in enumerate(headers):
+                left_class = " iars-gantt-left" if idx < 3 else ""
+                header_cols[idx].markdown(
+                    f'<div class="iars-gantt-head{left_class}">{html.escape(label)}</div>',
+                    unsafe_allow_html=True,
+                )
 
         for master in shown:
             master_id = str(master.get("id") or "")
@@ -1123,7 +1122,7 @@ def _render_matrix(
                                     current_user_name=current_user_name,
                                     auditor_options=auditor_options,
                                 )
-    st.caption(f"Showing {len(shown)} of {len(filtered)} matching custodian record(s). Click a month box to update it.")
+    st.caption(f"Showing all {len(filtered)} matching custodian record(s) on one page. Scroll down for more rows; scroll sideways for January–December. Click a month box to update it.")
     return filtered
 
 
@@ -1275,6 +1274,7 @@ def render_yearly_gantt_page(
     )
     sort_desc = st.toggle("Descending order", value=False, key="iars_gantt_sort_desc_v4520")
     month_filter = None if month_label == "All" else list(month_name).index(month_label)
+    st.caption("Month filter affects custodian rows only. All January–December columns remain visible for every matching row.")
 
     _render_matrix(
         client,
