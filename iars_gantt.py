@@ -679,21 +679,30 @@ def _render_gantt_css() -> None:
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
         .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
-        .st-key-iars-gantt-scroll-v4523 {max-height:calc(100vh - 235px)!important;min-height:320px!important;overflow:auto!important;padding-bottom:.45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;scrollbar-gutter:stable both-edges;isolation:isolate!important;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"] {min-width:1880px!important;padding:.18rem .35rem!important;gap:.25rem!important;align-items:stretch!important;flex-wrap:nowrap!important;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {flex:0 0 104px!important;width:104px!important;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {position:sticky!important;left:0!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {position:sticky!important;left:108px!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {position:sticky!important;left:216px!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {position:sticky!important;left:324px!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {position:sticky!important;left:432px!important;z-index:20!important;box-shadow:2px 0 0 #CBD5E1;}
-        .st-key-iars-gantt-header-v4523 {position:sticky!important;top:0!important;z-index:70!important;background:#fff!important;border-bottom:1px solid #CBD5E1!important;padding-top:.1rem!important;box-shadow:0 2px 5px rgba(15,23,42,.08)!important;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head) {position:sticky!important;top:0!important;z-index:70!important;background:#fff!important;box-shadow:0 2px 5px rgba(15,23,42,.08)!important;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"] {z-index:71!important;background:#fff!important;}
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"]:nth-child(-n+5) {z-index:72!important;}
-        .st-key-iars-gantt-scroll-v4523 .stButton>button,
-        .st-key-iars-gantt-scroll-v4523 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
+        /* V4.5.24: one dedicated Gantt viewport. Vertical wheel events stay inside
+           the table, so the module does not drift down to the sections below it. */
+        .st-key-iars-gantt-scroll-v4524 {height:calc(100dvh - 272px)!important;max-height:calc(100dvh - 272px)!important;min-height:390px!important;overflow:auto!important;overscroll-behavior:contain!important;padding:0 .35rem .45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;scrollbar-gutter:stable both-edges;isolation:isolate!important;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"] {min-width:1880px!important;padding:.18rem 0!important;gap:.25rem!important;align-items:stretch!important;flex-wrap:nowrap!important;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {flex:0 0 104px!important;width:104px!important;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {position:sticky!important;left:0!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {position:sticky!important;left:108px!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {position:sticky!important;left:216px!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {position:sticky!important;left:324px!important;z-index:30!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {position:sticky!important;left:432px!important;z-index:30!important;box-shadow:2px 0 0 #CBD5E1;}
+
+        /* The previous build nested the header in a short header-only container,
+           which constrained sticky positioning. V4.5.24 places the header row
+           directly in the full Gantt block and makes that actual row sticky. */
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head),
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stVerticalBlock"] > div:has(> [data-testid="stHorizontalBlock"] .iars-gantt-head) {position:sticky!important;top:0!important;z-index:110!important;background:#fff!important;margin:0!important;padding-top:.12rem!important;border-bottom:1px solid #CBD5E1!important;box-shadow:0 3px 7px rgba(15,23,42,.12)!important;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"] {z-index:112!important;background:#fff!important;}
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"]:nth-child(-n+5) {z-index:113!important;}
+        .st-key-iars-gantt-scroll-v4524 .stButton>button,
+        .st-key-iars-gantt-scroll-v4524 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
+        @media (max-height:760px) {
+          .st-key-iars-gantt-scroll-v4524 {height:calc(100dvh - 238px)!important;max-height:calc(100dvh - 238px)!important;min-height:350px!important;}
+        }
         [class*="st-key-gantt-empty-"] [data-testid="stPopover"]>button {border:1px dashed #CBD5E1!important;background:#FAFBFC!important;color:#667085!important;}
         [class*="st-key-gantt-planned-"] [data-testid="stPopover"]>button {border:1px solid #D6A129!important;background:#FFF8E6!important;color:#594200!important;}
         [class*="st-key-gantt-in-progress-"] [data-testid="stPopover"]>button {border:1px solid #2563EB!important;background:#EFF6FF!important;color:#1E3A8A!important;}
@@ -1054,25 +1063,26 @@ def _render_matrix(
         st.info("No schedule matched the selected filters.")
         return []
 
-    # V4.5.23: render every matching custodian record in one vertically scrollable
-    # Gantt viewport. The complete Company-to-December header stays sticky while
-    # the month filter changes rows only and never hides month columns.
+    # V4.5.24: render every matching custodian record in one dedicated scroll
+    # viewport. The actual Streamlit header element wrapper is sticky, while
+    # overscroll containment prevents the page from drifting to the sections below.
     shown = filtered
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
     widths = [1.04] * 17
 
-    with _safe_container(key="iars-gantt-scroll-v4523"):
-        with _safe_container(key="iars-gantt-header-v4523"):
-            header_cols = st.columns(widths, gap="small")
-            headers = ["Company / Department", "Custodian", "Audit Task", "Accountability", "Frequency"] + [
-                month_name[month] for month in MONTHS
-            ]
-            for idx, label in enumerate(headers):
-                header_cols[idx].markdown(
-                    f'<div class="iars-gantt-head">{html.escape(label)}</div>',
-                    unsafe_allow_html=True,
-                )
+    with _safe_container(key="iars-gantt-scroll-v4524"):
+        # Keep the header row directly under the full Gantt vertical block. This
+        # avoids the short nested container that prevented CSS sticky positioning.
+        header_cols = st.columns(widths, gap="small")
+        headers = ["Company / Department", "Custodian", "Audit Task", "Accountability", "Frequency"] + [
+            month_name[month] for month in MONTHS
+        ]
+        for idx, label in enumerate(headers):
+            header_cols[idx].markdown(
+                f'<div class="iars-gantt-head">{html.escape(label)}</div>',
+                unsafe_allow_html=True,
+            )
 
         for master in shown:
             master_id = str(master.get("id") or "")

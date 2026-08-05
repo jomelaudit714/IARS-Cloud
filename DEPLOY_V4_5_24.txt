@@ -1,0 +1,16 @@
+IARS V4.5.24 — CLEAN PATCH
+
+Replace these two files in the ROOT of the existing GitHub repository:
+1. app.py
+2. iars_gantt.py
+
+Do not delete the other existing repository files or assets.
+No Supabase SQL migration is required for V4.5.24.
+After replacement, reboot the Streamlit app and confirm that the header shows v4.5.24.
+
+Included fixes:
+- All authenticated modules open at one raised, fixed top position.
+- Removed the older module-specific negative header transforms.
+- Gantt uses a dedicated contained scroll viewport.
+- The actual Company/Department-to-December row is sticky.
+- Scroll chaining to the page below the Gantt is contained.

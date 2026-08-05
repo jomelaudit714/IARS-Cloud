@@ -1075,28 +1075,12 @@ def _apply_v4502_transition_refinements() -> None:
             100% { transform: translateX(205%); }
         }
 
-        /* Keep the authenticated top bar at exactly one vertical position on every module. */
+        /* Header coordinates are controlled only by the V4.5.24 fixed-header
+           block below. Remove the older sticky/negative-transform positioning so
+           every module opens at exactly the same top position. */
         .stApp:has(.edl-topbar) .block-container,
         .stApp:has(.edl-topbar) [data-testid="stMainBlockContainer"] {
             padding-top: 0 !important;
-        }
-        .stApp:has(.edl-topbar) .edl-topbar {
-            margin-top: -37px !important;
-            position: sticky !important;
-            top: 4px !important;
-            z-index: 1000 !important;
-        }
-
-        /*
-         * The Dashboard already receives a 29px top-space recovery from the
-         * approved dashboard layout. Apply the same visual recovery to every
-         * other authenticated module so the header never drops during module
-         * changes. The negative bottom margin keeps the following content in
-         * the same relative position instead of leaving a blank band.
-         */
-        .stApp:has(.edl-topbar):not(:has(.iars-dashboard-v4477-marker)) .edl-topbar {
-            transform: translateY(-29px) !important;
-            margin-bottom: -29px !important;
         }
 
         /* Hidden first submit control: pressing Enter in the password field
@@ -1301,9 +1285,9 @@ def _apply_v4503_root_cause_fixes() -> None:
         #iars-fixed-header-v4503,
         .stApp:has(.edl-topbar) #iars-fixed-header-v4503 {
             position: fixed !important;
-            top: 6px !important;
-            left: 266px !important;
-            right: 24px !important;
+            top: 2px !important;
+            left: 254px !important;
+            right: 12px !important;
             width: auto !important;
             max-width: none !important;
             margin: 0 !important;
@@ -1314,8 +1298,8 @@ def _apply_v4503_root_cause_fixes() -> None:
         .stApp:has(.edl-topbar) .iars-fixed-header-spacer-v4503 {
             display: block !important;
             width: 100% !important;
-            height: 88px !important;
-            min-height: 88px !important;
+            height: 74px !important;
+            min-height: 74px !important;
             margin: 0 !important;
             padding: 0 !important;
             pointer-events: none !important;
@@ -1323,14 +1307,19 @@ def _apply_v4503_root_cause_fixes() -> None:
         .stApp:has(.edl-topbar) .block-container,
         .stApp:has(.edl-topbar) [data-testid="stMainBlockContainer"] {
             padding-top: 0 !important;
+            scroll-padding-top: 76px !important;
+        }
+        .stApp:has(.edl-topbar) .iars-fixed-header-spacer-v4503 + [data-testid="stElementContainer"],
+        .stApp:has(.edl-topbar) .iars-fixed-header-spacer-v4503 + div {
+            margin-top: 0 !important;
         }
 
         /* The invisible Streamlit popover button exactly covers the visual
            user card. It stays clickable on Dashboard and every other module. */
         .st-key-profile_menu_trigger {
             position: fixed !important;
-            top: 16px !important;
-            right: 36px !important;
+            top: 10px !important;
+            right: 24px !important;
             width: 196px !important;
             height: 60px !important;
             min-width: 196px !important;
@@ -1434,19 +1423,19 @@ def _apply_v4503_root_cause_fixes() -> None:
             .stApp:has(.edl-topbar) #iars-fixed-header-v4503 {
                 left: 16px !important;
                 right: 16px !important;
-                top: 6px !important;
+                top: 2px !important;
             }
             .st-key-profile_menu_trigger {
-                right: 28px !important;
-                top: 16px !important;
+                right: 20px !important;
+                top: 10px !important;
                 width: 176px !important;
                 min-width: 176px !important;
                 height: 56px !important;
                 min-height: 56px !important;
             }
             .stApp:has(.edl-topbar) .iars-fixed-header-spacer-v4503 {
-                height: 84px !important;
-                min-height: 84px !important;
+                height: 72px !important;
+                min-height: 72px !important;
             }
         }
         </style>
@@ -4781,7 +4770,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.23",
+    version="4.5.24",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -5807,7 +5796,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.23", "note": "No-Wrap Gantt Header + Equal Compact Columns", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.24", "note": "Raised Modules + True Sticky Gantt Header", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
