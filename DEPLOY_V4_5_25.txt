@@ -1,0 +1,19 @@
+IARS V4.5.25 — TRUE STICKY STREAMLIT WRAPPER FIX
+
+ESSENTIAL ROOT FILES ONLY:
+1. app.py
+2. iars_gantt.py
+
+DEPLOYMENT:
+- Upload app.py and iars_gantt.py to the ROOT of the existing GitHub repository.
+- Replace the existing files.
+- Do not delete the existing assets or other modules.
+- Reboot the Streamlit app and confirm the header displays v4.5.25.
+- No Supabase SQL migration is required.
+
+FIX:
+The previous release applied sticky positioning to Streamlit's inner
+stHorizontalBlock. In the live Streamlit DOM, that block is wrapped by a
+short stElementContainer, so the header was constrained and scrolled away.
+V4.5.25 applies sticky positioning to the actual stElementContainer row owner,
+with fallback selectors for current Streamlit DOM variants.
