@@ -679,19 +679,21 @@ def _render_gantt_css() -> None:
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
         .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
-        .st-key-iars-gantt-scroll-v4522 {max-height:calc(100vh - 235px)!important;min-height:320px!important;overflow:auto!important;padding-bottom:.45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;scrollbar-gutter:stable both-edges;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"] {min-width:1975px!important;padding:.18rem .35rem!important;gap:.35rem!important;align-items:stretch!important;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {flex:0 0 180px!important;width:180px!important;position:sticky!important;left:0!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {flex:0 0 160px!important;width:160px!important;position:sticky!important;left:186px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {flex:0 0 145px!important;width:145px!important;position:sticky!important;left:352px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {flex:0 0 120px!important;width:120px!important;position:sticky!important;left:503px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {flex:0 0 80px!important;width:80px!important;position:sticky!important;left:629px!important;z-index:12!important;box-shadow:2px 0 0 #CBD5E1;}
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(n+6) {flex:0 0 104px!important;width:104px!important;}
-        .st-key-iars-gantt-header-v4522 {position:sticky!important;top:0!important;z-index:40!important;background:#fff!important;border-bottom:1px solid #CBD5E1!important;padding-top:.1rem!important;box-shadow:0 2px 5px rgba(15,23,42,.08)!important;}
-        .st-key-iars-gantt-header-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {z-index:41!important;background:#fff!important;}
-        .st-key-iars-gantt-scroll-v4522 .stButton>button,
-        .st-key-iars-gantt-scroll-v4522 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
+        .st-key-iars-gantt-scroll-v4523 {max-height:calc(100vh - 235px)!important;min-height:320px!important;overflow:auto!important;padding-bottom:.45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;scrollbar-gutter:stable both-edges;isolation:isolate!important;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"] {min-width:1880px!important;padding:.18rem .35rem!important;gap:.25rem!important;align-items:stretch!important;flex-wrap:nowrap!important;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {flex:0 0 104px!important;width:104px!important;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {position:sticky!important;left:0!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {position:sticky!important;left:108px!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {position:sticky!important;left:216px!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {position:sticky!important;left:324px!important;z-index:20!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {position:sticky!important;left:432px!important;z-index:20!important;box-shadow:2px 0 0 #CBD5E1;}
+        .st-key-iars-gantt-header-v4523 {position:sticky!important;top:0!important;z-index:70!important;background:#fff!important;border-bottom:1px solid #CBD5E1!important;padding-top:.1rem!important;box-shadow:0 2px 5px rgba(15,23,42,.08)!important;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head) {position:sticky!important;top:0!important;z-index:70!important;background:#fff!important;box-shadow:0 2px 5px rgba(15,23,42,.08)!important;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"] {z-index:71!important;background:#fff!important;}
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stHorizontalBlock"]:has(.iars-gantt-head)>[data-testid="stColumn"]:nth-child(-n+5) {z-index:72!important;}
+        .st-key-iars-gantt-scroll-v4523 .stButton>button,
+        .st-key-iars-gantt-scroll-v4523 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
         [class*="st-key-gantt-empty-"] [data-testid="stPopover"]>button {border:1px dashed #CBD5E1!important;background:#FAFBFC!important;color:#667085!important;}
         [class*="st-key-gantt-planned-"] [data-testid="stPopover"]>button {border:1px solid #D6A129!important;background:#FFF8E6!important;color:#594200!important;}
         [class*="st-key-gantt-in-progress-"] [data-testid="stPopover"]>button {border:1px solid #2563EB!important;background:#EFF6FF!important;color:#1E3A8A!important;}
@@ -701,9 +703,8 @@ def _render_gantt_css() -> None:
         [class*="st-key-gantt-for-irs-"] [data-testid="stPopover"]>button {border:1px solid #D97706!important;background:#FFF7ED!important;color:#7C2D12!important;}
         [class*="st-key-gantt-for-frs-"] [data-testid="stPopover"]>button {border:1px solid #7C3AED!important;background:#F5F3FF!important;color:#4C1D95!important;}
         [class*="st-key-gantt-frs-"] [data-testid="stPopover"]>button {border:1px solid #18864B!important;background:#ECFDF3!important;color:#14532D!important;}
-        .iars-gantt-head {font-size:.78rem;font-weight:800;color:#0B2B55;background:#EAF0F8;border-radius:8px;padding:.55rem .35rem;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center;}
-        .iars-gantt-left {justify-content:flex-start;text-align:left;}
-        .iars-gantt-textcell {font-size:.75rem;line-height:1.2;border-bottom:1px solid #E5E7EB;min-height:78px;padding:.42rem .28rem;display:flex;align-items:center;white-space:normal;overflow-wrap:anywhere;word-break:break-word;}
+        .iars-gantt-head {font-size:.72rem;font-weight:800;color:#0B2B55;background:#EAF0F8;border-radius:8px;padding:.45rem .25rem;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center;white-space:normal;overflow-wrap:anywhere;word-break:break-word;}
+        .iars-gantt-textcell {font-size:.70rem;line-height:1.15;border-bottom:1px solid #E5E7EB;min-height:78px;padding:.35rem .22rem;display:flex;align-items:center;white-space:normal;overflow-wrap:anywhere;word-break:break-word;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -1053,24 +1054,23 @@ def _render_matrix(
         st.info("No schedule matched the selected filters.")
         return []
 
-    # V4.5.22: render every matching custodian record in one vertically scrollable
+    # V4.5.23: render every matching custodian record in one vertically scrollable
     # Gantt viewport. The complete Company-to-December header stays sticky while
     # the month filter changes rows only and never hides month columns.
     shown = filtered
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
-    widths = [1.8, 1.6, 1.45, 1.2, .8] + [1.04] * 12
+    widths = [1.04] * 17
 
-    with _safe_container(key="iars-gantt-scroll-v4522"):
-        with _safe_container(key="iars-gantt-header-v4522"):
+    with _safe_container(key="iars-gantt-scroll-v4523"):
+        with _safe_container(key="iars-gantt-header-v4523"):
             header_cols = st.columns(widths, gap="small")
             headers = ["Company / Department", "Custodian", "Audit Task", "Accountability", "Frequency"] + [
                 month_name[month] for month in MONTHS
             ]
             for idx, label in enumerate(headers):
-                left_class = " iars-gantt-left" if idx < 3 else ""
                 header_cols[idx].markdown(
-                    f'<div class="iars-gantt-head{left_class}">{html.escape(label)}</div>',
+                    f'<div class="iars-gantt-head">{html.escape(label)}</div>',
                     unsafe_allow_html=True,
                 )
 
