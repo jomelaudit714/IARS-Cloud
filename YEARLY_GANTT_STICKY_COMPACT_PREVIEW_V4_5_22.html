@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IARS V4.5.22 Sticky Gantt Preview</title>
+<style>
+:root{font-family:Arial,sans-serif;color:#172033;background:#f6f8fb}
+body{margin:0;padding:24px;background:#f6f8fb}
+.card{background:#fff;border:1px solid #d9e2ee;border-radius:14px;padding:18px;box-shadow:0 3px 14px rgba(15,23,42,.06)}
+h1{font-size:25px;margin:0 0 4px;color:#0b2b55}.sub{margin:0 0 16px;color:#667085;font-size:14px}
+.toolbar{display:flex;gap:10px;margin-bottom:12px}.filter{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:9px 12px;font-size:13px}
+.viewport{height:535px;overflow:auto;border:1px solid #d9e2ee;border-radius:12px;background:#fff;scrollbar-gutter:stable both-edges}
+.grid{min-width:1975px}
+.row{display:grid;grid-template-columns:180px 160px 145px 120px 80px repeat(12,104px);column-gap:6px;padding:3px 6px;background:#fff}
+.header{position:sticky;top:0;z-index:40;border-bottom:1px solid #cbd5e1;box-shadow:0 2px 5px rgba(15,23,42,.08)}
+.head{font-size:12px;font-weight:800;color:#0b2b55;background:#eaf0f8;border-radius:8px;min-height:46px;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px}
+.cell{font-size:12px;line-height:1.2;min-height:70px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:4px;overflow-wrap:anywhere;background:#fff}
+.month{min-height:64px;border:1px solid #d6a129;background:#fff8e6;color:#594200;border-radius:9px;padding:5px;font-size:11px;line-height:1.2;display:flex;flex-direction:column;justify-content:center}
+.month.done{border-color:#18864b;background:#ecfdf3;color:#14532d}.month.overdue{border-color:#991b1b;background:#b91c1c;color:#fff}.month.empty{border-style:dashed;border-color:#cbd5e1;background:#fafbfc;color:#667085;text-align:center;align-items:center}
+.row>div:nth-child(1){position:sticky;left:0;z-index:12}.row>div:nth-child(2){position:sticky;left:186px;z-index:12}.row>div:nth-child(3){position:sticky;left:352px;z-index:12}.row>div:nth-child(4){position:sticky;left:503px;z-index:12}.row>div:nth-child(5){position:sticky;left:629px;z-index:12;box-shadow:2px 0 0 #cbd5e1}
+.header>div{z-index:41!important}.money{font-weight:800}.freq{justify-content:center;font-weight:800}
+.badge{font-weight:800;margin-bottom:2px}.note{margin-top:10px;color:#667085;font-size:12px}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>2026 Yearly Audit Gantt Schedule</h1>
+<p class="sub">All custodians in one scrollable view · full Company-to-December header remains visible · compact identifying columns</p>
+<div class="toolbar"><div class="filter">Month Filter: All Months</div><div class="filter">Status: All</div><div class="filter">Auditor: All</div></div>
+<div id="viewport" class="viewport"><div id="grid" class="grid"></div></div>
+<p class="note">Accountability values are displayed with peso sign, comma separators, and two decimal places.</p>
+</div>
+<script>
+const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const companies=['East Asia Laboratories, Inc.','EDL Pet Health & Technical Solutions, Inc.','EDL Agri Farm, Inc.','EDL Logistics and Services, Inc.'];
+const custodians=['Augustus Marco Lorenzo','Dianne Susie Berbano','Camille Saporna','Jenny Pama','Juan Dela Cruz','Maria Santos','Ramon Villanueva','Ana Reyes'];
+const tasks=['Revolving Fund','Petty Cash Fund','Cash Advance','Delivery Fund'];
+const grid=document.getElementById('grid');
+const header=document.createElement('div');header.className='row header';
+['Company / Department','Custodian','Audit Task','Accountability','Frequency',...months].forEach(x=>{const d=document.createElement('div');d.className='head';d.textContent=x;header.appendChild(d)});grid.appendChild(header);
+for(let i=0;i<24;i++){
+ const row=document.createElement('div');row.className='row';
+ const values=[companies[i%companies.length],custodians[i%custodians.length],tasks[i%tasks.length],`₱${(5000+(i%6)*2500).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`,`${1+i%4}×`];
+ values.forEach((x,j)=>{const d=document.createElement('div');d.className='cell '+(j===3?'money ':'')+(j===4?'freq':'');d.textContent=x;row.appendChild(d)});
+ months.forEach((m,j)=>{const d=document.createElement('div');const state=(i+j)%7;if(state===0){d.className='month overdue';d.innerHTML='<span class="badge">IRS OVERDUE</span><span>Sab</span><span>Due Aug 12</span>'}else if(state===1){d.className='month done';d.innerHTML='<span class="badge">FRS</span><span>Jomel</span><span>Aug 18</span>'}else if(state===2){d.className='month';d.innerHTML='<span class="badge">PLANNED</span><span>Anne</span><span>Due Sep 30</span>'}else{d.className='month empty';d.textContent='＋ Plan'}row.appendChild(d)});
+ grid.appendChild(row)
+}
+</script>
+</body>
+</html>

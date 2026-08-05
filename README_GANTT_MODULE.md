@@ -1,4 +1,4 @@
-# IARS Yearly Audit Gantt — V4.5.20
+# IARS Yearly Audit Gantt — V4.5.22
 
 ## Roles
 
@@ -28,3 +28,10 @@
 - `iars_gantt_master`
 - `iars_gantt_schedule`
 - `iars_gantt_holiday`
+
+## V4.5.22 display behavior
+- All matching custodians remain in one scrollable Gantt viewport.
+- The complete header from Company / Department through December stays visible while scrolling vertically.
+- Company, Custodian, Audit Task, Accountability, and Frequency remain sticky during horizontal scrolling.
+- Identifying columns are compact to provide more space for the twelve month boxes.
+- Accountability is displayed as Philippine peso with two decimal places.

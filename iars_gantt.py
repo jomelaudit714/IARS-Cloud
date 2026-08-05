@@ -611,12 +611,14 @@ def parse_holiday_upload(file_bytes: bytes) -> pd.DataFrame:
 
 
 def _format_accountability(value: Any) -> str:
-    text = _clean_text(value)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return "—"
+    text = "0" if value == 0 else _clean_text(value)
     if not text:
         return "—"
     try:
         number = float(text.replace(",", "").replace("₱", ""))
-        return f"₱{number:,.0f}" if number.is_integer() else f"₱{number:,.2f}"
+        return f"₱{number:,.2f}"
     except ValueError:
         return text
 
@@ -677,19 +679,19 @@ def _render_gantt_css() -> None:
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
         .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
-        .st-key-iars-gantt-scroll-v4521 {overflow-x:auto!important;overflow-y:visible!important;padding-bottom:.45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"] {min-width:2390px!important;padding:.18rem .4rem!important;gap:.35rem!important;align-items:stretch!important;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {flex:0 0 260px!important;width:260px!important;position:sticky!important;left:0!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {flex:0 0 220px!important;width:220px!important;position:sticky!important;left:266px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {flex:0 0 190px!important;width:190px!important;position:sticky!important;left:492px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {flex:0 0 135px!important;width:135px!important;position:sticky!important;left:688px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {flex:0 0 90px!important;width:90px!important;position:sticky!important;left:829px!important;z-index:12!important;box-shadow:2px 0 0 #CBD5E1;}
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(n+6) {flex:0 0 112px!important;width:112px!important;}
-        .st-key-iars-gantt-header-v4521 {position:sticky!important;top:0!important;z-index:30!important;background:#fff!important;border-bottom:1px solid #CBD5E1!important;padding-top:.1rem!important;}
-        .st-key-iars-gantt-header-v4521 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {z-index:31!important;background:#fff!important;}
-        .st-key-iars-gantt-scroll-v4521 .stButton>button,
-        .st-key-iars-gantt-scroll-v4521 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
+        .st-key-iars-gantt-scroll-v4522 {max-height:calc(100vh - 235px)!important;min-height:320px!important;overflow:auto!important;padding-bottom:.45rem!important;border:1px solid #D9E2EE;border-radius:14px;background:#fff;position:relative!important;scrollbar-gutter:stable both-edges;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"] {min-width:1975px!important;padding:.18rem .35rem!important;gap:.35rem!important;align-items:stretch!important;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stColumn"] {min-width:0!important;background:#fff;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(1) {flex:0 0 180px!important;width:180px!important;position:sticky!important;left:0!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(2) {flex:0 0 160px!important;width:160px!important;position:sticky!important;left:186px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(3) {flex:0 0 145px!important;width:145px!important;position:sticky!important;left:352px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(4) {flex:0 0 120px!important;width:120px!important;position:sticky!important;left:503px!important;z-index:12!important;box-shadow:1px 0 0 #D9E2EE;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(5) {flex:0 0 80px!important;width:80px!important;position:sticky!important;left:629px!important;z-index:12!important;box-shadow:2px 0 0 #CBD5E1;}
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:nth-child(n+6) {flex:0 0 104px!important;width:104px!important;}
+        .st-key-iars-gantt-header-v4522 {position:sticky!important;top:0!important;z-index:40!important;background:#fff!important;border-bottom:1px solid #CBD5E1!important;padding-top:.1rem!important;box-shadow:0 2px 5px rgba(15,23,42,.08)!important;}
+        .st-key-iars-gantt-header-v4522 [data-testid="stHorizontalBlock"]>[data-testid="stColumn"] {z-index:41!important;background:#fff!important;}
+        .st-key-iars-gantt-scroll-v4522 .stButton>button,
+        .st-key-iars-gantt-scroll-v4522 [data-testid="stPopover"]>button {min-height:78px!important;width:100%!important;white-space:pre-line!important;font-size:.72rem!important;line-height:1.18!important;padding:.35rem!important;border-radius:10px!important;}
         [class*="st-key-gantt-empty-"] [data-testid="stPopover"]>button {border:1px dashed #CBD5E1!important;background:#FAFBFC!important;color:#667085!important;}
         [class*="st-key-gantt-planned-"] [data-testid="stPopover"]>button {border:1px solid #D6A129!important;background:#FFF8E6!important;color:#594200!important;}
         [class*="st-key-gantt-in-progress-"] [data-testid="stPopover"]>button {border:1px solid #2563EB!important;background:#EFF6FF!important;color:#1E3A8A!important;}
@@ -701,7 +703,7 @@ def _render_gantt_css() -> None:
         [class*="st-key-gantt-frs-"] [data-testid="stPopover"]>button {border:1px solid #18864B!important;background:#ECFDF3!important;color:#14532D!important;}
         .iars-gantt-head {font-size:.78rem;font-weight:800;color:#0B2B55;background:#EAF0F8;border-radius:8px;padding:.55rem .35rem;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center;}
         .iars-gantt-left {justify-content:flex-start;text-align:left;}
-        .iars-gantt-textcell {font-size:.76rem;border-bottom:1px solid #E5E7EB;min-height:78px;padding:.45rem .3rem;display:flex;align-items:center;}
+        .iars-gantt-textcell {font-size:.75rem;line-height:1.2;border-bottom:1px solid #E5E7EB;min-height:78px;padding:.42rem .28rem;display:flex;align-items:center;white-space:normal;overflow-wrap:anywhere;word-break:break-word;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -1051,16 +1053,16 @@ def _render_matrix(
         st.info("No schedule matched the selected filters.")
         return []
 
-    # V4.5.21: render every matching custodian record on one page. The browser page
-    # provides vertical scrolling; the month filter changes rows only and never hides
-    # the January-to-December columns.
+    # V4.5.22: render every matching custodian record in one vertically scrollable
+    # Gantt viewport. The complete Company-to-December header stays sticky while
+    # the month filter changes rows only and never hides month columns.
     shown = filtered
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
-    widths = [2.7, 2.25, 1.95, 1.35, .85] + [1.12] * 12
+    widths = [1.8, 1.6, 1.45, 1.2, .8] + [1.04] * 12
 
-    with _safe_container(key="iars-gantt-scroll-v4521"):
-        with _safe_container(key="iars-gantt-header-v4521"):
+    with _safe_container(key="iars-gantt-scroll-v4522"):
+        with _safe_container(key="iars-gantt-header-v4522"):
             header_cols = st.columns(widths, gap="small")
             headers = ["Company / Department", "Custodian", "Audit Task", "Accountability", "Frequency"] + [
                 month_name[month] for month in MONTHS
@@ -1122,7 +1124,7 @@ def _render_matrix(
                                     current_user_name=current_user_name,
                                     auditor_options=auditor_options,
                                 )
-    st.caption(f"Showing all {len(filtered)} matching custodian record(s) on one page. Scroll down for more rows; scroll sideways for January–December. Click a month box to update it.")
+    st.caption(f"Showing all {len(filtered)} matching custodian record(s) in one scrollable Gantt view. The full header stays visible while scrolling down; scroll sideways for January–December. Click a month box to update it.")
     return filtered
 
 
