@@ -28,7 +28,7 @@ PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8))
 REPORT_WORKING_DAYS = 5
 GANTT_EDIT_QUERY_PARAM = "iars_gantt_edit"  # legacy URL key; no longer used for month clicks
 GANTT_PENDING_EDIT_KEY = "iars_gantt_pending_edit_v4530"
-GANTT_GRID_KEY = "iars_gantt_native_grid_v4530"
+GANTT_GRID_KEY = "iars_gantt_native_grid_v4531"
 GANTT_GRID_MAP_SUFFIX = "__selection_map"
 
 HOLIDAY_COVERAGES = ["National", "Province of Rizal", "San Mateo, Rizal"]
@@ -1770,7 +1770,6 @@ def _render_matrix(
         on_select=_grid_selection_callback,
         selection_mode="single-cell",
         row_height=72,
-        lazy=False,
     )
 
     selected = _pending_gantt_edit()
