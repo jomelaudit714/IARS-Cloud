@@ -26,7 +26,10 @@ DISPLAY_STATUSES = ["Scheduled", "In Progress", "Overdue", "Done"] + REPORT_STAG
 MONTHS = list(range(1, 13))
 PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8))
 REPORT_WORKING_DAYS = 5
-GANTT_EDIT_QUERY_PARAM = "iars_gantt_edit"
+GANTT_EDIT_QUERY_PARAM = "iars_gantt_edit"  # legacy URL key; no longer used for month clicks
+GANTT_PENDING_EDIT_KEY = "iars_gantt_pending_edit_v4530"
+GANTT_GRID_KEY = "iars_gantt_native_grid_v4530"
+GANTT_GRID_MAP_SUFFIX = "__selection_map"
 
 HOLIDAY_COVERAGES = ["National", "Province of Rizal", "San Mateo, Rizal"]
 HOLIDAY_TYPES = [
@@ -1022,22 +1025,25 @@ def _safe_popover(label: str, *, key: str) -> Iterator[Any]:
         yield ctx
 
 
+def _empty_grid_selection() -> dict[str, dict[str, list[Any]]]:
+    return {"selection": {"rows": [], "columns": [], "cells": []}}
+
+
 def _reset_gantt_grid_selection() -> None:
+    """Clear the selected grid cell without changing the browser URL or page."""
     try:
-        st.session_state["iars_gantt_grid_generation_v4527"] = int(
-            st.session_state.get("iars_gantt_grid_generation_v4527", 0)
-        ) + 1
+        st.session_state[GANTT_GRID_KEY] = _empty_grid_selection()
     except Exception:
         pass
 
 
 def _dismiss_month_editor() -> None:
-    _clear_gantt_edit_query()
+    st.session_state.pop(GANTT_PENDING_EDIT_KEY, None)
     _reset_gantt_grid_selection()
 
 
 def _finish_month_editor() -> None:
-    _clear_gantt_edit_query()
+    st.session_state.pop(GANTT_PENDING_EDIT_KEY, None)
     _reset_gantt_grid_selection()
     st.rerun()
 
@@ -1541,6 +1547,167 @@ def _build_gantt_table_html(
     )
 
 
+def _grid_map_key(grid_key: str) -> str:
+    return f"{grid_key}{GANTT_GRID_MAP_SUFFIX}"
+
+
+def _grid_selection_callback(grid_key: str = GANTT_GRID_KEY) -> None:
+    """Translate one native dataframe cell selection into an editor request.
+
+    This callback runs before the app rerenders. It keeps ``main_navigation``
+    unchanged, so selecting a month never performs a browser navigation and
+    can never send the user back to Dashboard.
+    """
+    try:
+        state = st.session_state.get(grid_key, {})
+        selection = state.get("selection", {}) if hasattr(state, "get") else {}
+        cells = selection.get("cells", []) if hasattr(selection, "get") else []
+        mapping = st.session_state.get(_grid_map_key(grid_key), {})
+        if cells and isinstance(mapping, dict):
+            row_index, column_name = cells[-1]
+            month_by_column = mapping.get("month_by_column", {})
+            master_ids = mapping.get("master_ids", [])
+            clickable_cells = set(mapping.get("clickable_cells", []))
+            cell_token = f"{int(row_index)}|{str(column_name)}"
+            month = month_by_column.get(str(column_name))
+            if (
+                month in MONTHS
+                and 0 <= int(row_index) < len(master_ids)
+                and cell_token in clickable_cells
+            ):
+                st.session_state[GANTT_PENDING_EDIT_KEY] = {
+                    "master_id": str(master_ids[int(row_index)]),
+                    "year": int(mapping.get("year") or _today_pht().year),
+                    "month": int(month),
+                }
+        # Clearing in the callback is supported because the widget has not yet
+        # been recreated on the new run. This makes every click immediately
+        # available, including two consecutive clicks on the same month cell.
+        st.session_state[grid_key] = _empty_grid_selection()
+    except Exception:
+        # A selection must never break the Gantt page. The next click can retry.
+        try:
+            st.session_state[grid_key] = _empty_grid_selection()
+        except Exception:
+            pass
+
+
+def _gantt_cell_palette(slug: str) -> str:
+    palettes = {
+        "scheduled": "background-color:#EAF2FF;color:#1E3A8A;font-weight:700;border:1px solid #3B82F6;",
+        "in-progress": "background-color:#FFF4E5;color:#7C2D12;font-weight:700;border:1px solid #F59E0B;",
+        "done": "background-color:#DCFCE7;color:#14532D;font-weight:700;border:1px solid #22C55E;",
+        "for-frs": "background-color:#ECFEFF;color:#164E63;font-weight:700;border:1px solid #0891B2;",
+        "frs": "background-color:#D1FAE5;color:#064E3B;font-weight:700;border:1px solid #047857;",
+        "overdue": "background-color:#B91C1C;color:#FFFFFF;font-weight:800;border:1px solid #991B1B;",
+        "overdue-irs": "background-color:#B91C1C;color:#FFFFFF;font-weight:800;border:1px solid #991B1B;",
+        "overdue-frs": "background-color:#B91C1C;color:#FFFFFF;font-weight:800;border:1px solid #991B1B;",
+        "empty": "background-color:#FAFBFC;color:#667085;font-weight:650;border:1px solid #CBD5E1;",
+        "na": "background-color:#FFFFFF;color:#98A2B3;",
+    }
+    return palettes.get(slug, palettes["empty"])
+
+
+def _build_native_gantt_dataframe(
+    filtered: list[dict[str, Any]],
+    entries: list[dict[str, Any]],
+    holiday_rows: list[dict[str, Any]],
+    *,
+    year: int,
+    admin: bool,
+    current_user_name: str,
+    done_counts: dict[str, int],
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    """Build the native Streamlit grid, styling matrix and click map."""
+    lookup = _entry_lookup(entries)
+    current_key = _name_key(current_user_name)
+    rows: list[dict[str, str]] = []
+    style_rows: list[dict[str, str]] = []
+    master_ids: list[str] = []
+    clickable_cells: list[str] = []
+    month_by_column = {month_name[month]: month for month in MONTHS}
+
+    for row_index, master in enumerate(filtered):
+        master_id = str(master.get("id") or "")
+        master_ids.append(master_id)
+        row: dict[str, str] = {
+            "Company / Department": _clean_text(master.get("company_department")),
+            "Custodian": _clean_text(master.get("custodian")),
+            "Audit Task": _clean_text(master.get("audit_task")),
+            "Accountability": _format_accountability(master.get("accountability")),
+            "Frequency": f"{done_counts.get(master_id, 0)}×",
+        }
+        style_row = {column: "" for column in row}
+
+        for month in MONTHS:
+            column = month_name[month]
+            entry = lookup.get((master_id, month))
+            assigned_to_current = bool(entry) and _name_key(entry.get("auditor_full_name")) == current_key
+            visible_entry = entry if (admin or assigned_to_current) else None
+            clickable = bool(admin or assigned_to_current)
+            if visible_entry is None and not clickable:
+                row[column] = "—"
+                slug = "na"
+            else:
+                label, slug = _month_box_label(visible_entry, holiday_rows)
+                row[column] = label
+            style_row[column] = _gantt_cell_palette(slug)
+            if clickable:
+                clickable_cells.append(f"{row_index}|{column}")
+        rows.append(row)
+        style_rows.append(style_row)
+
+    data = pd.DataFrame(rows)
+    style_matrix = pd.DataFrame(style_rows, columns=data.columns, index=data.index)
+    mapping = {
+        "year": int(year),
+        "master_ids": master_ids,
+        "month_by_column": month_by_column,
+        "clickable_cells": clickable_cells,
+    }
+    return data, style_matrix, mapping
+
+
+def _native_gantt_column_config() -> dict[str, Any]:
+    config: dict[str, Any] = {
+        "Company / Department": st.column_config.TextColumn(
+            "Company / Department", width=112, pinned=True, alignment="center"
+        ),
+        "Custodian": st.column_config.TextColumn(
+            "Custodian", width=108, pinned=True, alignment="center"
+        ),
+        "Audit Task": st.column_config.TextColumn(
+            "Audit Task", width=104, pinned=True, alignment="center"
+        ),
+        "Accountability": st.column_config.TextColumn(
+            "Accountability", width=100, pinned=True, alignment="center"
+        ),
+        "Frequency": st.column_config.TextColumn(
+            "Frequency", width=82, pinned=True, alignment="center"
+        ),
+    }
+    for month in MONTHS:
+        config[month_name[month]] = st.column_config.TextColumn(
+            month_name[month], width=112, alignment="center"
+        )
+    return config
+
+
+def _pending_gantt_edit() -> tuple[str, int, int] | None:
+    pending = st.session_state.get(GANTT_PENDING_EDIT_KEY)
+    if not isinstance(pending, dict):
+        return None
+    try:
+        master_id = _clean_text(pending.get("master_id"))
+        year = int(pending.get("year"))
+        month = int(pending.get("month"))
+    except (TypeError, ValueError):
+        return None
+    if not master_id or month not in MONTHS:
+        return None
+    return master_id, year, month
+
+
 def _render_matrix(
     client: Any,
     masters: list[dict[str, Any]],
@@ -1577,7 +1744,7 @@ def _render_matrix(
 
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
-    table_html = _build_gantt_table_html(
+    data, style_matrix, selection_map = _build_native_gantt_dataframe(
         filtered,
         entries,
         holiday_rows,
@@ -1586,9 +1753,27 @@ def _render_matrix(
         current_user_name=current_user_name,
         done_counts=done_counts,
     )
-    st.markdown(table_html, unsafe_allow_html=True)
+    st.session_state[_grid_map_key(GANTT_GRID_KEY)] = selection_map
 
-    selected = _selected_gantt_edit()
+    def _apply_grid_styles(_: pd.DataFrame) -> pd.DataFrame:
+        return style_matrix
+
+    styled = data.style.apply(_apply_grid_styles, axis=None)
+    table_height = min(650, max(240, 58 + len(filtered) * 78))
+    st.dataframe(
+        styled,
+        width="stretch",
+        height=table_height,
+        hide_index=True,
+        column_config=_native_gantt_column_config(),
+        key=GANTT_GRID_KEY,
+        on_select=_grid_selection_callback,
+        selection_mode="single-cell",
+        row_height=72,
+        lazy=False,
+    )
+
+    selected = _pending_gantt_edit()
     if selected:
         selected_master_id, selected_year, selected_month = selected
         master = next(
@@ -1596,7 +1781,7 @@ def _render_matrix(
             None,
         )
         if selected_year != year or master is None:
-            _clear_gantt_edit_query()
+            _dismiss_month_editor()
         else:
             entry = lookup.get((selected_master_id, selected_month))
             assigned_to_current = bool(entry) and _name_key(entry.get("auditor_full_name")) == _name_key(current_user_name)
@@ -1613,15 +1798,14 @@ def _render_matrix(
                     auditor_options=auditor_options,
                 )
             else:
-                _clear_gantt_edit_query()
+                _dismiss_month_editor()
                 st.warning("You can open only the monthly audit schedules assigned to your account.")
 
     st.caption(
-        f"Showing all {len(filtered)} matching custodian record(s) in one scrollable Gantt view. "
-        "The Company-to-December header remains frozen inside the scrollable Gantt view. Company through Frequency remain frozen during horizontal scrolling. Click a month box to update it."
+        f"Showing all {len(filtered)} matching custodian record(s). Click one January–December cell to edit it. "
+        "The native grid keeps the header visible during vertical scrolling and pins Company through Frequency during horizontal scrolling."
     )
     return filtered
-
 
 def _load_gantt_data(client: Any, year: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     return (
