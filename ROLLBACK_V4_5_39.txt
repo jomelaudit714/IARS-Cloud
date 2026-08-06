@@ -1,0 +1,9 @@
+ROLLBACK INSTRUCTIONS
+
+If a live deployment issue occurs:
+1. Restore the previously confirmed IARS V4.5.38 complete ZIP.
+2. Upload its contents to the GitHub repository root and replace V4.5.39 files.
+3. Reboot Streamlit.
+4. Confirm that the header returns to v4.5.38.
+
+No database rollback is needed because V4.5.39 has no Supabase migration.

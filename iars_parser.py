@@ -1480,8 +1480,46 @@ def normalize_recommendation(rec):
     return make_sentence(rec)
 
 
+def _preserve_recommendation_text(rec):
+    """Clean recommendation spacing while preserving its wording and punctuation."""
+    rec = clean_text(rec).replace("NONE.", "None").strip()
+    if not rec or rec.upper() in {"NONE", "N/A", "NONE."}:
+        return "None"
+    return make_sentence(rec)
+
+
+def _merge_recommendation_continuations(parts):
+    """Rejoin introductory continuations that are not separate recommendations.
+
+    PDF table extraction can split ``Again, we recommend ...`` immediately before
+    ``we recommend``.  ``Again,`` is an introductory phrase, not Recommendation1.
+    """
+    merged = []
+    index = 0
+    continuation_only = re.compile(
+        r"^(?:again|similarly|likewise|furthermore|moreover|additionally|also),?$",
+        re.I,
+    )
+    continuation_start = re.compile(
+        r"^(?:we\s+recommend(?:ed)?|we\s+advise|please\s+review)\b",
+        re.I,
+    )
+    while index < len(parts):
+        current = clean_text(parts[index])
+        if (
+            continuation_only.fullmatch(current)
+            and index + 1 < len(parts)
+            and continuation_start.match(clean_text(parts[index + 1]))
+        ):
+            current = f"{current} {clean_text(parts[index + 1])}"
+            index += 1
+        merged.append(current)
+        index += 1
+    return merged
+
+
 def split_recommendations(rec):
-    """Split recommendation cell into Recommendation1 and Recommendation2."""
+    """Split genuine recommendations without breaking introductory phrases."""
     rec = clean_text(rec)
     if not rec or rec.upper() in ["NONE", "N/A", "NONE."]:
         return "None", "None"
@@ -1491,8 +1529,11 @@ def split_recommendations(rec):
         rec,
         flags=re.I,
     )
-    parts = [normalize_recommendation(p) for p in parts if clean_text(p)]
-    parts = [p for p in parts if p and p != "None"]
+    parts = _merge_recommendation_continuations(
+        [part for part in parts if clean_text(part)]
+    )
+    parts = [_preserve_recommendation_text(part) for part in parts]
+    parts = [part for part in parts if part and part != "None"]
 
     if not parts:
         return "None", "None"
@@ -2389,14 +2430,46 @@ def concise_text(text, max_words=25, field="general"):
     text = re.sub(r"^(It was observed that|It was noted that|The audit noted that)\s+", "", text, flags=re.I)
 
     if field.startswith("recommendation"):
-        text = normalize_recommendation(text)
-        # Output rule: Recommendation1 and Recommendation2 may contain up to
-        # 150 characters each.  Business-rule classification uses the full
-        # untruncated recommendation separately in build_records().
+        # Preserve the complete wording and punctuation whenever it fits.  Only
+        # shorten after the full semantic text has been used by business rules.
+        text = _preserve_recommendation_text(text)
         max_chars = 150
         if len(text) <= max_chars:
-            return make_sentence(text)
-        clipped = text[: max_chars - 3].rstrip(" ,;:-")
+            return text
+
+        # Safe concision removes polite/repetitive framing without changing the
+        # required action, subject, or purpose of the recommendation.
+        concise = text
+        safe_replacements = [
+            (r"^Again,\s*we\s+recommend(?:ed)?(?:\s+that)?\s+", "Recommend "),
+            (r"^We\s+recommend(?:ed)?(?:\s+that)?\s+", "Recommend "),
+            (r"^It\s+is\s+recommended\s+that\s+", "Recommend "),
+            (r"^We\s+advise(?:\s+that)?\s+", "Advise "),
+            (r"^Please\s+", ""),
+            (r"\bin\s+order\s+to\b", "to"),
+            (r"\bfor\s+the\s+purpose\s+of\b", "to"),
+            (r"\bat\s+this\s+point\s+in\s+time\b", "now"),
+            (r"\bthe\s+fact\s+that\b", "that"),
+        ]
+        for pattern, replacement in safe_replacements:
+            concise = re.sub(pattern, replacement, concise, flags=re.I)
+        concise = make_sentence(clean_text(concise))
+        if len(concise) <= max_chars:
+            return concise
+
+        # Prefer a complete first sentence when later sentences only explain the
+        # benefit or effect.  Otherwise clip at a word boundary with an ellipsis.
+        sentences = _safe_sentence_split(concise)
+        if sentences:
+            first_sentence = make_sentence(sentences[0])
+            if len(first_sentence) <= max_chars:
+                return first_sentence
+
+        limit = max_chars - 3
+        clipped = concise[:limit].rstrip()
+        if len(concise) > limit and not concise[limit:limit + 1].isspace():
+            clipped = clipped.rsplit(" ", 1)[0]
+        clipped = clipped.rstrip(" ,;:-")
         return clipped + "..."
 
     words = text.split()

@@ -1,0 +1,37 @@
+IARS V4.5.39 CHANGE MANIFEST
+
+Baseline: IARS V4.5.38
+
+Modified runtime files:
+- app.py: version label only.
+- iars_parser.py: recommendation continuity, punctuation preservation, and 150-character output logic.
+
+Modified regression controls:
+- tests/test_locked_extraction_rules.py
+- LOCKED_EXTRACTION_RULES.md
+
+Added release files:
+- DEPLOY_README_V4_5_39.txt
+- CHANGE_MANIFEST_V4_5_39.txt
+- TEST_REPORT_V4_5_39.txt
+- ROLLBACK_V4_5_39.txt
+
+Removed non-runtime artifacts:
+- .pytest_cache/
+- DEPLOY_README_V4_5_38.txt
+
+Protected modules verified unchanged:
+- iars_pdf_editor.py
+- iars_gantt.py
+- iars_auth.py
+- iars_archive.py
+- iars_excel_conversion.py
+- iars_weekly_itinerary.py
+- iars_document_library.py
+- iars_theme.py
+- iars_extract_worker.py
+- requirements.txt
+- packages.txt
+- assets/
+- data/Master_Data.xlsx
+- Supabase SQL files

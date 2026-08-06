@@ -1,0 +1,24 @@
+IARS V4.5.39 TEST REPORT
+
+LOCKED TEST SUITE
+.......                                                                  [100%]
+7 passed in 0.09s
+
+ACTUAL PDF GOLDEN TEST
+300 recommendation continuity iterations passed
+25 full actual-PDF extraction iterations passed
+Issue 3 Recommendation1 length: 149
+Issue 3 Recommendation2: None
+Issue 1 classification: NONCONF
+Issue 1 frequency: THIRD time
+
+COMPILATION
+11 Python modules compiled successfully
+
+PROTECTED FILE CONTROL
+- 37 protected runtime/dependency/asset/SQL files compared against V4.5.38.
+- Changed protected files: 0
+- Missing protected files: 0
+
+LIVE LIMITATION
+- Final Streamlit Cloud behavior must still be confirmed after deployment because this environment does not have access to the user's live application session.
