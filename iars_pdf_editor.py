@@ -1,4 +1,4 @@
-"""IARS PDF textbox editor v3.3.
+"""IARS PDF textbox editor v3.5.
 
 Text is synchronized only after an explicit editing boundary:
 - click outside the active textbox
@@ -6,7 +6,7 @@ Text is synchronized only after an explicit editing boundary:
 - leave the editor
 - close or unmount the popup
 
-Outside-click and box-switch commits use a one-second timer. Leaving or closing
+Outside-click and box-switch commits use a 1.2-second timer. Leaving or closing
 flushes immediately so the last active text is not lost. Browser-local backup is
 still updated while typing, but typing alone does not trigger Streamlit sync.
 """
@@ -67,6 +67,7 @@ EDITOR_CSS = r"""
   width: 100%;
   height: 100%;
   overflow: hidden;
+  overflow-anchor: none;
   border: 1px solid color-mix(in srgb, var(--st-text-color, #111827) 20%, transparent);
   border-radius: 10px;
   background: var(--st-background-color, #ffffff);
@@ -191,6 +192,7 @@ button.save:not(:disabled) {
   padding: 18px;
   background: #d7dbe0;
   overscroll-behavior: contain;
+  overflow-anchor: none;
 }
 
 .page-stage {
@@ -381,6 +383,123 @@ export default function(component) {
   const pageKey = String(pageNumber);
   const storageKey = String(data?.storage_key ?? 'iars_pdf_editor_backup');
   const pythonEditor = data?.editor ?? {};
+  const scrollStateKey = `${storageKey}:smooth-scroll-v35`;
+  const RESTORE_WINDOW_MS = 10000;
+
+  try {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+  } catch (_) {
+    // Browser may restrict history access. Scroll restoration below still applies.
+  }
+
+  function isVerticalScrollHost(element) {
+    if (!element || element === document.body) return false;
+    try {
+      const style = window.getComputedStyle(element);
+      const overflowY = style.overflowY;
+      return (
+        (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
+        element.scrollHeight > element.clientHeight + 4
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function findOuterScrollHost() {
+    let node = parentElement?.parentElement ?? null;
+    while (node && node !== document.body && node !== document.documentElement) {
+      if (isVerticalScrollHost(node)) return node;
+      node = node.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+
+  function hostViewportTop(host) {
+    if (!host || host === document.scrollingElement || host === document.documentElement || host === document.body) {
+      return 0;
+    }
+    try {
+      return host.getBoundingClientRect().top;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function captureSmoothScrollState() {
+    try {
+      const host = findOuterScrollHost();
+      const parentTop = parentElement.getBoundingClientRect().top;
+      const payload = {
+        page_number: pageNumber,
+        captured_at: Date.now(),
+        host_scroll_top: Number(host?.scrollTop ?? 0),
+        host_scroll_left: Number(host?.scrollLeft ?? 0),
+        anchor_top: Number(parentTop - hostViewportTop(host)),
+        window_x: Number(window.scrollX ?? 0),
+        window_y: Number(window.scrollY ?? 0),
+        viewport_top: Number(viewport?.scrollTop ?? 0),
+        viewport_left: Number(viewport?.scrollLeft ?? 0),
+      };
+      window.sessionStorage.setItem(scrollStateKey, JSON.stringify(payload));
+      return payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function readSmoothScrollState() {
+    try {
+      const raw = window.sessionStorage.getItem(scrollStateKey);
+      if (!raw) return null;
+      const payload = JSON.parse(raw);
+      if (Number(payload?.page_number) !== pageNumber) return null;
+      if (Date.now() - Number(payload?.captured_at ?? 0) > RESTORE_WINDOW_MS) return null;
+      return payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function restoreSmoothScrollState() {
+    const saved = readSmoothScrollState();
+    if (!saved) return;
+    let attempt = 0;
+    const delays = [0, 16, 40, 90, 160, 280, 450, 700, 1000, 1350];
+
+    const restore = () => {
+      const host = findOuterScrollHost();
+      try {
+        if (host?.style) host.style.overflowAnchor = 'none';
+        const currentAnchor = parentElement.getBoundingClientRect().top - hostViewportTop(host);
+        const anchorDelta = currentAnchor - Number(saved.anchor_top ?? currentAnchor);
+        const rawTarget = Number(host?.scrollTop ?? 0) + anchorDelta;
+        const fallbackTarget = Number(saved.host_scroll_top ?? 0);
+        const target = Number.isFinite(rawTarget) ? rawTarget : fallbackTarget;
+        if (host) {
+          host.scrollTop = Math.max(0, target);
+          host.scrollLeft = Math.max(0, Number(saved.host_scroll_left ?? 0));
+        }
+        if (viewport) {
+          viewport.scrollTop = Math.max(0, Number(saved.viewport_top ?? 0));
+          viewport.scrollLeft = Math.max(0, Number(saved.viewport_left ?? 0));
+        }
+        // The app usually scrolls inside the dialog. This is a harmless fallback
+        // for deployments where the document itself is the scrolling element.
+        if (host === document.scrollingElement || host === document.documentElement || host === document.body) {
+          window.scrollTo(Number(saved.window_x ?? 0), Number(saved.window_y ?? 0));
+        }
+      } catch (_) {
+        // A later scheduled attempt can still restore after layout settles.
+      }
+      attempt += 1;
+      if (attempt >= delays.length) {
+        try { window.sessionStorage.removeItem(scrollStateKey); } catch (_) {}
+      }
+    };
+
+    delays.forEach((delay) => window.setTimeout(restore, delay));
+  }
 
   function readLocalEditor() {
     try {
@@ -423,7 +542,7 @@ export default function(component) {
   let textCommitTimer = null;
   let dirty = localUpdated > pythonUpdated;
   let syncing = false;
-  const OUTSIDE_COMMIT_DELAY_MS = 1000;
+  const OUTSIDE_COMMIT_DELAY_MS = 1200;
   let suppressBlurCommit = false;
   let isComposing = false;
 
@@ -539,7 +658,8 @@ export default function(component) {
     const value = saveLocal();
     syncing = true;
     dirty = false;
-    setStatus('Saving…');
+    setStatus('Saving in background…');
+    captureSmoothScrollState();
     setStateValue('editor', value);
     window.setTimeout(() => {
       syncing = false;
@@ -990,7 +1110,7 @@ export default function(component) {
         textElement.innerText = box.text;
         dirty = true;
         saveLocal();
-        setStatus('Text committed — saving within one second…');
+        setStatus('Text committed — saving in 1.2 seconds…');
         syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
       });
       textElement.addEventListener('keydown', (event) => {
@@ -1183,7 +1303,7 @@ export default function(component) {
       setStatus('Text committed — saving now…');
       syncToStreamlit();
     } else {
-      setStatus('Text committed — saving within one second…');
+      setStatus('Text committed — saving in 1.2 seconds…');
       syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
     }
     return true;
@@ -1205,7 +1325,7 @@ export default function(component) {
       : null;
     const clickedInsideSelected = Boolean(selectedElement && path.includes(selectedElement));
     if (!clickedInsideSelected) {
-      setStatus('Changes committed — saving within one second…');
+      setStatus('Changes committed — saving in 1.2 seconds…');
       syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
     }
   }
@@ -1262,6 +1382,7 @@ export default function(component) {
     if (flushFocusedText({ blur: false, immediate: true })) return;
     if (dirty) {
       const value = saveLocal();
+      captureSmoothScrollState();
       try { setStateValue('editor', value); } catch (_) {}
       dirty = false;
     }
@@ -1287,6 +1408,7 @@ export default function(component) {
   };
   image.src = data?.image_data ?? '';
   renderBoxes();
+  restoreSmoothScrollState();
 
   if (localEditor && localUpdated > pythonUpdated) {
     dirty = true;
@@ -1301,6 +1423,7 @@ export default function(component) {
   return () => {
     if (!flushFocusedText({ blur: false, immediate: true }) && dirty) {
       const value = saveLocal();
+      captureSmoothScrollState();
       try { setStateValue('editor', value); } catch (_) {}
       dirty = false;
     }
@@ -1337,7 +1460,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v32",
+        name="iars_pdf_textbox_editor_v35",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
