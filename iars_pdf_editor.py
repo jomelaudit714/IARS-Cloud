@@ -1,4 +1,4 @@
-"""IARS PDF textbox editor v3.2.
+"""IARS PDF textbox editor v3.3.
 
 Text is synchronized only after an explicit editing boundary:
 - click outside the active textbox
@@ -420,15 +420,12 @@ export default function(component) {
   let contextHint = null;
   let lastSnapshot = null;
   let localSaveTimer = null;
-  let autoSyncTimer = null;
   let textCommitTimer = null;
   let dirty = localUpdated > pythonUpdated;
   let syncing = false;
-  const AUTOSAVE_IDLE_MS = 900;
   const OUTSIDE_COMMIT_DELAY_MS = 1000;
   let suppressBlurCommit = false;
   let isComposing = false;
-  let lastInteractionAt = performance.now();
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const clampFontSize = (value) => clamp(Number(value) || 11, 6, 48);
@@ -501,50 +498,21 @@ export default function(component) {
     }, delay);
   }
 
-  function editorHasActiveInput() {
-    const active = document.activeElement;
-    return Boolean(
-      operation ||
-      isComposing ||
-      active === fontSizeInput
-    );
-  }
-
   function noteUserInteraction() {
-    lastInteractionAt = performance.now();
-    if (autoSyncTimer) {
-      window.clearTimeout(autoSyncTimer);
-      autoSyncTimer = null;
-    }
+    // Intentionally no idle-save timer. Typing and editing remain local until
+    // an explicit boundary such as an outside click, box switch, or editor close.
   }
 
-  function scheduleAutoSync(delay = AUTOSAVE_IDLE_MS) {
-    if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
-    const elapsed = performance.now() - lastInteractionAt;
-    const wait = Math.max(120, Number(delay) || AUTOSAVE_IDLE_MS, AUTOSAVE_IDLE_MS - elapsed);
-    autoSyncTimer = window.setTimeout(() => {
-      autoSyncTimer = null;
-      if (!dirty || syncing) return;
-      const idleFor = performance.now() - lastInteractionAt;
-      if (editorHasActiveInput() || idleFor < AUTOSAVE_IDLE_MS) {
-        scheduleAutoSync(Math.max(180, AUTOSAVE_IDLE_MS - idleFor));
-        return;
-      }
-      syncToStreamlit();
-    }, wait);
-  }
-
-  function markDirty(message = 'Saving changes automatically…', delay = AUTOSAVE_IDLE_MS) {
+  function markDirty(message = 'Changes pending — click outside to save.') {
     dirty = true;
     noteUserInteraction();
     queueLocalSave(40);
     setStatus(message);
-    scheduleAutoSync(Math.max(120, Number(delay) || AUTOSAVE_IDLE_MS));
   }
 
   function syncTextCommitSoon(
     delay = OUTSIDE_COMMIT_DELAY_MS,
-    message = 'All changes saved automatically.'
+    message = 'All changes saved.'
   ) {
     if (textCommitTimer) window.clearTimeout(textCommitTimer);
     textCommitTimer = window.setTimeout(() => {
@@ -558,15 +526,11 @@ export default function(component) {
     }, Math.max(40, Number(delay) || OUTSIDE_COMMIT_DELAY_MS));
   }
 
-  function syncToStreamlit(message = 'All changes saved automatically.') {
+  function syncToStreamlit(message = 'All changes saved.') {
     if (!dirty || syncing) return;
     if (localSaveTimer) {
       window.clearTimeout(localSaveTimer);
       localSaveTimer = null;
-    }
-    if (autoSyncTimer) {
-      window.clearTimeout(autoSyncTimer);
-      autoSyncTimer = null;
     }
     if (textCommitTimer) {
       window.clearTimeout(textCommitTimer);
@@ -746,7 +710,7 @@ export default function(component) {
     }
     const boxElement = gesture.textElement.closest('.tag-box');
     boxElement?.classList.add('dragging');
-    setStatus('Dragging textbox… release to save automatically.');
+    setStatus('Dragging textbox… release, then click outside the box to save.');
   }
 
   function handleTextPointerDown(event, id, textElement) {
@@ -810,7 +774,7 @@ export default function(component) {
       noteUserInteraction();
       selectBox(gesture.id);
       placeCaretAtPoint(gesture.textElement, gesture.startX, gesture.startY);
-      setStatus('Editing… changes are saved automatically after 1.8 seconds of inactivity.');
+      setStatus('Editing… click outside or switch boxes to save.');
     }
   }
 
@@ -863,7 +827,7 @@ export default function(component) {
     fontSizeInput.value = String(Math.round(size));
     const box = currentBox();
     if (!box) {
-      markDirty(`Default font size ${Math.round(size)} pt — saving automatically…`, 650);
+      markDirty(`Default font size ${Math.round(size)} pt changed — click outside to save.`);
       return;
     }
     box.font_size = size;
@@ -877,7 +841,7 @@ export default function(component) {
       boxElement.style.height = `${box.h_pct}%`;
     }
     if (textElement) textElement.style.fontSize = `${size}px`;
-    markDirty(`Font size ${Math.round(size)} pt — saving automatically…`, 650);
+    markDirty(`Font size ${Math.round(size)} pt changed — click outside to save.`);
   }
 
   function showContextHint(clientX, clientY, message) {
@@ -917,7 +881,7 @@ export default function(component) {
     box.w_pct = desiredWidthPct;
     box.h_pct = desiredHeightPct;
     renderBoxes();
-    markDirty('Textbox fitted — saving automatically…', 650);
+    markDirty('Textbox fitted — click outside to save.');
   }
 
   function createBoxAt(clientX, clientY) {
@@ -942,7 +906,7 @@ export default function(component) {
     boxes.push(box);
     selectedId = box.id;
     renderBoxes();
-    markDirty('Textbox added — changes save automatically.', AUTOSAVE_IDLE_MS);
+    markDirty('Textbox added — click outside the box to save.');
     window.setTimeout(() => {
       const text = layer.querySelector(`[data-box-id="${box.id}"] .tag-text`);
       if (text) text.focus({ preventScroll: true });
@@ -1165,7 +1129,7 @@ export default function(component) {
     operation = null;
     layer.querySelectorAll('.tag-box.dragging').forEach((element) => element.classList.remove('dragging'));
     if (!moved) return;
-    markDirty(finishedType === 'resize' ? 'Textbox resized — saving automatically…' : 'Textbox repositioned — saving automatically…', AUTOSAVE_IDLE_MS);
+    markDirty(finishedType === 'resize' ? 'Textbox resized — click outside to save.' : 'Textbox repositioned — click outside to save.');
   }
 
   function deleteSelected() {
@@ -1173,7 +1137,7 @@ export default function(component) {
     boxes = boxes.filter((box) => box.id !== selectedId);
     selectedId = null;
     renderBoxes();
-    markDirty('Textbox deleted — saving automatically…', AUTOSAVE_IDLE_MS);
+    markDirty('Textbox deleted — click outside to save.');
   }
 
   function duplicateSelected() {
@@ -1186,7 +1150,7 @@ export default function(component) {
     boxes.push(duplicate);
     selectedId = duplicate.id;
     renderBoxes();
-    markDirty('Textbox duplicated — saving automatically…', AUTOSAVE_IDLE_MS);
+    markDirty('Textbox duplicated — click outside to save.');
   }
 
   function clearPage() {
@@ -1194,7 +1158,7 @@ export default function(component) {
     boxes = [];
     selectedId = null;
     renderBoxes();
-    markDirty('Page cleared — saving automatically…', AUTOSAVE_IDLE_MS);
+    markDirty('Page cleared — click outside to save.');
   }
 
   function flushFocusedText({ blur = false, immediate = false } = {}) {
@@ -1226,11 +1190,23 @@ export default function(component) {
   }
 
   function handleDocumentPointerDown(event) {
-    const focused = layer.querySelector('.tag-text:focus');
-    if (!focused) return;
     const path = event.composedPath?.() ?? [];
-    if (!path.includes(focused)) {
-      flushFocusedText({ blur: true, immediate: false });
+    const focused = layer.querySelector('.tag-text:focus');
+    if (focused) {
+      if (!path.includes(focused)) {
+        flushFocusedText({ blur: true, immediate: false });
+      }
+      return;
+    }
+
+    if (!dirty || syncing) return;
+    const selectedElement = selectedId
+      ? layer.querySelector(`[data-box-id="${selectedId}"]`)
+      : null;
+    const clickedInsideSelected = Boolean(selectedElement && path.includes(selectedElement));
+    if (!clickedInsideSelected) {
+      setStatus('Changes committed — saving within one second…');
+      syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
     }
   }
 
@@ -1314,13 +1290,12 @@ export default function(component) {
 
   if (localEditor && localUpdated > pythonUpdated) {
     dirty = true;
-    setStatus('Recovered local changes — saving automatically…');
-    scheduleAutoSync(AUTOSAVE_IDLE_MS);
+    setStatus('Recovered local changes — click outside the box or close the editor to save.');
   } else {
     dirty = false;
     setStatus(pythonUpdated > 0
-      ? 'All changes saved automatically.'
-      : `Page ${pageNumber}. Changes save automatically.`);
+      ? 'All changes saved.'
+      : `Page ${pageNumber}. Click outside or switch boxes to save changes.`);
   }
 
   return () => {
@@ -1343,7 +1318,6 @@ export default function(component) {
     window.removeEventListener('pointercancel', handleTextPointerCancel);
     window.removeEventListener('pointercancel', finishOperation);
     if (localSaveTimer) window.clearTimeout(localSaveTimer);
-    if (autoSyncTimer) window.clearTimeout(autoSyncTimer);
     window.removeEventListener('blur', handleWindowBlur);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('pagehide', handlePageHide);

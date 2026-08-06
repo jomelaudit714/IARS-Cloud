@@ -2219,6 +2219,53 @@ def frequency_rate_value(value, frequency_df=None):
 def is_repeat_frequency(value, frequency_df=None):
     return frequency_rate_value(value, frequency_df) > 1
 
+
+def _frequency_label_from_occurrence_count(count):
+    """Return the supported frequency label for the current audit occurrence.
+
+    IARS currently supports frequency master values through Seventh Time. Counts
+    above seven are therefore capped at the highest supported label rather than
+    returning a value that the receiving system cannot accept.
+    """
+    try:
+        occurrence_count = max(1, int(count))
+    except (TypeError, ValueError):
+        occurrence_count = 1
+    labels = {
+        1: "First Time",
+        2: "Second Time",
+        3: "Third Time",
+        4: "FORTH time",
+        5: "Fifth Time",
+        6: "Sixth Time",
+        7: "Seventh Time",
+    }
+    return labels[min(occurrence_count, 7)]
+
+
+def _audit_reference_numbers(text):
+    """Return unique normalized IAD reference numbers found in narrative text.
+
+    Accepted examples include 2026IAD103, 2026-IAD-103, 2026/IAD/103, and
+    variants containing spaces. Duplicate mentions of the same reference are
+    counted once so repeated wording does not inflate the frequency.
+    """
+    references = []
+    seen = set()
+    pattern = re.compile(
+        r"(?<![A-Z0-9])"
+        r"(20\d{2})\s*[-_/]?\s*IAD\s*[-_/]?\s*(\d{1,8})"
+        r"(?![A-Z0-9])",
+        re.I,
+    )
+    for match in pattern.finditer(clean_text(text)):
+        normalized = f"{match.group(1)}IAD{match.group(2)}".upper()
+        if normalized not in seen:
+            seen.add(normalized)
+            references.append(normalized)
+    return references
+
+
 def detect_frequency(issue, narrative, recommendation):
     text = clean_text(f"{issue} {narrative} {recommendation}")
 
@@ -2245,6 +2292,12 @@ def detect_frequency(issue, narrative, recommendation):
         if normalized:
             return normalized
 
+    # Each unique previous IAD reference represents one earlier audit. Add one
+    # for the current audit. Example: two references -> Third Time.
+    previous_references = _audit_reference_numbers(text)
+    if previous_references:
+        return _frequency_label_from_occurrence_count(len(previous_references) + 1)
+
     lower = text.lower()
     prior_markers = [
         r"same finding was noted",
@@ -2252,8 +2305,7 @@ def detect_frequency(issue, narrative, recommendation):
         r"previous audit",
         r"previously noted",
         r"noted in the previous audit",
-        r"reference\s+no\.",
-        r"\b20\d{2}iad\d+\b",
+        r"reference\s+(?:no\.?|number)",
     ]
     if any(re.search(pattern, lower, re.I) for pattern in prior_markers):
         return "Second Time"
