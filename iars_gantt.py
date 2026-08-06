@@ -622,15 +622,21 @@ def admin_save_schedule_entry(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    if initial_report_submitted_at is None:
-        payload["initial_report_reference"] = None
-    elif entry and _clean_text(entry.get("initial_report_reference")):
-        payload["initial_report_reference"] = _clean_text(entry.get("initial_report_reference"))
-
-    if final_report_submitted_at is None:
-        payload["final_report_reference"] = None
-    elif entry and _clean_text(entry.get("final_report_reference")):
-        payload["final_report_reference"] = _clean_text(entry.get("final_report_reference"))
+    # Supabase defines both report-reference columns as NOT NULL with an
+    # empty-string default.  Sending an explicit Python None bypasses that
+    # database default and causes the insert/update to fail.  Always send a
+    # string while preserving an existing reference when the corresponding
+    # report stage is still present.
+    payload["initial_report_reference"] = (
+        _clean_text((entry or {}).get("initial_report_reference"))
+        if initial_report_submitted_at is not None
+        else ""
+    )
+    payload["final_report_reference"] = (
+        _clean_text((entry or {}).get("final_report_reference"))
+        if final_report_submitted_at is not None
+        else ""
+    )
 
     entry_id = _clean_text((entry or {}).get("id"))
     if entry_id:

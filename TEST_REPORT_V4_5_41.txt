@@ -1,0 +1,23 @@
+IARS V4.5.41 TEST REPORT
+
+TARGET SCENARIO
+- Create January 2026 Scheduled monthly record.
+- Auditor: Jed Laserna.
+- Blank Audit Remarks / Reference.
+- Expected: successful payload with initial_report_reference='' and final_report_reference=''.
+
+AUTOMATED TESTS
+- 14 pytest regression tests passed.
+- Includes all locked extraction tests retained from V4.5.40.
+- Includes Gantt create/update tests for Scheduled, In Progress, Done, and FRS stages.
+- 1,000 repeated constraint simulations passed with no NULL report-reference values.
+- Existing IRS/FRS references preserved only for active report stages.
+
+PACKAGE TESTS
+- All Python modules compiled successfully.
+- Protected-file hash comparison passed.
+- ZIP integrity test passed.
+- No __pycache__, .pyc, or pytest cache files included.
+
+LIVE LIMITATION
+- Final Streamlit Cloud/Supabase verification must be performed after deployment to the user's live app.

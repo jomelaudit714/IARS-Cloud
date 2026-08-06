@@ -1,0 +1,36 @@
+IARS V4.5.41 CHANGE MANIFEST
+
+BASE VERSION
+- V4.5.40
+
+REQUESTED / OBSERVED ISSUE
+- Creating a Gantt monthly record returned PostgreSQL error 23502:
+  null value in column initial_report_reference violates not-null constraint.
+
+ROOT CAUSE
+- iars_gantt.py explicitly sent Python None for initial_report_reference and final_report_reference when their submission dates were absent.
+- An explicit NULL bypasses the database empty-string default.
+
+FILES MODIFIED
+- iars_gantt.py
+  * Sends empty strings instead of NULL to both NOT NULL reference columns.
+  * Preserves existing references only while the related report stage remains active.
+- app.py
+  * Version display changed from 4.5.40 to 4.5.41.
+
+FILES ADDED
+- tests/test_gantt_non_null_references.py
+- DEPLOY_README_V4_5_41.txt
+- CHANGE_MANIFEST_V4_5_41.txt
+- TEST_REPORT_V4_5_41.txt
+- ROLLBACK_V4_5_41.txt
+
+PROTECTED MODULES VERIFIED UNCHANGED
+- PDF Tagging
+- Audit Extraction and locked classification/recommendation rules
+- Authentication and Profile
+- Archive
+- Excel Conversion
+- Weekly Itinerary
+- Document Library
+- Theme, assets, requirements, and Supabase SQL files
