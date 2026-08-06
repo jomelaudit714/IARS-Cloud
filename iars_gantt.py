@@ -28,7 +28,7 @@ PHILIPPINE_TIMEZONE = timezone(timedelta(hours=8))
 REPORT_WORKING_DAYS = 5
 GANTT_EDIT_QUERY_PARAM = "iars_gantt_edit"  # legacy URL key; no longer used for month clicks
 GANTT_PENDING_EDIT_KEY = "iars_gantt_pending_edit_v4530"
-GANTT_GRID_KEY = "iars_gantt_native_grid_v4531"
+GANTT_GRID_KEY = "iars_gantt_native_grid_v4532"
 GANTT_GRID_MAP_SUFFIX = "__selection_map"
 
 HOLIDAY_COVERAGES = ["National", "Province of Rizal", "San Mateo, Rizal"]
@@ -298,7 +298,7 @@ def list_holidays(client: Any, year: int | None = None, *, active_only: bool = T
 
 
 def _master_payload(row: dict[str, Any], actor: str) -> dict[str, Any]:
-    company = _clean_text(row.get("company_department") or row.get("Company / Department"))
+    company = _clean_text(row.get("company_department") or row.get("Company") or row.get("Company / Department"))
     custodian = _clean_text(row.get("custodian") or row.get("Custodian"))
     task = _clean_text(row.get("audit_task") or row.get("Audit Task"))
     accountability = _clean_text(row.get("accountability") or row.get("Accountability"))
@@ -308,7 +308,7 @@ def _master_payload(row: dict[str, Any], actor: str) -> dict[str, Any]:
     else:
         active = bool(active_raw)
     if not company or not custodian or not task:
-        raise GanttError("Company / Department, Custodian, and Audit Task are required.")
+        raise GanttError("Company, Custodian, and Audit Task are required.")
     return {
         "company_department": company,
         "custodian": custodian,
@@ -346,6 +346,47 @@ def set_master_active(client: Any, record_id: str, active: bool, actor: str) -> 
         "updated_by": actor,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", record_id).execute()
+
+
+def _unique_record_ids(record_ids: Iterable[Any]) -> list[str]:
+    """Return cleaned, de-duplicated master-record IDs in original order."""
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for value in record_ids:
+        record_id = _clean_text(value)
+        if record_id and record_id not in seen:
+            seen.add(record_id)
+            cleaned.append(record_id)
+    return cleaned
+
+
+def delete_master_records(client: Any, record_ids: Iterable[Any]) -> int:
+    """Permanently delete selected master records and their linked schedules.
+
+    Monthly schedules are deleted explicitly before the master rows. The
+    database foreign key also uses ON DELETE CASCADE, but the explicit delete
+    keeps this action compatible with older deployments that may not yet have
+    the cascade constraint. Holiday-calendar records are never affected.
+    """
+    ids = _unique_record_ids(record_ids)
+    if not ids:
+        raise GanttError("Select at least one Gantt Master Data record to delete.")
+
+    chunk_size = 100
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start:start + chunk_size]
+        client.table(GANTT_SCHEDULE_TABLE).delete().in_("master_id", chunk).execute()
+        client.table(GANTT_MASTER_TABLE).delete().in_("id", chunk).execute()
+    return len(ids)
+
+
+def delete_all_master_records(client: Any) -> int:
+    """Delete the whole custodian master list and all linked schedules."""
+    records = list_master_records(client, active_only=False)
+    ids = [row.get("id") for row in records]
+    if not _unique_record_ids(ids):
+        return 0
+    return delete_master_records(client, ids)
 
 
 def _holiday_payload(row: dict[str, Any], actor: str) -> dict[str, Any]:
@@ -715,7 +756,7 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
     missing = [name for name in required if name not in selected]
     if missing:
         friendly = {
-            "company_department": "Company / Department",
+            "company_department": "Company",
             "custodian": "Custodian",
             "audit_task": "Audit Task",
             "accountability": "Accountability",
@@ -728,7 +769,7 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
     for target in required:
         output[target] = output[target].map(_clean_text)
     if output[["company_department", "custodian", "audit_task"]].eq("").any(axis=None):
-        raise GanttError("Every row must contain Company / Department, Custodian, and Audit Task.")
+        raise GanttError("Every row must contain Company, Custodian, and Audit Task.")
     output["active"] = output["active"].map(
         lambda value: _clean_text(value).casefold() not in {"no", "n", "false", "0", "inactive"}
         if isinstance(value, str)
@@ -740,7 +781,7 @@ def parse_master_upload(file_bytes: bytes) -> pd.DataFrame:
     )
     if duplicates.any():
         raise GanttError(
-            "Exact duplicate master-data rows were found. Company / Department, Custodian, "
+            "Exact duplicate master-data rows were found. Company, Custodian, "
             "Audit Task, and Accountability must not all be identical."
         )
     return output.reset_index(drop=True)
@@ -1494,7 +1535,7 @@ def _build_gantt_table_html(
     """
     lookup = _entry_lookup(entries)
     headers = [
-        "Company / Department",
+        "Company",
         "Custodian",
         "Audit Task",
         "Accountability",
@@ -1631,7 +1672,7 @@ def _build_native_gantt_dataframe(
         master_id = str(master.get("id") or "")
         master_ids.append(master_id)
         row: dict[str, str] = {
-            "Company / Department": _clean_text(master.get("company_department")),
+            "Company": _clean_text(master.get("company_department")),
             "Custodian": _clean_text(master.get("custodian")),
             "Audit Task": _clean_text(master.get("audit_task")),
             "Accountability": _format_accountability(master.get("accountability")),
@@ -1670,8 +1711,8 @@ def _build_native_gantt_dataframe(
 
 def _native_gantt_column_config() -> dict[str, Any]:
     config: dict[str, Any] = {
-        "Company / Department": st.column_config.TextColumn(
-            "Company / Department", width=112, pinned=True, alignment="center"
+        "Company": st.column_config.TextColumn(
+            "Company", width=112, pinned=True, alignment="center"
         ),
         "Custodian": st.column_config.TextColumn(
             "Custodian", width=108, pinned=True, alignment="center"
@@ -2163,7 +2204,7 @@ def render_gantt_master_data_page(
                 parsed = parse_master_upload(uploaded.getvalue())
                 st.success(f"Validation passed: {len(parsed):,} master-data row(s) detected.")
                 preview = parsed[["company_department", "custodian", "audit_task", "accountability"]].rename(columns={
-                    "company_department": "Company / Department",
+                    "company_department": "Company",
                     "custodian": "Custodian",
                     "audit_task": "Audit Task",
                     "accountability": "Accountability",
@@ -2190,8 +2231,96 @@ def render_gantt_master_data_page(
         metric_cols[2].metric("Custodians", len({_clean_text(row.get('custodian')) for row in masters}))
         metric_cols[3].metric("Audit Tasks", len({_clean_text(row.get('audit_task')) for row in masters}))
 
-        st.markdown("### Add or Edit a Master Record")
         record_map = {str(row.get("id")): row for row in masters}
+
+        with st.expander("Delete Gantt Master Data Records", expanded=False):
+            st.warning(
+                "Deletion is permanent. Any monthly Gantt schedules linked to the deleted "
+                "master record(s) will also be deleted. The Holiday Calendar will remain unchanged."
+            )
+            delete_mode = st.radio(
+                "Deletion mode",
+                ["Single record", "Multiple records", "Delete all records"],
+                horizontal=True,
+                key="iars_gantt_master_delete_mode_v4532",
+            )
+
+            def _record_label(item: str) -> str:
+                row = record_map.get(item, {})
+                return (
+                    f"{_clean_text(row.get('company_department'))} — "
+                    f"{_clean_text(row.get('custodian'))} — "
+                    f"{_clean_text(row.get('audit_task'))} — "
+                    f"{_format_accountability(row.get('accountability'))}"
+                )
+
+            delete_ids: list[str] = []
+            required_phrase = "DELETE"
+            if delete_mode == "Single record":
+                selected_delete_id = st.selectbox(
+                    "Record to delete",
+                    [""] + list(record_map),
+                    format_func=lambda item: "Select one record" if not item else _record_label(item),
+                    key="iars_gantt_master_delete_single_v4532",
+                )
+                delete_ids = [selected_delete_id] if selected_delete_id else []
+            elif delete_mode == "Multiple records":
+                delete_ids = st.multiselect(
+                    "Records to delete",
+                    list(record_map),
+                    format_func=_record_label,
+                    key="iars_gantt_master_delete_multiple_v4532",
+                )
+                if delete_ids:
+                    st.caption(f"{len(delete_ids):,} record(s) selected for permanent deletion.")
+            else:
+                delete_ids = list(record_map)
+                required_phrase = "DELETE ALL"
+                st.error(
+                    f"This will permanently delete all {len(delete_ids):,} Gantt Master Data "
+                    "record(s) and every linked monthly schedule."
+                )
+
+            acknowledged = st.checkbox(
+                "I understand that this action cannot be undone.",
+                key="iars_gantt_master_delete_ack_v4532",
+            )
+            confirmation = st.text_input(
+                f'Type {required_phrase} to confirm',
+                key="iars_gantt_master_delete_confirm_v4532",
+            )
+            delete_ready = bool(
+                delete_ids
+                and acknowledged
+                and _clean_text(confirmation).upper() == required_phrase
+            )
+            delete_label = {
+                "Single record": "Delete Selected Record",
+                "Multiple records": "Delete Selected Records",
+                "Delete all records": "Delete All Master Data",
+            }[delete_mode]
+            if st.button(
+                delete_label,
+                type="primary",
+                use_container_width=True,
+                disabled=not delete_ready,
+                key="iars_gantt_master_delete_execute_v4532",
+            ):
+                try:
+                    deleted = (
+                        delete_all_master_records(client)
+                        if delete_mode == "Delete all records"
+                        else delete_master_records(client, delete_ids)
+                    )
+                    st.success(
+                        f"{deleted:,} Gantt Master Data record(s) and their linked schedules "
+                        "were permanently deleted."
+                    )
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Unable to delete Gantt Master Data: {exc}")
+
+        st.markdown("### Add or Edit a Master Record")
         choices = [""] + list(record_map)
         selected_id = st.selectbox(
             "Record to edit",
@@ -2207,7 +2336,7 @@ def render_gantt_master_data_page(
         selected = record_map.get(selected_id, {})
         with st.form("iars_gantt_master_record_form_v4520"):
             col1, col2 = st.columns(2)
-            company = col1.text_input("Company / Department", value=_clean_text(selected.get("company_department")))
+            company = col1.text_input("Company", value=_clean_text(selected.get("company_department")))
             custodian = col2.text_input("Custodian", value=_clean_text(selected.get("custodian")))
             col3, col4 = st.columns([2, 1])
             task = col3.text_input("Audit Task", value=_clean_text(selected.get("audit_task")))
@@ -2247,7 +2376,7 @@ def render_gantt_master_data_page(
         if masters:
             table = pd.DataFrame([
                 {
-                    "Company / Department": _clean_text(row.get("company_department")),
+                    "Company": _clean_text(row.get("company_department")),
                     "Custodian": _clean_text(row.get("custodian")),
                     "Audit Task": _clean_text(row.get("audit_task")),
                     "Accountability": _format_accountability(row.get("accountability")),
