@@ -706,6 +706,7 @@ def _remove_profile_picture(client: Any, config: AuthConfig, user_id: str, curre
 def _effective_admin_profile(client: Any, config: AuthConfig) -> dict[str, Any]:
     profile = _fetch_profile(client, config, "admin")
     username = str(profile.get("username_override") or config.admin_username).strip().casefold()
+    full_name = str(profile.get("full_name_override") or config.admin_name).strip()
     picture = _download_profile_picture(client, config, str(profile.get("profile_picture_path") or ""))
     if not picture:
         picture = str(profile.get("profile_picture_data") or "").strip()
@@ -713,7 +714,7 @@ def _effective_admin_profile(client: Any, config: AuthConfig) -> dict[str, Any]:
         **profile,
         "profile_picture_data": picture,
         "username": username,
-        "full_name": config.admin_name,
+        "full_name": full_name,
         "role": "admin",
         "status": "Active",
         "id": "admin",
@@ -1177,6 +1178,65 @@ def render_profile_menu(client: Any, user: dict[str, Any], config: AuthConfig) -
             st.markdown("## Edit Profile")
             st.caption(f"@{current_username} · {role_label}")
             st.caption("Close this panel by clicking the top-right user card again or anywhere outside the menu.")
+
+            with st.expander("Change Full Name", expanded=False):
+                with st.container(key="profile_full_name_panel"):
+                    current_full_name = user_display_name(user)
+                    with st.form("profile_change_full_name_form"):
+                        st.text_input("Current Full Name", value=current_full_name, disabled=True)
+                        new_full_name_input = st.text_input(
+                            "New Full Name",
+                            placeholder="Enter your complete name",
+                        )
+                        current_password = st.text_input(
+                            "Current Password",
+                            type="password",
+                            key="profile_full_name_current_password",
+                        )
+                        submitted = st.form_submit_button(
+                            "Update Full Name",
+                            type="primary",
+                            width="stretch",
+                        )
+                    if submitted:
+                        try:
+                            new_full_name = clean_full_name(new_full_name_input)
+                            if new_full_name.casefold() == current_full_name.casefold():
+                                raise ValueError("Enter a different full name.")
+                            if not _verify_current_password(client, config, user, current_password):
+                                raise ValueError("Current password is incorrect.")
+                            if is_admin_user(user):
+                                _upsert_profile(
+                                    client,
+                                    config,
+                                    "admin",
+                                    {"full_name_override": new_full_name},
+                                )
+                            else:
+                                _update_user(
+                                    client,
+                                    config,
+                                    user_id,
+                                    {"full_name": new_full_name},
+                                )
+                            cached_user = dict(user)
+                            cached_user["full_name"] = new_full_name
+                            _cache_session_user(cached_user)
+                            _log_event(
+                                client,
+                                config,
+                                event_type="full_name_changed",
+                                username=current_username,
+                                user_id=None if is_admin_user(user) else user_id,
+                                success=True,
+                                details=f"Full name updated to {new_full_name}",
+                            )
+                            st.success("Full name updated successfully.")
+                            st.rerun()
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        except Exception as exc:
+                            st.error(f"Unable to update full name: {_profile_error_text(exc)}")
 
             with st.expander("Change Username", expanded=False):
                 with st.container(key="profile_username_panel"):

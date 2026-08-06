@@ -4,6 +4,7 @@
 create table if not exists public.iars_profiles (
   user_id text primary key,
   username_override text unique,
+  full_name_override text,
   profile_picture_path text,
   profile_picture_data text,
   admin_password_salt text,
@@ -13,6 +14,7 @@ create table if not exists public.iars_profiles (
 
 alter table public.iars_profiles
   add column if not exists username_override text,
+  add column if not exists full_name_override text,
   add column if not exists profile_picture_path text,
   add column if not exists profile_picture_data text,
   add column if not exists admin_password_salt text,
