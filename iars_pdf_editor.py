@@ -1,14 +1,15 @@
-"""IARS PDF textbox editor v3.6.
+"""IARS PDF textbox editor v3.7.
 
-Text is synchronized only after an explicit editing boundary:
+Ordinary editing boundaries save only to the browser-local PDF workspace:
 - click outside the active textbox box
 - switch to another textbox
 - leave or close the PDF Tagging dialog
 
-Every boundary waits 1.2 seconds before saving. Typing, pausing, browser focus
-changes, visibility changes, and component cleanup do not trigger a save.
-Scroll and active-caret state are restored after the Streamlit state rerun so
-tagging can continue without jumping to the top of the PDF.
+Each boundary waits 1.2 seconds. Typing and pausing never save. Most
+importantly, boundary saves do not call Streamlit and therefore do not rerun
+the page, jump the PDF to the top, or close the tagging dialog. The latest
+local state is synchronized to Python only when the user explicitly generates
+the tagged PDF.
 """
 from __future__ import annotations
 
@@ -393,7 +394,10 @@ export default function(component) {
   const pythonEditor = data?.editor ?? {};
   const instanceToken = `${storageKey}::${pageNumber}`;
   root.dataset.iarsPdfInstance = instanceToken;
-  const scrollStateKey = `${storageKey}:smooth-scroll-v36`;
+  const scrollStateKey = `${storageKey}:smooth-scroll-v37`;
+  const syncRequestToken = String(data?.sync_request_token ?? '');
+  const syncOwner = Boolean(data?.sync_owner);
+  const syncAckStorageKey = `${storageKey}:sync-ack-v37`;
   const RESTORE_WINDOW_MS = 15000;
 
   try {
@@ -662,10 +666,13 @@ export default function(component) {
   let contextHint = null;
   let lastSnapshot = null;
   let textCommitTimer = null;
-  let boundarySaveRequested = false;
-  let dirty = localUpdated > pythonUpdated;
+  let pendingBoundarySave = null;
+  let dirty = false;
   let syncing = false;
-  const OUTSIDE_COMMIT_DELAY_MS = 1200;
+  let editRevision = 0;
+  let persistedRevision = 0;
+  const OUTSIDE_COMMIT_DELAY_MS = Math.max(40, Number(data?.save_delay_ms ?? 1200));
+  const SYNC_REQUEST_DELAY_MS = Math.max(50, Number(data?.sync_delay_ms ?? 1450));
   let suppressBlurCommit = false;
   let isComposing = false;
 
@@ -722,8 +729,7 @@ export default function(component) {
     return lastSnapshot;
   }
 
-  function saveLocal() {
-    const value = snapshot();
+  function writeLocalSnapshot(value) {
     try {
       window.__iarsPdfLocalEditors = window.__iarsPdfLocalEditors || {};
       window.__iarsPdfLocalEditors[storageKey] = structuredClone(value);
@@ -738,64 +744,92 @@ export default function(component) {
     return value;
   }
 
+  function saveLocal() {
+    return writeLocalSnapshot(snapshot());
+  }
 
   function noteUserInteraction() {
-    // Intentionally no idle-save timer. Typing and editing remain local until
-    // an explicit boundary such as an outside click, box switch, or editor close.
+    // Intentionally no idle-save timer. Typing and editing remain in memory
+    // until an explicit outside-click, textbox-switch, or editor-close boundary.
   }
 
   function markDirty(message = 'Changes pending — click outside to save.') {
+    editRevision += 1;
     dirty = true;
     noteUserInteraction();
     setStatus(message);
   }
 
-  function syncTextCommitSoon(
-    delay = OUTSIDE_COMMIT_DELAY_MS,
-    message = 'All changes saved.'
-  ) {
-    boundarySaveRequested = true;
+  function scheduleBoundarySave(message = 'All changes saved locally.') {
+    if (!dirty || syncing) return false;
+
+    // Capture the exact state at the boundary. Text typed in another box after
+    // this click is not silently included in the earlier save.
+    pendingBoundarySave = {
+      value: snapshot(),
+      revision: editRevision,
+      requested_at: Date.now(),
+      message,
+    };
+
     if (textCommitTimer) window.clearTimeout(textCommitTimer);
+    setStatus(`Changes committed — saving in ${(OUTSIDE_COMMIT_DELAY_MS / 1000).toFixed(1)} seconds…`);
     textCommitTimer = window.setTimeout(() => {
       textCommitTimer = null;
-      if (!dirty || syncing) {
-        boundarySaveRequested = false;
-        return;
-      }
-      if (isComposing) {
-        syncTextCommitSoon(120, message);
-        return;
-      }
-      syncToStreamlit(message);
-    }, Math.max(40, Number(delay) || OUTSIDE_COMMIT_DELAY_MS));
+      const pending = pendingBoundarySave;
+      pendingBoundarySave = null;
+      if (!pending) return;
+
+      writeLocalSnapshot(pending.value);
+      persistedRevision = Math.max(persistedRevision, Number(pending.revision ?? 0));
+      dirty = editRevision > persistedRevision;
+      setStatus(
+        dirty
+          ? 'Earlier changes saved. Current textbox is still pending — click outside to save.'
+          : pending.message
+      );
+    }, OUTSIDE_COMMIT_DELAY_MS);
+    return true;
   }
 
-  function syncToStreamlit(message = 'All changes saved.') {
-    if (!dirty || syncing || !boundarySaveRequested) return;
+  function lastSyncAckToken() {
+    try {
+      return String(window.sessionStorage.getItem(syncAckStorageKey) ?? '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function rememberSyncAckToken(token) {
+    try { window.sessionStorage.setItem(syncAckStorageKey, String(token)); } catch (_) {}
+  }
+
+  function synchronizeForExplicitGenerate() {
+    if (!syncOwner || !syncRequestToken || lastSyncAckToken() === syncRequestToken) return;
+
+    // The Generate button itself is an outside click. Wait long enough for the
+    // old mounted editor's 1.2-second local boundary save to finish, then read
+    // the shared local workspace and send one consolidated state to Python.
     if (textCommitTimer) {
       window.clearTimeout(textCommitTimer);
       textCommitTimer = null;
+      pendingBoundarySave = null;
     }
 
     const value = saveLocal();
-    boundarySaveRequested = false;
-
-    // A close or navigation click can unmount the component before the
-    // 1.2-second boundary finishes. The browser-local save above is still
-    // durable; do not call Streamlit from a detached component.
-    if (!root.isConnected || !parentElement.isConnected) {
-      dirty = false;
-      return;
-    }
-
+    value.sync_token = syncRequestToken;
     syncing = true;
     dirty = false;
+    persistedRevision = editRevision;
     captureSmoothScrollState();
-    setStateValue('editor', value);
-    window.setTimeout(() => {
+    try {
+      setStateValue('editor', value);
+      rememberSyncAckToken(syncRequestToken);
+      setStatus('Latest tags synchronized for PDF generation.');
+    } catch (_) {
       syncing = false;
-      setStatus(message);
-    }, 180);
+      setStatus('Unable to synchronize tags. Try Generate Tagged PDF again.');
+    }
   }
 
   function setStatus(message) {
@@ -1215,6 +1249,7 @@ export default function(component) {
       textElement.addEventListener('compositionend', () => {
         isComposing = false;
         box.text = textElement.innerText;
+        editRevision += 1;
         dirty = true;
         noteUserInteraction();
         setStatus('Text updated — click outside or switch boxes to save.');
@@ -1224,6 +1259,7 @@ export default function(component) {
         // Streamlit synchronization begins only after an explicit boundary:
         // outside click, box switch, leaving the editor, or closing the popup.
         box.text = textElement.innerText;
+        editRevision += 1;
         dirty = true;
         setStatus('Editing… click outside or switch boxes to save.');
         noteUserInteraction();
@@ -1425,8 +1461,7 @@ export default function(component) {
     }
 
     // Every valid boundary, including Escape/leave, waits the same 1.2 seconds.
-    setStatus('Changes committed — saving in 1.2 seconds…');
-    syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
+    scheduleBoundarySave('All changes saved locally.');
     return true;
   }
 
@@ -1451,8 +1486,7 @@ export default function(component) {
       : null;
     const clickedInsideSelected = Boolean(selectedElement && path.includes(selectedElement));
     if (!clickedInsideSelected) {
-      setStatus('Changes committed — saving in 1.2 seconds…');
-      syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
+      scheduleBoundarySave('All changes saved locally.');
     }
   }
 
@@ -1520,8 +1554,8 @@ export default function(component) {
   restoreSmoothScrollState();
 
   if (localEditor && localUpdated > pythonUpdated) {
-    dirty = true;
-    setStatus('Recovered local changes — click outside the box or close the editor to save.');
+    dirty = false;
+    setStatus('Local tags restored. Continue tagging without a page rerun.');
   } else {
     dirty = false;
     setStatus(pythonUpdated > 0
@@ -1529,10 +1563,15 @@ export default function(component) {
       : `Page ${pageNumber}. Click outside or switch boxes to save changes.`);
   }
 
+  if (syncOwner && syncRequestToken && lastSyncAckToken() !== syncRequestToken) {
+    window.setTimeout(synchronizeForExplicitGenerate, SYNC_REQUEST_DELAY_MS);
+  }
+
   return () => {
-    // Component cleanup and unrelated Streamlit reruns are deliberately not
-    // save triggers. A pending explicit boundary timer is allowed to finish;
-    // it writes to browser storage and skips Streamlit if this node detached.
+    // Component cleanup itself is not an extra save trigger. A save timer that
+    // was already started by an explicit outside click / switch / close action
+    // is deliberately left running so its browser-local save finishes after
+    // 1.2 seconds even when the dialog has already unmounted.
 
     layer.removeEventListener('contextmenu', handleContextMenu);
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
@@ -1559,7 +1598,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v36",
+        name="iars_pdf_textbox_editor_v37",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
@@ -1584,6 +1623,8 @@ def pdf_textbox_editor(
     storage_key: str,
     key: str,
     height: int = 920,
+    sync_request_token: int | str = 0,
+    sync_owner: bool = False,
 ):
     """Mount one persistent editor instance for all pages of one PDF."""
     initial_editor: dict[str, Any] = {
@@ -1608,6 +1649,8 @@ def pdf_textbox_editor(
             "page_number": int(page_number),
             "storage_key": storage_key,
             "zoom": 1.0,
+            "sync_request_token": str(sync_request_token or ""),
+            "sync_owner": bool(sync_owner),
         },
         default={"editor": current_editor},
         key=safe_key,

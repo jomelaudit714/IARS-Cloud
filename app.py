@@ -4369,9 +4369,9 @@ def render_pdf_tagging_full_document_dialog(
     st.markdown(f"### {filename}")
     st.info(
         "Scroll through all pages. Double-right-click a page to add a textbox, "
-        "then type, move, resize, or change the exact font size. Changes save "
+        "then type, move, resize, or change the exact font size. Changes save locally "
         "1.2 seconds after you click outside the active textbox, switch to another textbox, "
-        "or leave/close the editor. Typing and pausing never trigger a save. Auditee, Auditor, and Task ID tags carry "
+        "or leave/close the editor. These saves do not rerun or move the PDF. Typing and pausing never trigger a save. Auditee, Auditor, and Task ID tags carry "
         "forward to every succeeding issue and page until a newer tag of the same "
         "type appears. Frequency Rate and Reaction remain issue-specific."
     )
@@ -4379,8 +4379,12 @@ def render_pdf_tagging_full_document_dialog(
     reset_key = f"pdf_editor_reset_{file_id}"
     reset_version = int(st.session_state.get(reset_key, 0) or 0)
     storage_key = f"iars_pdf_editor_{file_id}_v30_reset_{reset_version}"
+    sync_request_key = f"pdf_editor_sync_request_v4_5_37_{file_id}"
+    pending_generate_key = f"pdf_editor_generate_pending_v4_5_37_{file_id}"
+    requested_sync_token = int(st.session_state.get(sync_request_key, 0) or 0)
     component_keys: list[str] = []
     merged_pages: dict[str, list] = {}
+    merged_sync_token = 0
 
     for page_number in range(1, page_count + 1):
         st.markdown(f"#### Page {page_number} of {page_count}")
@@ -4394,7 +4398,7 @@ def render_pdf_tagging_full_document_dialog(
             "_",
             (
                 f"iars_pdf_editor_{file_id}_page_{page_number}_"
-                f"v36_reset_{reset_version}"
+                f"v37_reset_{reset_version}"
             ),
         )
         component_keys.append(component_key)
@@ -4415,6 +4419,8 @@ def render_pdf_tagging_full_document_dialog(
                 storage_key=storage_key,
                 key=component_key,
                 height=editor_height,
+                sync_request_token=requested_sync_token,
+                sync_owner=page_number == 1,
             )
 
         for state_candidate in (
@@ -4422,6 +4428,14 @@ def render_pdf_tagging_full_document_dialog(
             st.session_state.get(component_key),
         ):
             current_editor = component_editor_value(state_candidate)
+            if isinstance(current_editor, dict):
+                try:
+                    merged_sync_token = max(
+                        merged_sync_token,
+                        int(current_editor.get("sync_token", 0) or 0),
+                    )
+                except (TypeError, ValueError):
+                    pass
             pages = current_editor.get("pages", {}) if isinstance(current_editor, dict) else {}
             if isinstance(pages, dict):
                 for page_key, page_boxes in pages.items():
@@ -4469,33 +4483,54 @@ def render_pdf_tagging_full_document_dialog(
 
     st.divider()
     if all_tag_rows:
-        with st.expander(f"Review saved textbox data ({len(all_tag_rows)})"):
+        with st.expander(f"Review synchronized textbox data ({len(all_tag_rows)})"):
             st.dataframe(
                 pd.DataFrame(all_tag_rows),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
     else:
-        st.info("No completed textbox tags yet.")
+        st.info(
+            "Tagging changes are saved locally without rerunning the page. "
+            "Click Generate Tagged PDF when finished to synchronize the latest tags."
+        )
 
     tagged_state_key = f"tagged_pdf_{file_id}"
+    generate_pending = bool(st.session_state.get(pending_generate_key, False))
+    if generate_pending and requested_sync_token and merged_sync_token == requested_sync_token:
+        try:
+            if not all_tag_rows:
+                raise ValueError("No completed textbox tags were found.")
+            st.session_state[tagged_state_key] = stamp_pdf_with_tags(
+                pdf_bytes,
+                all_tag_rows,
+            )
+            st.session_state[pending_generate_key] = False
+            st.success("Tagged PDF generated successfully using the latest locally saved tags.")
+        except Exception as exc:
+            st.session_state[pending_generate_key] = False
+            st.error(f"Unable to generate tagged PDF: {exc}")
+    elif generate_pending:
+        st.info(
+            "Synchronizing the latest locally saved tags. This runs only when "
+            "Generate Tagged PDF is clicked and does not interrupt normal tagging."
+        )
+
     action_left, action_middle, action_right = st.columns(3)
     with action_left:
         if st.button(
             "Generate Tagged PDF",
             type="primary",
-            disabled=not all_tag_rows,
-            use_container_width=True,
-            key=f"pdf_tagging_generate_v4_4_81_{file_id}",
+            width="stretch",
+            key=f"pdf_tagging_generate_v4_5_37_{file_id}",
         ):
-            try:
-                st.session_state[tagged_state_key] = stamp_pdf_with_tags(
-                    pdf_bytes,
-                    all_tag_rows,
-                )
-                st.success("Tagged PDF generated successfully.")
-            except Exception as exc:
-                st.error(f"Unable to generate tagged PDF: {exc}")
+            next_token = max(
+                int(st.session_state.get(sync_request_key, 0) or 0) + 1,
+                int(time.time_ns()),
+            )
+            st.session_state[sync_request_key] = next_token
+            st.session_state[pending_generate_key] = True
+            st.rerun()
 
     with action_middle:
         tagged_pdf = st.session_state.get(tagged_state_key)
@@ -4525,6 +4560,8 @@ def render_pdf_tagging_full_document_dialog(
             for component_key in component_keys:
                 st.session_state.pop(component_key, None)
             st.session_state.pop(tagged_state_key, None)
+            st.session_state.pop(sync_request_key, None)
+            st.session_state.pop(pending_generate_key, None)
             st.rerun()
 
     with st.expander("Save original/tagged PDF to permanent archive"):
@@ -4801,7 +4838,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.36",
+    version="4.5.37",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -5827,7 +5864,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.36", "note": "Stable PDF Boundary Save Without Scroll Jump", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.37", "note": "PDF Tagging Local Boundary Save Without Rerun", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},
