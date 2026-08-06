@@ -1843,15 +1843,30 @@ def is_missing_receiver_signature_issue(issue, narrative="", recommendation=""):
 
 
 def recommendation_requires_written_policy_compliance(recommendation):
-    """Return True when the recommendation cites a governing document."""
+    """Return True when the recommendation cites a governing document.
+
+    The classifier receives normalized recommendation text, so wording such as
+    ``Please review No. 3 of Policies and Procedures`` may become
+    ``Review No. 3 of Policies and Procedures`` before classification.  A
+    governing-document citation is therefore sufficient; it must not depend on
+    a particular opener such as ``please review`` or ``review the``.
+    """
     rec = clean_text(recommendation).lower()
     if not rec:
         return False
-    has_governing_term = any(term in rec for term in GOVERNING_DOCUMENT_TERMS)
-    has_directive = any(term in rec for term in GOVERNING_RECOMMENDATION_DIRECTIVES)
-    # "Please review Circular ..." is the common format, while direct wording
-    # such as "Follow Policy X" or "Comply with the SOP" is also supported.
-    return has_governing_term and has_directive
+    return any(term in rec for term in GOVERNING_DOCUMENT_TERMS)
+
+
+def narrative_or_recommendation_cites_governing_document(narrative="", recommendation=""):
+    """Return True when the narrative or recommendation cites policy guidance.
+
+    This implements the controlled IARS rule: when the narrative or
+    recommendation cites a process, policy, procedure, guideline, memorandum,
+    circular, SOP, manual, protocol, or written rule, a completeness/best-
+    practice issue is classified as written-policy nonconformity.
+    """
+    combined = clean_text(f"{narrative} {recommendation}").lower()
+    return bool(combined) and any(term in combined for term in GOVERNING_DOCUMENT_TERMS)
 
 
 def is_explicit_minimal_cash_shortage(issue, narrative=""):
@@ -1941,6 +1956,13 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
             return "Cash/Fund/Collection Overage (below ₱1,000.00) -2"
         return "Cash/Fund/Collection Overage (₱1,000.00 and above) -4"
 
+    # Controlled classification precedence for BEST-PRACT versus NONCONF:
+    # when the narrative or recommendation cites a governing document, classify
+    # the issue as written-policy nonconformity before the generic incomplete-
+    # details / best-practice fallback below.
+    if narrative_or_recommendation_cites_governing_document(narrative, recommendation):
+        return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
+
     # Incomplete details in PCV/receipt/generic receipt are completeness lapses,
     # not omission/alteration or nonconformity, unless actual alteration/tampering is stated.
     incomplete_detail_patterns = [
@@ -2028,75 +2050,6 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     if "immaterial" in combined:
         return "Immaterial Findings 3"
 
-    return "Ignore or Disregard Office/Operation Best Practices -3"
-
-
-    if any(p in combined for p in NO_FINDING_PATTERNS):
-        return "No Findings 10"
-
-    amounts = extract_money_amounts(issue) or extract_money_amounts(narrative)
-    amount = max(amounts) if amounts else None
-    is_estancia = "estancia de lorenzo" in company_lower
-    is_petty_cash = "petty cash" in combined or "petty cash" in audit_title_lower
-
-    if any(k in issue_lower for k in ["cash shortage", "fund shortage", "collection shortage"]):
-        if amount is not None and amount < 1000:
-            return "Immaterial Findings 3"
-        if amount is not None and amount < 3000:
-            return "Cash/Fund/Collection Shortage (below ₱3,000.00) -4"
-        return "Cash/Fund/Collection Shortage (₱3,000.00 and above) -8"
-
-    if any(k in issue_lower for k in ["cash overage", "fund overage", "collection overage"]):
-        if amount is not None and amount < 1000:
-            return "Cash/Fund/Collection Overage (below ₱1,000.00) -2"
-        return "Cash/Fund/Collection Overage (₱1,000.00 and above) -4"
-
-    if is_estancia and any(k in combined for k in ["policy", "procedure", "proper procedure", "guidelines", "sop", "required", "must", "cash voucher"]):
-        return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
-
-    if is_petty_cash and any(k in combined for k in ["reimbursement exceeding", "without stamped paid", "unsupported", "cash voucher", "official receipt", "invoice"]):
-        return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
-
-    if any(k in issue_lower for k in ["incomplete details", "incomplete receipt", "incorrect receipt", "incomplete cv", "incomplete pcv", "incorrect pcv", "omission", "alteration"]):
-        if any(k in combined for k in ["policy", "procedure", "sop", "guideline", "required"]):
-            return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
-        if any(k in combined for k in ["missing", "no signature", "no date", "incorrect date", "no supplier", "no owner"]):
-            return "Omission & Alteration Of Details in Documents -7"
-        return "Ignore or Disregard Office/Operation Best Practices -3"
-
-    if any(k in issue_lower for k in ["late preparation of pcv", "no preparation of pcv", "uncancelled pcv", "inconsistent using of pcv"]):
-        if any(k in combined for k in ["policy", "procedure", "sop", "guideline", "required"]):
-            return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
-        return "Ignore or Disregard Office/Operation Best Practices -3"
-
-    if "skipped and missing pcv" in issue_lower or ("missing pcv" in issue_lower and "skipped" in issue_lower):
-        return "Missing, Misused or Lost Of Documents/Asset(s) -3"
-
-    if any(k in issue_lower for k in ["no document used for cash taken from the fund", "cash taken without document", "no document used"]):
-        if any(k in combined for k in ["lost document", "missing document", "cannot produce", "unable to locate", "misused document"]):
-            return "Missing, Misused or Lost Of Documents/Asset(s) -3"
-        return "Ignore or Disregard Office/Operation Best Practices -3"
-
-    if any(k in issue_lower for k in ["undocumented", "without document"]):
-        if any(k in combined for k in ["lost document", "missing document", "cannot produce", "unable to locate", "misused document"]):
-            return "Missing, Misused or Lost Of Documents/Asset(s) -3"
-        return "Ignore or Disregard Office/Operation Best Practices -3"
-
-    if any(k in issue_lower for k in ["inaccurate monitoring", "outdated monitoring", "no daily balancing", "no monitoring", "incomplete monitoring", "delayed recording"]):
-        if any(k in combined for k in ["policy", "procedure", "sop", "guideline", "proper procedure"]):
-            return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
-        return "Ignore or Disregard Office/Operation Best Practices -3"
-
-    if any(k in issue_lower for k in ["depleted fund", "low fund", "fund depletion", "mixing of fund", "mixed fund", "personal cash", "outside its purpose"]):
-        return "Ignore or Disregard Office/Operation Best Practices -3"
-
-    if any(k in combined for k in ["nonconformity", "non-compliance", "not following proper procedure", "policy", "policies", "procedure", "procedures", "guidelines", "sop", "process", "memorandum", "written requirement"]):
-        return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
-
-    if "uncooperative" in combined:
-        return "Uncooperative or Failed To Produce Documents/Results Within Reasonable Time -4"
-    if "immaterial" in combined:
-        return "Immaterial Findings 3"
     return "Ignore or Disregard Office/Operation Best Practices -3"
 
 
@@ -2437,13 +2390,14 @@ def concise_text(text, max_words=25, field="general"):
 
     if field.startswith("recommendation"):
         text = normalize_recommendation(text)
-
-    # Do not truncate named policy/circular recommendations; these are intentionally specific.
-    if field.startswith("recommendation") and (
-        "Policy No. 3 of Policies and Procedures on Revolving Fund" in text
-        or re.search(r"\bCircular\s+\d{4}\s*-\s*\d+\s+no\.\s*\d+", text, re.I)
-    ):
-        return make_sentence(text)
+        # Output rule: Recommendation1 and Recommendation2 may contain up to
+        # 150 characters each.  Business-rule classification uses the full
+        # untruncated recommendation separately in build_records().
+        max_chars = 150
+        if len(text) <= max_chars:
+            return make_sentence(text)
+        clipped = text[: max_chars - 3].rstrip(" ,;:-")
+        return clipped + "..."
 
     words = text.split()
     if len(words) <= max_words:
@@ -4296,13 +4250,26 @@ def build_records(
         ):
             continue
 
-        recommendation1 = concise_text(item.get("recommendation1", "None"), 24, "recommendation1")
-        recommendation2 = concise_text(item.get("recommendation2", "None"), 24, "recommendation2")
+        # Keep full semantic text for rule evaluation.  Only the exported
+        # Recommendation columns are shortened to the 150-character display
+        # limit.  This prevents a policy citation from disappearing before
+        # classification.
+        recommendation1_full = clean_text(item.get("recommendation1", "None"))
+        recommendation2_full = clean_text(item.get("recommendation2", "None"))
+        recommendation_semantic = clean_text(
+            " ".join(
+                value for value in [recommendation1_full, recommendation2_full]
+                if value and value.upper() not in {"NONE", "N/A", "NONE."}
+            )
+        ) or "None"
+
+        recommendation1 = concise_text(recommendation1_full, 24, "recommendation1")
+        recommendation2 = concise_text(recommendation2_full, 24, "recommendation2")
         explanation = make_sentence(item.get("explanation", "None"))
         correction = concise_text(item.get("correction", "None"), 24, "correction")
 
-        reaction_raw = detect_reaction(issue_title, item["narrative"], recommendation1)
-        frequency_raw = detect_frequency(issue_title, item["narrative"], recommendation1)
+        reaction_raw = detect_reaction(issue_title, item["narrative"], recommendation_semantic)
+        frequency_raw = detect_frequency(issue_title, item["narrative"], recommendation_semantic)
 
         if item.get("reaction_override"):
             reaction_raw = master_display_text(item.get("reaction_override", "")) or reaction_raw
@@ -4349,7 +4316,7 @@ def build_records(
         if not classified_value:
             classified_value = classify_finding(
                 issue_title,
-                recommendation1,
+                recommendation_semantic,
                 item["narrative"],
                 header.get("company", ""),
                 header.get("audit_title", ""),
