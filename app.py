@@ -1075,12 +1075,43 @@ def _apply_v4502_transition_refinements() -> None:
             100% { transform: translateX(205%); }
         }
 
-        /* Header coordinates are controlled only by the V4.5.28 separated fixed Gantt-header
+        /* Header coordinates are controlled only by the V4.5.29 native-DOM Gantt
            block below. Remove the older sticky/negative-transform positioning so
            every module opens at exactly the same top position. */
         .stApp:has(.edl-topbar) .block-container,
         .stApp:has(.edl-topbar) [data-testid="stMainBlockContainer"] {
             padding-top: 0 !important;
+        }
+
+
+        /* V4.5.29: collapse the fixed profile/avatar support rows and recover
+           the unused space above every authenticated module. The anchor uses a
+           negative flow margin, so subsequent content moves upward without a
+           transform and remains fully interactive. */
+        .stApp:has(.edl-topbar) div[data-testid="stElementContainer"]:has(.iars-workspace-lift-anchor-v4529) {
+            display:block !important;
+            width:100% !important;
+            height:0 !important;
+            min-height:0 !important;
+            margin:-8.5rem 0 0 !important;
+            padding:0 !important;
+            border:0 !important;
+            overflow:visible !important;
+            pointer-events:none !important;
+        }
+        .stApp:has(.edl-topbar) .iars-workspace-lift-anchor-v4529 {
+            display:block !important;
+            width:1px !important;
+            height:0 !important;
+            min-height:0 !important;
+            margin:0 !important;
+            padding:0 !important;
+        }
+        .stApp:has(.edl-topbar) div[data-testid="stElementContainer"]:has(.st-key-profile_menu_trigger),
+        .stApp:has(.edl-topbar) div[data-testid="stElementContainer"]:has(.st-key-avatar_camera_trigger) {
+            min-height:0 !important;
+            margin:0 !important;
+            padding:0 !important;
         }
 
         /* Hidden first submit control: pressing Enter in the password field
@@ -4770,11 +4801,11 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.28",
+    version="4.5.29",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
-
+st.markdown('<div class="iars-workspace-lift-anchor-v4529" aria-hidden="true"></div>', unsafe_allow_html=True)
 
 
 if page_key == "Dashboard":
@@ -5796,7 +5827,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.28", "note": "Fixed Separate Gantt Header, Editable Historical Status, and Stable Cloud Dependencies", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.29", "note": "Raised Modules, Responsive Gantt Month Boxes, and Full Admin Status Editing", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

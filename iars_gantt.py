@@ -13,7 +13,6 @@ import re
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 GANTT_MASTER_TABLE = "iars_gantt_master"
@@ -460,30 +459,103 @@ def admin_save_schedule_entry(
     auditor_full_name: str,
     status: str,
     accomplished_date: date | None,
+    initial_report_submitted_at: date | None = None,
+    final_report_submitted_at: date | None = None,
     remarks: str,
     actor: str,
+    holiday_rows: Iterable[dict[str, Any]] = (),
 ) -> None:
     """Create or edit any monthly schedule from the Admin/Supervisor dialog.
 
-    Admin may backfill previous months as Scheduled, In Progress, or Done. A
-    Done date defaults to today in the UI, may be moved backward, and may never
-    be later than today's Philippine date.
+    The Admin/Supervisor may select every visible workflow status.  Report
+    stages are saved using the existing audit, IRS and FRS date columns, so no
+    additional Supabase migration is required.
     """
-    clean_status = _clean_text(status)
-    if clean_status == "Scheduled":
-        clean_status = "Planned"
-    if clean_status not in {"Planned", "In Progress", "Done"}:
-        raise GanttError("Select Scheduled, In Progress, or Done.")
+    selected_status = _clean_text(status) or "Scheduled"
+    if selected_status not in DISPLAY_STATUSES:
+        raise GanttError("Select a valid audit or report status.")
+
     auditor = _clean_text(auditor_full_name)
     if not auditor:
         raise GanttError("Assigned auditor is required.")
-    if clean_status == "Done":
-        if not accomplished_date:
-            raise GanttError("Date of Audit is required when status is Done.")
-        if accomplished_date > _today_pht():
-            raise GanttError("Date of Audit cannot be later than today's Philippine date.")
-    else:
+
+    today = _today_pht()
+    holiday_dates = active_non_working_holiday_dates(holiday_rows)
+    for label, value in (
+        ("Date of Audit", accomplished_date),
+        ("IRS Submission Date", initial_report_submitted_at),
+        ("FRS Submission Date", final_report_submitted_at),
+    ):
+        if value and value > today:
+            raise GanttError(f"{label} cannot be later than today's Philippine date.")
+
+    database_status = {
+        "Scheduled": "Planned",
+        "In Progress": "In Progress",
+        "Overdue": "Overdue",
+    }.get(selected_status, "Done")
+
+    needs_audit_date = selected_status in {
+        "Done", "Overdue: IRS", "For FRS", "Overdue: FRS", "FRS"
+    }
+    needs_irs_date = selected_status in {"For FRS", "Overdue: FRS", "FRS"}
+    needs_frs_date = selected_status == "FRS"
+
+    if needs_audit_date and not accomplished_date:
+        raise GanttError("Date of Audit is required for the selected status.")
+    if needs_irs_date and not initial_report_submitted_at:
+        raise GanttError("IRS Submission Date is required for the selected status.")
+    if needs_frs_date and not final_report_submitted_at:
+        raise GanttError("FRS Submission Date is required when status is FRS.")
+
+    if accomplished_date and initial_report_submitted_at and initial_report_submitted_at < accomplished_date:
+        raise GanttError("IRS Submission Date cannot be earlier than the Date of Audit.")
+    if initial_report_submitted_at and final_report_submitted_at and final_report_submitted_at < initial_report_submitted_at:
+        raise GanttError("FRS Submission Date cannot be earlier than the IRS Submission Date.")
+
+    if selected_status == "Overdue" and month_end_date(schedule_year, schedule_month) >= today:
+        raise GanttError("Overdue can be selected only when the month's due date has already passed.")
+
+    if accomplished_date:
+        irs_deadline = add_working_days(
+            accomplished_date,
+            REPORT_WORKING_DAYS,
+            holidays=holiday_dates,
+        )
+        if selected_status == "Done" and today > irs_deadline:
+            raise GanttError(
+                "This Date of Audit is already beyond the five-working-day IRS period. "
+                "Choose Overdue: IRS, For FRS, Overdue: FRS, or FRS."
+            )
+        if selected_status == "Overdue: IRS" and today <= irs_deadline:
+            raise GanttError(
+                f"Overdue: IRS begins after {_display_date(irs_deadline)}. "
+                "Choose Done until the five-working-day period has passed."
+            )
+
+    if initial_report_submitted_at:
+        frs_deadline = add_working_days(
+            initial_report_submitted_at,
+            REPORT_WORKING_DAYS,
+            holidays=holiday_dates,
+        )
+        if selected_status == "For FRS" and today > frs_deadline:
+            raise GanttError(
+                "This IRS Submission Date is already beyond the five-working-day FRS period. "
+                "Choose Overdue: FRS or FRS."
+            )
+        if selected_status == "Overdue: FRS" and today <= frs_deadline:
+            raise GanttError(
+                f"Overdue: FRS begins after {_display_date(frs_deadline)}. "
+                "Choose For FRS until the five-working-day period has passed."
+            )
+
+    if not needs_audit_date:
         accomplished_date = None
+    if not needs_irs_date:
+        initial_report_submitted_at = None
+    if not needs_frs_date:
+        final_report_submitted_at = None
 
     due_date = month_end_date(schedule_year, schedule_month)
     payload: dict[str, Any] = {
@@ -492,22 +564,29 @@ def admin_save_schedule_entry(
         "schedule_month": int(schedule_month),
         "auditor_full_name": auditor,
         "auditor_nickname": nickname_for(auditor),
-        "status": clean_status,
+        "status": database_status,
         "planned_date": due_date.isoformat(),
         "accomplished_date": accomplished_date.isoformat() if accomplished_date else None,
+        "initial_report_submitted_at": (
+            initial_report_submitted_at.isoformat() if initial_report_submitted_at else None
+        ),
+        "final_report_submitted_at": (
+            final_report_submitted_at.isoformat() if final_report_submitted_at else None
+        ),
         "remarks": _clean_text(remarks),
         "updated_by": actor,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    previous_status = _clean_text((entry or {}).get("status"))
-    if clean_status != "Done" or previous_status != "Done":
-        payload.update({
-            "initial_report_submitted_at": None,
-            "initial_report_reference": None,
-            "final_report_submitted_at": None,
-            "final_report_reference": None,
-        })
+    if initial_report_submitted_at is None:
+        payload["initial_report_reference"] = None
+    elif entry and _clean_text(entry.get("initial_report_reference")):
+        payload["initial_report_reference"] = _clean_text(entry.get("initial_report_reference"))
+
+    if final_report_submitted_at is None:
+        payload["final_report_reference"] = None
+    elif entry and _clean_text(entry.get("final_report_reference")):
+        payload["final_report_reference"] = _clean_text(entry.get("final_report_reference"))
 
     entry_id = _clean_text((entry or {}).get("id"))
     if entry_id:
@@ -860,40 +939,41 @@ def _render_gantt_css() -> None:
     st.markdown(
         """
         <style>
-        .iars-gantt-title h2 {font-size:1.72rem!important;font-weight:800!important;margin-bottom:.2rem!important;color:#0B2B55!important;}
-        .iars-gantt-title p {color:#667085!important;margin-top:0!important;}
+        .iars-gantt-title {margin-top:0!important;padding-top:0!important;}
+        .iars-gantt-title h2 {font-size:1.72rem!important;font-weight:800!important;margin:0 0 .2rem!important;color:#0B2B55!important;}
+        .iars-gantt-title p {color:#667085!important;margin:0 0 .45rem!important;}
         .iars-gantt-alert {border:1px solid #991B1B;background:#B91C1C;color:#fff;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-alert strong {font-size:1.02rem;display:block;margin-bottom:.18rem;}
         .iars-gantt-alert ul {margin:.45rem 0 0 1.1rem;padding:0;}
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
-        .iars-gantt-access-note {border-left:4px solid #C78B12;background:#FFF9E8;border-radius:8px;padding:.75rem .9rem;color:#344054;margin:.4rem 0 1rem;}
 
-        /* V4.5.28: the column header is physically separated from the vertically
-           scrolling body. This avoids relying on Streamlit wrapper stickiness. */
-        .iars-gantt-table-shell {border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFFFFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}
-        .iars-gantt-x-scroll {overflow-x:auto;overflow-y:hidden;position:relative;background:#FFFFFF;scrollbar-gutter:stable;}
-        .iars-gantt-canvas {width:1578px;min-width:1578px;background:#FFFFFF;}
-        .iars-gantt-header-table,.iars-gantt-body-table {border-collapse:separate;border-spacing:0;table-layout:fixed;width:1564px;min-width:1564px;margin:0!important;font-size:.72rem;color:#23324A;}
-        .iars-gantt-header-table th,.iars-gantt-body-table td {box-sizing:border-box;width:92px;min-width:92px;max-width:92px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.32rem .34rem;overflow:hidden;vertical-align:middle;}
-        .iars-gantt-header-strip {position:relative;z-index:90;width:1578px;min-width:1578px;background:#EAF0F8;box-shadow:0 2px 0 #C8D4E3;}
-        .iars-gantt-header-table th {height:54px;background:#EAF0F8;color:#0B2B55;text-align:center!important;font-weight:800;line-height:1.14;word-break:normal;overflow-wrap:anywhere;}
-        .iars-gantt-header-spacer {display:block;position:absolute;right:0;top:0;width:14px;height:54px;background:#EAF0F8;border-bottom:1px solid #D9E2EE;}
-        .iars-gantt-body-scroll {width:1578px;min-width:1578px;overflow-y:auto;overflow-x:clip;scrollbar-gutter:stable;background:#FFFFFF;}
-        .iars-gantt-body-table tbody td {height:82px;background:#FFFFFF;word-break:break-word;line-height:1.20;}
-        .iars-gantt-body-table tbody tr:hover td {background:#F8FAFC;}
-        .iars-gantt-header-table th:nth-child(1),.iars-gantt-body-table td:nth-child(1){position:sticky;left:0;}
-        .iars-gantt-header-table th:nth-child(2),.iars-gantt-body-table td:nth-child(2){position:sticky;left:92px;}
-        .iars-gantt-header-table th:nth-child(3),.iars-gantt-body-table td:nth-child(3){position:sticky;left:184px;}
-        .iars-gantt-header-table th:nth-child(4),.iars-gantt-body-table td:nth-child(4){position:sticky;left:276px;}
-        .iars-gantt-header-table th:nth-child(5),.iars-gantt-body-table td:nth-child(5){position:sticky;left:368px;}
-        .iars-gantt-header-table th:nth-child(-n+5){z-index:120;background:#EAF0F8;}
-        .iars-gantt-body-table td:nth-child(-n+5){z-index:40;background:#FFFFFF;}
-        .iars-gantt-body-table tbody tr:hover td:nth-child(-n+5){background:#F8FAFC;}
-        .iars-gantt-body-table .iars-static-cell {text-align:left;font-weight:600;}
-        .iars-gantt-body-table .iars-accountability,.iars-gantt-body-table .iars-frequency {text-align:center;font-weight:800;white-space:nowrap;}
-        .iars-gantt-month-box {display:flex;min-height:68px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.14rem;border:1px solid #CBD5E1;border-radius:9px;padding:.30rem .18rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.10;transition:transform .08s ease,border-color .08s ease,box-shadow .08s ease;}
-        .iars-gantt-month-box:hover {transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);}
+        /* V4.5.29: one native-DOM table. The scroll viewport owns both the
+           header and rows, so the complete Company-to-December header remains
+           frozen without an iframe or cross-frame click navigation. */
+        .iars-gantt-native-shell {border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFFFFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}
+        .iars-gantt-native-scroll {width:100%;max-height:560px;overflow:auto;position:relative;overscroll-behavior:contain;scrollbar-gutter:stable;background:#FFFFFF;}
+        .iars-gantt-native-table {border-collapse:separate;border-spacing:0;table-layout:fixed;width:1564px;min-width:1564px;margin:0!important;font-size:.72rem;color:#23324A;}
+        .iars-gantt-native-table th,.iars-gantt-native-table td {box-sizing:border-box;width:92px;min-width:92px;max-width:92px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.32rem .34rem;overflow:hidden;vertical-align:middle;}
+        .iars-gantt-native-table thead th {position:sticky;top:0;z-index:100;height:54px;background:#EAF0F8;color:#0B2B55;text-align:center!important;font-weight:800;line-height:1.12;word-break:normal;overflow-wrap:anywhere;box-shadow:0 2px 0 #C8D4E3;}
+        .iars-gantt-native-table thead th:nth-child(4) {font-size:.58rem!important;letter-spacing:-.035em;white-space:nowrap;overflow:visible;}
+        .iars-gantt-native-table tbody td {height:82px;background:#FFFFFF;word-break:break-word;line-height:1.20;}
+        .iars-gantt-native-table tbody tr:hover td {background:#F8FAFC;}
+        .iars-gantt-native-table th:nth-child(1),.iars-gantt-native-table td:nth-child(1){position:sticky;left:0;}
+        .iars-gantt-native-table th:nth-child(2),.iars-gantt-native-table td:nth-child(2){position:sticky;left:92px;}
+        .iars-gantt-native-table th:nth-child(3),.iars-gantt-native-table td:nth-child(3){position:sticky;left:184px;}
+        .iars-gantt-native-table th:nth-child(4),.iars-gantt-native-table td:nth-child(4){position:sticky;left:276px;}
+        .iars-gantt-native-table th:nth-child(5),.iars-gantt-native-table td:nth-child(5){position:sticky;left:368px;box-shadow:2px 0 0 #C8D4E3;}
+        .iars-gantt-native-table thead th:nth-child(-n+5){z-index:130;background:#EAF0F8;}
+        .iars-gantt-native-table tbody td:nth-child(-n+5){z-index:40;background:#FFFFFF;}
+        .iars-gantt-native-table tbody tr:hover td:nth-child(-n+5){background:#F8FAFC;}
+        .iars-gantt-native-table .iars-static-cell {text-align:left;font-weight:600;font-size:.66rem;}
+        .iars-gantt-native-table .iars-accountability {text-align:center;font-weight:800;white-space:nowrap;font-size:.64rem;letter-spacing:-.02em;}
+        .iars-gantt-native-table .iars-frequency {text-align:center;font-weight:800;white-space:nowrap;font-size:.68rem;}
+        .iars-gantt-month-box {display:flex;min-height:68px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.14rem;border:1px solid #CBD5E1;border-radius:9px;padding:.30rem .18rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.10;transition:transform .06s ease,border-color .06s ease,box-shadow .06s ease,filter .06s ease;cursor:pointer;touch-action:manipulation;}
+        .iars-gantt-month-box:hover {transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);filter:brightness(.99);}
+        .iars-gantt-month-box:active {transform:translateY(0) scale(.985);box-shadow:none;}
+        .iars-gantt-month-box:focus-visible {outline:3px solid rgba(23,92,211,.25);outline-offset:1px;}
         .iars-gantt-month-stage {font-size:.70rem;font-weight:850;}
         .iars-gantt-month-auditor {font-size:.69rem;font-weight:800;}
         .iars-gantt-month-date {font-size:.63rem;font-weight:650;white-space:nowrap;}
@@ -905,7 +985,7 @@ def _render_gantt_css() -> None:
         .iars-gantt-month-box.overdue,.iars-gantt-month-box.overdue-irs,.iars-gantt-month-box.overdue-frs {background:#B91C1C;color:#FFFFFF;border-color:#991B1B;}
         .iars-gantt-month-box.empty {background:#FAFBFC;color:#667085;border-color:#CBD5E1;}
         .iars-gantt-month-na {display:flex;align-items:center;justify-content:center;min-height:68px;color:#98A2B3;font-weight:700;}
-        .iars-gantt-legend {display:flex;flex-wrap:wrap;gap:.42rem;margin:.35rem 0 .7rem;}
+        .iars-gantt-legend {display:flex;flex-wrap:wrap;gap:.42rem;margin:.2rem 0 .55rem;}
         .iars-gantt-chip {display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:.28rem .62rem;font-size:.74rem;font-weight:800;border:1px solid transparent;}
         .iars-gantt-chip.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
         .iars-gantt-chip.in-progress {background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
@@ -1041,7 +1121,7 @@ def _render_month_editor(
     )
 
     # Admin/Supervisor can create or edit every monthly record, including
-    # backfilling previous months that were already completed.
+    # historical audit and report stages from previous months.
     if admin:
         options = list(dict.fromkeys(
             [name for name in auditor_options if _clean_text(name)]
@@ -1054,13 +1134,12 @@ def _render_month_editor(
 
         assigned = _clean_text((entry or {}).get("auditor_full_name"))
         selected_index = options.index(assigned) if assigned in options else 0
-        stored_status = _clean_text((entry or {}).get("status")) or "Planned"
-        if stored_status not in {"Planned", "In Progress", "Done"}:
-            stored_status = "Planned"
-        display_status = _display_stage(stored_status)
-        status_options = ["Scheduled", "In Progress", "Done"]
-        status_index = status_options.index(display_status) if display_status in status_options else 0
+        current_stage = _display_stage(report_stage_info(entry or {}, holiday_rows).stage) if entry else "Scheduled"
+        status_options = list(DISPLAY_STATUSES)
+        status_index = status_options.index(current_stage) if current_stage in status_options else 0
         existing_audit_date = _parse_date((entry or {}).get("accomplished_date")) or today
+        existing_irs_date = _parse_date((entry or {}).get("initial_report_submitted_at")) or today
+        existing_frs_date = _parse_date((entry or {}).get("final_report_submitted_at")) or today
 
         auditor = st.selectbox(
             "Auditor",
@@ -1075,16 +1154,39 @@ def _render_month_editor(
             index=status_index,
             key=f"gantt_admin_status_{unique}",
         )
-        audit_date = st.date_input(
-            "Date of Audit",
-            value=min(existing_audit_date, today),
-            max_value=today,
-            key=f"gantt_admin_audit_date_{unique}",
-        )
-        if selected_status != "Done":
-            st.caption("Date of Audit is saved only when Status is Done.")
-        else:
-            st.caption("Default is today. You may choose today or an earlier date; future dates are blocked.")
+        st.caption(f"Monthly due date: {_box_date(due_date)}")
+
+        audit_date: date | None = None
+        initial_date: date | None = None
+        final_date: date | None = None
+        if selected_status in {"Done", "Overdue: IRS", "For FRS", "Overdue: FRS", "FRS"}:
+            audit_date = st.date_input(
+                "Date of Audit",
+                value=min(existing_audit_date, today),
+                max_value=today,
+                key=f"gantt_admin_audit_date_{unique}",
+            )
+        if selected_status in {"For FRS", "Overdue: FRS", "FRS"}:
+            initial_default = max(audit_date or existing_audit_date, min(existing_irs_date, today))
+            initial_date = st.date_input(
+                "IRS Submission Date",
+                value=initial_default,
+                min_value=audit_date if audit_date else None,
+                max_value=today,
+                key=f"gantt_admin_irs_date_{unique}",
+            )
+        if selected_status == "FRS":
+            final_default = max(initial_date or existing_irs_date, min(existing_frs_date, today))
+            final_date = st.date_input(
+                "FRS Submission Date",
+                value=final_default,
+                min_value=initial_date if initial_date else None,
+                max_value=today,
+                key=f"gantt_admin_frs_date_{unique}",
+            )
+
+        if selected_status in {"Done", "Overdue: IRS", "For FRS", "Overdue: FRS", "FRS"}:
+            st.caption("Dates default to today and may be edited backward. Future dates are blocked.")
         remarks = st.text_area(
             "Audit Remarks / Reference",
             value=_clean_text((entry or {}).get("remarks")),
@@ -1101,14 +1203,14 @@ def _render_month_editor(
                     schedule_month=month,
                     auditor_full_name=auditor,
                     status=selected_status,
-                    accomplished_date=audit_date if selected_status == "Done" else None,
+                    accomplished_date=audit_date,
+                    initial_report_submitted_at=initial_date,
+                    final_report_submitted_at=final_date,
                     remarks=remarks,
                     actor=current_user_name,
+                    holiday_rows=holiday_rows,
                 )
-                if selected_status == "Done":
-                    st.success("Monthly audit saved as Done. The five-working-day initial-report period is now based on the selected Date of Audit.")
-                else:
-                    st.success(f"Monthly audit saved as {selected_status}.")
+                st.success(f"Monthly record saved as {selected_status}.")
                 _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
@@ -1122,55 +1224,6 @@ def _render_month_editor(
                 _finish_month_editor()
             except Exception as exc:
                 st.error(str(exc))
-
-        stage = report_stage_info(entry, holiday_rows)
-        if effective_status(entry) != "Done":
-            return
-
-        st.divider()
-        st.write(f"**Recorded Date of Audit:** {_display_date(entry.get('accomplished_date'))}")
-        if stage.stage in {"Done", "Overdue: IRS"}:
-            st.write(f"**Initial report deadline:** {_display_date(stage.deadline)}")
-            if stage.overdue:
-                st.error("Overdue: IRS — the assigned auditor has not yet submitted the initial report.")
-            else:
-                st.info("Waiting for the assigned auditor's initial report. The five-working-day period is running.")
-            return
-
-        st.write(f"**Initial report submitted:** {_display_date(entry.get('initial_report_submitted_at'))}")
-        if stage.stage in {"For FRS", "Overdue: FRS"}:
-            st.write(f"**FRS deadline:** {_display_date(stage.deadline)}")
-            if stage.overdue:
-                st.error("Overdue: FRS — finalize and submit the report now.")
-            with st.form(f"gantt_frs_{unique}"):
-                reference = st.text_input(
-                    "FRS Reference / Remarks",
-                    value=_clean_text(entry.get("final_report_reference")),
-                    key=f"gantt_frs_ref_{unique}",
-                )
-                submit_frs = st.form_submit_button(
-                    "FRS — Final Report Submitted",
-                    type="primary",
-                    use_container_width=True,
-                )
-            if submit_frs:
-                try:
-                    submit_final_report(
-                        client,
-                        entry_id=str(entry.get("id") or ""),
-                        actor=current_user_name,
-                        reference=reference,
-                    )
-                    st.success("FRS recorded using today's Philippine date.")
-                    _finish_month_editor()
-                except Exception as exc:
-                    st.error(str(exc))
-            return
-
-        if stage.stage == "FRS":
-            st.success(f"FRS submitted on {_display_date(entry.get('final_report_submitted_at'))}.")
-            if _clean_text(entry.get("final_report_reference")):
-                st.caption(_clean_text(entry.get("final_report_reference")))
         return
 
     # Auditor workflow.
@@ -1410,7 +1463,7 @@ def _month_cell_html(
     href = html.escape(_gantt_edit_href(master_id, year, month), quote=True)
     return (
         f'<a class="iars-gantt-month-box {html.escape(slug)}" '
-        f'href="{href}" target="_parent" aria-label="Edit {html.escape(month_name[month])} audit schedule">{content}</a>'
+        f'href="{href}" aria-label="Edit {html.escape(month_name[month])} audit schedule">{content}</a>'
     )
 
 
@@ -1428,23 +1481,21 @@ def _build_gantt_table_html(
     current_user_name: str,
     done_counts: dict[str, int],
 ) -> str:
-    """Build a self-contained Gantt component with a truly separate header.
+    """Build one native-DOM table with a frozen header and clickable links.
 
-    The body is the only vertically scrollable element. JavaScript synchronizes
-    its horizontal position with the January-to-December header strip, while
-    Company through Frequency remain sticky inside the body scroller.
+    Because the HTML is inserted directly into Streamlit's main document,
+    month-box links are not blocked by an iframe sandbox and respond immediately.
     """
     lookup = _entry_lookup(entries)
-    fixed_headers = [
+    headers = [
         "Company / Department",
         "Custodian",
         "Audit Task",
         "Accountability",
         "Frequency",
+        *[month_name[month] for month in MONTHS],
     ]
-    month_headers = [month_name[month] for month in MONTHS]
-    fixed_header_html = "".join(f"<th>{html.escape(header)}</th>" for header in fixed_headers)
-    month_header_html = "".join(f"<th>{html.escape(header)}</th>" for header in month_headers)
+    header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
     body_rows: list[str] = []
     current_key = _name_key(current_user_name)
 
@@ -1480,81 +1531,14 @@ def _build_gantt_table_html(
             )
         body_rows.append("<tr>" + "".join(cells) + "</tr>")
 
-    viewport_height = _gantt_body_viewport_height(len(filtered))
-    return f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<base target="_parent">
-<style>
-:root{{--cell:92px;--fixed-width:460px;--month-width:1104px;--table-width:1564px;}}
-*{{box-sizing:border-box;}}
-html,body{{margin:0;padding:0;background:transparent;font-family:Inter,"Segoe UI",Roboto,Arial,sans-serif;color:#23324A;overflow:hidden;}}
-.gantt-shell{{width:100%;border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}}
-.gantt-header{{display:grid;grid-template-columns:var(--fixed-width) minmax(0,1fr);height:54px;background:#EAF0F8;box-shadow:0 2px 0 #C8D4E3;position:relative;z-index:100;}}
-.gantt-header-fixed{{width:var(--fixed-width);overflow:hidden;position:relative;z-index:120;background:#EAF0F8;}}
-.gantt-header-months{{min-width:0;overflow:hidden;background:#EAF0F8;}}
-.gantt-header-months-inner{{width:var(--month-width);will-change:transform;transform:translateX(0);}}
-.gantt-fixed-table,.gantt-month-table,.gantt-body-table{{border-collapse:separate;border-spacing:0;table-layout:fixed;margin:0;width:100%;font-size:.72rem;color:#23324A;}}
-.gantt-fixed-table{{width:var(--fixed-width);min-width:var(--fixed-width);}}
-.gantt-month-table{{width:var(--month-width);min-width:var(--month-width);}}
-.gantt-body-table{{width:var(--table-width);min-width:var(--table-width);}}
-th,td{{width:var(--cell);min-width:var(--cell);max-width:var(--cell);border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.32rem .34rem;overflow:hidden;vertical-align:middle;}}
-th{{height:54px;background:#EAF0F8;color:#0B2B55;text-align:center;font-weight:800;line-height:1.14;overflow-wrap:anywhere;}}
-.gantt-body-scroll{{height:{viewport_height}px;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:#FFF;position:relative;}}
-.gantt-body-table td{{height:82px;background:#FFF;word-break:break-word;line-height:1.20;}}
-.gantt-body-table tr:hover td{{background:#F8FAFC;}}
-.gantt-body-table td:nth-child(1){{position:sticky;left:0;z-index:50;}}
-.gantt-body-table td:nth-child(2){{position:sticky;left:92px;z-index:50;}}
-.gantt-body-table td:nth-child(3){{position:sticky;left:184px;z-index:50;}}
-.gantt-body-table td:nth-child(4){{position:sticky;left:276px;z-index:50;}}
-.gantt-body-table td:nth-child(5){{position:sticky;left:368px;z-index:50;box-shadow:2px 0 0 #C8D4E3;}}
-.gantt-body-table tr:hover td:nth-child(-n+5){{background:#F8FAFC;}}
-.iars-static-cell{{text-align:left;font-weight:600;}}
-.iars-accountability,.iars-frequency{{text-align:center;font-weight:800;white-space:nowrap;}}
-.iars-gantt-month-box{{display:flex;min-height:68px;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:.14rem;border:1px solid #CBD5E1;border-radius:9px;padding:.30rem .18rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.10;transition:transform .08s ease,border-color .08s ease,box-shadow .08s ease;}}
-.iars-gantt-month-box:hover{{transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);}}
-.iars-gantt-month-stage{{font-size:.70rem;font-weight:850;}}
-.iars-gantt-month-auditor{{font-size:.69rem;font-weight:800;}}
-.iars-gantt-month-date{{font-size:.63rem;font-weight:650;white-space:nowrap;}}
-.iars-gantt-month-box.scheduled{{background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}}
-.iars-gantt-month-box.in-progress{{background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}}
-.iars-gantt-month-box.done{{background:#DCFCE7;color:#14532D;border-color:#22C55E;}}
-.iars-gantt-month-box.for-frs{{background:#ECFEFF;color:#164E63;border-color:#0891B2;}}
-.iars-gantt-month-box.frs{{background:#D1FAE5;color:#064E3B;border-color:#047857;}}
-.iars-gantt-month-box.overdue,.iars-gantt-month-box.overdue-irs,.iars-gantt-month-box.overdue-frs{{background:#B91C1C;color:#FFF;border-color:#991B1B;}}
-.iars-gantt-month-box.empty{{background:#FAFBFC;color:#667085;border-color:#CBD5E1;}}
-.iars-gantt-month-na{{display:flex;align-items:center;justify-content:center;min-height:68px;color:#98A2B3;font-weight:700;}}
-</style>
-</head>
-<body>
-<div class="gantt-shell">
-  <div class="gantt-header">
-    <div class="gantt-header-fixed">
-      <table class="gantt-fixed-table"><thead><tr>{fixed_header_html}</tr></thead></table>
-    </div>
-    <div class="gantt-header-months">
-      <div id="ganttHeaderMonths" class="gantt-header-months-inner">
-        <table class="gantt-month-table"><thead><tr>{month_header_html}</tr></thead></table>
-      </div>
-    </div>
-  </div>
-  <div id="ganttBodyScroll" class="gantt-body-scroll">
-    <table class="gantt-body-table"><tbody>{"".join(body_rows)}</tbody></table>
-  </div>
-</div>
-<script>
-(() => {{
-  const body = document.getElementById('ganttBodyScroll');
-  const months = document.getElementById('ganttHeaderMonths');
-  if (!body || !months) return;
-  const sync = () => {{ months.style.transform = `translateX(${{-body.scrollLeft}}px)`; }};
-  body.addEventListener('scroll', sync, {{passive:true}});
-  sync();
-}})();
-</script>
-</body>
-</html>"""
+    return (
+        '<div class="iars-gantt-native-shell">'
+        '<div class="iars-gantt-native-scroll" role="region" aria-label="Yearly Audit Gantt">'
+        '<table class="iars-gantt-native-table">'
+        f'<thead><tr>{header_html}</tr></thead>'
+        f'<tbody>{"".join(body_rows)}</tbody>'
+        '</table></div></div>'
+    )
 
 
 def _render_matrix(
@@ -1602,8 +1586,7 @@ def _render_matrix(
         current_user_name=current_user_name,
         done_counts=done_counts,
     )
-    component_height = _gantt_body_viewport_height(len(filtered)) + 58
-    components.html(table_html, height=component_height, scrolling=False)
+    st.markdown(table_html, unsafe_allow_html=True)
 
     selected = _selected_gantt_edit()
     if selected:
@@ -1635,7 +1618,7 @@ def _render_matrix(
 
     st.caption(
         f"Showing all {len(filtered)} matching custodian record(s) in one scrollable Gantt view. "
-        "The Company-to-December header is a separate fixed strip above the vertically scrolling rows. Company through Frequency remain frozen during horizontal scrolling. Click a month box to update it."
+        "The Company-to-December header remains frozen inside the scrollable Gantt view. Company through Frequency remain frozen during horizontal scrolling. Click a month box to update it."
     )
     return filtered
 
@@ -1713,7 +1696,7 @@ def render_yearly_gantt_page(
     current_name = _user_name(current_user)
     st.markdown(
         '<div class="iars-gantt-title"><h2>Yearly Audit Gantt Schedule</h2>'
-        '<p>Click a month box to create or edit the monthly audit record. Admin/Supervisor may assign the auditor and set Scheduled, In Progress, or Done, including completed audits from previous months. Done starts the five-working-day initial-report period and becomes Overdue: IRS when the report is late. After initial-report submission, the record moves to For FRS and becomes Overdue: FRS when the final report is late.</p></div>',
+        '<p>Plan, update and monitor every monthly audit and report-submission stage.</p></div>',
         unsafe_allow_html=True,
     )
     setup = gantt_setup_status(client)
@@ -1745,16 +1728,6 @@ def render_yearly_gantt_page(
     metric_cols[3].metric("FRS", sum(stage == "FRS" for stage in stages))
     metric_cols[4].metric("Overdue", sum(stage in {"Overdue", "Overdue: IRS", "Overdue: FRS"} for stage in stages))
 
-    if admin:
-        st.markdown(
-            '<div class="iars-gantt-access-note"><strong>Administrator/Supervisor:</strong> Click any month box to create or edit the auditor and status. Use Scheduled for upcoming audits, In Progress for ongoing audits, and Done for completed audits, including previous months. Saving Done starts the five-working-day initial-report count from the Date of Audit. Without an initial report, the box becomes Overdue: IRS. After the initial report is submitted, it becomes For FRS; without final submission after another five working days, it becomes Overdue: FRS.</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            f'<div class="iars-gantt-access-note"><strong>Auditor — {html.escape(nickname_for(current_name))}:</strong> Click your assigned month box to update In Progress or Done and submit the initial report. It becomes Overdue: IRS after five working days from the Date of Audit.</div>',
-            unsafe_allow_html=True,
-        )
 
     custodian_options = ["All"] + sorted(
         {_clean_text(row.get("custodian")) for row in masters if _clean_text(row.get("custodian"))},
