@@ -4369,9 +4369,9 @@ def render_pdf_tagging_full_document_dialog(
     st.markdown(f"### {filename}")
     st.info(
         "Scroll through all pages. Double-right-click a page to add a textbox, "
-        "then type, move, resize, or change the exact font size. Active text saves "
-        "1.2 seconds after you click outside or switch to another textbox, "
-        "and is flushed immediately when you leave or close the editor. Auditee, Auditor, and Task ID tags carry "
+        "then type, move, resize, or change the exact font size. Changes save "
+        "1.2 seconds after you click outside the active textbox, switch to another textbox, "
+        "or leave/close the editor. Typing and pausing never trigger a save. Auditee, Auditor, and Task ID tags carry "
         "forward to every succeeding issue and page until a newer tag of the same "
         "type appears. Frequency Rate and Reaction remain issue-specific."
     )
@@ -4394,7 +4394,7 @@ def render_pdf_tagging_full_document_dialog(
             "_",
             (
                 f"iars_pdf_editor_{file_id}_page_{page_number}_"
-                f"v30_reset_{reset_version}"
+                f"v36_reset_{reset_version}"
             ),
         )
         component_keys.append(component_key)
@@ -4801,7 +4801,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.35",
+    version="4.5.36",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -5827,7 +5827,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.35", "note": "Smooth 1.2-Second PDF Boundary Save", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.36", "note": "Stable PDF Boundary Save Without Scroll Jump", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

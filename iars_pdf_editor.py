@@ -1,14 +1,14 @@
-"""IARS PDF textbox editor v3.5.
+"""IARS PDF textbox editor v3.6.
 
 Text is synchronized only after an explicit editing boundary:
-- click outside the active textbox
+- click outside the active textbox box
 - switch to another textbox
-- leave the editor
-- close or unmount the popup
+- leave or close the PDF Tagging dialog
 
-Outside-click and box-switch commits use a 1.2-second timer. Leaving or closing
-flushes immediately so the last active text is not lost. Browser-local backup is
-still updated while typing, but typing alone does not trigger Streamlit sync.
+Every boundary waits 1.2 seconds before saving. Typing, pausing, browser focus
+changes, visibility changes, and component cleanup do not trigger a save.
+Scroll and active-caret state are restored after the Streamlit state rerun so
+tagging can continue without jumping to the top of the PDF.
 """
 from __future__ import annotations
 
@@ -94,11 +94,19 @@ EDITOR_CSS = r"""
 .status-group {
   min-width: 260px;
   flex: 1 1 320px;
+  min-height: 1.35rem;
+  overflow: hidden;
 }
 
 #editor-status {
+  display: block;
+  width: 100%;
+  min-height: 1.25rem;
   font-size: 0.84rem;
   line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: color-mix(in srgb, var(--st-text-color, #111827) 72%, transparent);
 }
 
@@ -383,8 +391,10 @@ export default function(component) {
   const pageKey = String(pageNumber);
   const storageKey = String(data?.storage_key ?? 'iars_pdf_editor_backup');
   const pythonEditor = data?.editor ?? {};
-  const scrollStateKey = `${storageKey}:smooth-scroll-v35`;
-  const RESTORE_WINDOW_MS = 10000;
+  const instanceToken = `${storageKey}::${pageNumber}`;
+  root.dataset.iarsPdfInstance = instanceToken;
+  const scrollStateKey = `${storageKey}:smooth-scroll-v36`;
+  const RESTORE_WINDOW_MS = 15000;
 
   try {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
@@ -426,10 +436,62 @@ export default function(component) {
     }
   }
 
+  function focusedTextState() {
+    const focused = layer.querySelector('.tag-text:focus');
+    if (!focused) return { box_id: null, caret_offset: null };
+    const boxId = focused.closest('.tag-box')?.dataset?.boxId ?? null;
+    let caretOffset = null;
+    try {
+      const selection = window.getSelection?.();
+      if (selection && selection.rangeCount && focused.contains(selection.anchorNode)) {
+        const range = selection.getRangeAt(0).cloneRange();
+        const prefix = document.createRange();
+        prefix.selectNodeContents(focused);
+        prefix.setEnd(range.startContainer, range.startOffset);
+        caretOffset = prefix.toString().length;
+      }
+    } catch (_) {
+      caretOffset = null;
+    }
+    return { box_id: boxId, caret_offset: caretOffset };
+  }
+
+  function restoreCaretOffset(textElement, rawOffset) {
+    const targetOffset = Math.max(0, Number(rawOffset ?? 0));
+    try {
+      const walker = document.createTreeWalker(textElement, NodeFilter.SHOW_TEXT);
+      let remaining = targetOffset;
+      let node = walker.nextNode();
+      while (node) {
+        const length = node.textContent?.length ?? 0;
+        if (remaining <= length) {
+          const range = document.createRange();
+          range.setStart(node, remaining);
+          range.collapse(true);
+          const selection = window.getSelection?.();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          return;
+        }
+        remaining -= length;
+        node = walker.nextNode();
+      }
+      const range = document.createRange();
+      range.selectNodeContents(textElement);
+      range.collapse(false);
+      const selection = window.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    } catch (_) {
+      // Focus restoration is best effort and must never interrupt editing.
+    }
+  }
+
   function captureSmoothScrollState() {
     try {
       const host = findOuterScrollHost();
       const parentTop = parentElement.getBoundingClientRect().top;
+      const focusedState = focusedTextState();
       const payload = {
         page_number: pageNumber,
         captured_at: Date.now(),
@@ -440,8 +502,18 @@ export default function(component) {
         window_y: Number(window.scrollY ?? 0),
         viewport_top: Number(viewport?.scrollTop ?? 0),
         viewport_left: Number(viewport?.scrollLeft ?? 0),
+        focused_box_id: focusedState.box_id,
+        caret_offset: focusedState.caret_offset,
+        instance_token: instanceToken,
       };
-      window.sessionStorage.setItem(scrollStateKey, JSON.stringify(payload));
+      window.__iarsPdfSmoothStates = window.__iarsPdfSmoothStates || {};
+      window.__iarsPdfSmoothStates[scrollStateKey] = payload;
+      try {
+        window.sessionStorage.setItem(scrollStateKey, JSON.stringify(payload));
+      } catch (_) {
+        // The in-memory window map survives Streamlit reruns even when browser
+        // storage is unavailable or restricted.
+      }
       return payload;
     } catch (_) {
       return null;
@@ -449,59 +521,110 @@ export default function(component) {
   }
 
   function readSmoothScrollState() {
+    let payload = null;
     try {
-      const raw = window.sessionStorage.getItem(scrollStateKey);
-      if (!raw) return null;
-      const payload = JSON.parse(raw);
-      if (Number(payload?.page_number) !== pageNumber) return null;
-      if (Date.now() - Number(payload?.captured_at ?? 0) > RESTORE_WINDOW_MS) return null;
-      return payload;
+      payload = window.__iarsPdfSmoothStates?.[scrollStateKey] ?? null;
     } catch (_) {
-      return null;
+      payload = null;
     }
+    if (!payload) {
+      try {
+        const raw = window.sessionStorage.getItem(scrollStateKey);
+        payload = raw ? JSON.parse(raw) : null;
+      } catch (_) {
+        payload = null;
+      }
+    }
+    if (!payload) return null;
+    if (Number(payload?.page_number) !== pageNumber) return null;
+    if (Date.now() - Number(payload?.captured_at ?? 0) > RESTORE_WINDOW_MS) return null;
+    return payload;
   }
 
   function restoreSmoothScrollState() {
     const saved = readSmoothScrollState();
     if (!saved) return;
-    let attempt = 0;
-    const delays = [0, 16, 40, 90, 160, 280, 450, 700, 1000, 1350];
+
+    const delays = [0, 16, 40, 80, 140, 220, 340, 500, 720, 980, 1280, 1650, 2100];
+    let stableCount = 0;
 
     const restore = () => {
       const host = findOuterScrollHost();
       try {
-        if (host?.style) host.style.overflowAnchor = 'none';
-        const currentAnchor = parentElement.getBoundingClientRect().top - hostViewportTop(host);
-        const anchorDelta = currentAnchor - Number(saved.anchor_top ?? currentAnchor);
-        const rawTarget = Number(host?.scrollTop ?? 0) + anchorDelta;
-        const fallbackTarget = Number(saved.host_scroll_top ?? 0);
-        const target = Number.isFinite(rawTarget) ? rawTarget : fallbackTarget;
+        if (host?.style) {
+          host.style.overflowAnchor = 'none';
+          host.style.scrollBehavior = 'auto';
+        }
+        if (viewport?.style) {
+          viewport.style.overflowAnchor = 'none';
+          viewport.style.scrollBehavior = 'auto';
+        }
+
+        const targetTop = Math.max(0, Number(saved.host_scroll_top ?? 0));
+        const targetLeft = Math.max(0, Number(saved.host_scroll_left ?? 0));
         if (host) {
-          host.scrollTop = Math.max(0, target);
-          host.scrollLeft = Math.max(0, Number(saved.host_scroll_left ?? 0));
+          host.scrollTop = targetTop;
+          host.scrollLeft = targetLeft;
         }
         if (viewport) {
           viewport.scrollTop = Math.max(0, Number(saved.viewport_top ?? 0));
           viewport.scrollLeft = Math.max(0, Number(saved.viewport_left ?? 0));
         }
-        // The app usually scrolls inside the dialog. This is a harmless fallback
-        // for deployments where the document itself is the scrolling element.
-        if (host === document.scrollingElement || host === document.documentElement || host === document.body) {
-          window.scrollTo(Number(saved.window_x ?? 0), Number(saved.window_y ?? 0));
+
+        if (
+          host === document.scrollingElement ||
+          host === document.documentElement ||
+          host === document.body
+        ) {
+          window.scrollTo(
+            Math.max(0, Number(saved.window_x ?? 0)),
+            Math.max(0, Number(saved.window_y ?? 0)),
+          );
         }
+
+        const focusId = String(saved.focused_box_id ?? '');
+        if (focusId) {
+          const focused = layer.querySelector(`[data-box-id="${focusId}"] .tag-text`);
+          if (focused) {
+            focused.focus({ preventScroll: true });
+            restoreCaretOffset(focused, saved.caret_offset);
+          }
+        }
+
+        const topDifference = Math.abs(Number(host?.scrollTop ?? 0) - targetTop);
+        const viewportDifference = Math.abs(
+          Number(viewport?.scrollTop ?? 0) - Math.max(0, Number(saved.viewport_top ?? 0))
+        );
+        stableCount = topDifference <= 1 && viewportDifference <= 1
+          ? stableCount + 1
+          : 0;
       } catch (_) {
-        // A later scheduled attempt can still restore after layout settles.
-      }
-      attempt += 1;
-      if (attempt >= delays.length) {
-        try { window.sessionStorage.removeItem(scrollStateKey); } catch (_) {}
+        stableCount = 0;
       }
     };
 
-    delays.forEach((delay) => window.setTimeout(restore, delay));
+    delays.forEach((delay, index) => {
+      window.setTimeout(() => {
+        restore();
+        if (index === delays.length - 1) {
+          try {
+            if (window.__iarsPdfSmoothStates) delete window.__iarsPdfSmoothStates[scrollStateKey];
+          } catch (_) {}
+          try { window.sessionStorage.removeItem(scrollStateKey); } catch (_) {}
+        }
+      }, delay);
+    });
   }
 
   function readLocalEditor() {
+    try {
+      const memoryValue = window.__iarsPdfLocalEditors?.[storageKey];
+      if (memoryValue && typeof memoryValue === 'object') {
+        return structuredClone(memoryValue);
+      }
+    } catch (_) {
+      // Continue to persistent browser storage.
+    }
     try {
       const raw = window.localStorage.getItem(storageKey);
       return raw ? JSON.parse(raw) : null;
@@ -538,8 +661,8 @@ export default function(component) {
   let lastRightClick = { time: 0, x: 0, y: 0 };
   let contextHint = null;
   let lastSnapshot = null;
-  let localSaveTimer = null;
   let textCommitTimer = null;
+  let boundarySaveRequested = false;
   let dirty = localUpdated > pythonUpdated;
   let syncing = false;
   const OUTSIDE_COMMIT_DELAY_MS = 1200;
@@ -602,20 +725,19 @@ export default function(component) {
   function saveLocal() {
     const value = snapshot();
     try {
+      window.__iarsPdfLocalEditors = window.__iarsPdfLocalEditors || {};
+      window.__iarsPdfLocalEditors[storageKey] = structuredClone(value);
+    } catch (_) {
+      // The serialized localStorage copy below remains the fallback.
+    }
+    try {
       window.localStorage.setItem(storageKey, JSON.stringify(value));
     } catch (_) {
-      // Browser storage may be disabled; Streamlit state remains the fallback.
+      // The in-memory browser copy remains available for this open app session.
     }
     return value;
   }
 
-  function queueLocalSave(delay = 120) {
-    if (localSaveTimer) window.clearTimeout(localSaveTimer);
-    localSaveTimer = window.setTimeout(() => {
-      localSaveTimer = null;
-      saveLocal();
-    }, delay);
-  }
 
   function noteUserInteraction() {
     // Intentionally no idle-save timer. Typing and editing remain local until
@@ -625,7 +747,6 @@ export default function(component) {
   function markDirty(message = 'Changes pending — click outside to save.') {
     dirty = true;
     noteUserInteraction();
-    queueLocalSave(40);
     setStatus(message);
   }
 
@@ -633,10 +754,14 @@ export default function(component) {
     delay = OUTSIDE_COMMIT_DELAY_MS,
     message = 'All changes saved.'
   ) {
+    boundarySaveRequested = true;
     if (textCommitTimer) window.clearTimeout(textCommitTimer);
     textCommitTimer = window.setTimeout(() => {
       textCommitTimer = null;
-      if (!dirty || syncing) return;
+      if (!dirty || syncing) {
+        boundarySaveRequested = false;
+        return;
+      }
       if (isComposing) {
         syncTextCommitSoon(120, message);
         return;
@@ -646,25 +771,31 @@ export default function(component) {
   }
 
   function syncToStreamlit(message = 'All changes saved.') {
-    if (!dirty || syncing) return;
-    if (localSaveTimer) {
-      window.clearTimeout(localSaveTimer);
-      localSaveTimer = null;
-    }
+    if (!dirty || syncing || !boundarySaveRequested) return;
     if (textCommitTimer) {
       window.clearTimeout(textCommitTimer);
       textCommitTimer = null;
     }
+
     const value = saveLocal();
+    boundarySaveRequested = false;
+
+    // A close or navigation click can unmount the component before the
+    // 1.2-second boundary finishes. The browser-local save above is still
+    // durable; do not call Streamlit from a detached component.
+    if (!root.isConnected || !parentElement.isConnected) {
+      dirty = false;
+      return;
+    }
+
     syncing = true;
     dirty = false;
-    setStatus('Saving in background…');
     captureSmoothScrollState();
     setStateValue('editor', value);
     window.setTimeout(() => {
       syncing = false;
       setStatus(message);
-    }, 220);
+    }, 180);
   }
 
   function setStatus(message) {
@@ -1085,7 +1216,6 @@ export default function(component) {
         isComposing = false;
         box.text = textElement.innerText;
         dirty = true;
-        queueLocalSave(20);
         noteUserInteraction();
         setStatus('Text updated — click outside or switch boxes to save.');
       });
@@ -1095,7 +1225,6 @@ export default function(component) {
         // outside click, box switch, leaving the editor, or closing the popup.
         box.text = textElement.innerText;
         dirty = true;
-        queueLocalSave(20);
         setStatus('Editing… click outside or switch boxes to save.');
         noteUserInteraction();
       });
@@ -1105,22 +1234,19 @@ export default function(component) {
         document.execCommand('insertText', false, pasted);
       });
       textElement.addEventListener('blur', () => {
+        // Blur by itself is not a save trigger. Only the explicit document
+        // pointer boundary handler below may start the 1.2-second save.
         if (suppressBlurCommit) return;
-        box.text = normalizeText(textElement.innerText);
-        textElement.innerText = box.text;
-        dirty = true;
-        saveLocal();
-        setStatus('Text committed — saving in 1.2 seconds…');
-        syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
+        box.text = textElement.innerText;
       });
       textElement.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
+          // Text tags are single-line. Prevent a newline without saving.
           event.preventDefault();
-          box.text = normalizeText(textElement.innerText);
-          textElement.blur();
         }
         if (event.key === 'Escape') {
-          textElement.blur();
+          event.preventDefault();
+          flushFocusedText({ blur: true, immediate: false });
         }
       });
 
@@ -1291,7 +1417,6 @@ export default function(component) {
     box.text = normalizeText(focused.innerText);
     focused.innerText = box.text;
     dirty = true;
-    saveLocal();
 
     if (blur && document.activeElement === focused) {
       suppressBlurCommit = true;
@@ -1299,21 +1424,22 @@ export default function(component) {
       suppressBlurCommit = false;
     }
 
-    if (immediate) {
-      setStatus('Text committed — saving now…');
-      syncToStreamlit();
-    } else {
-      setStatus('Text committed — saving in 1.2 seconds…');
-      syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
-    }
+    // Every valid boundary, including Escape/leave, waits the same 1.2 seconds.
+    setStatus('Changes committed — saving in 1.2 seconds…');
+    syncTextCommitSoon(OUTSIDE_COMMIT_DELAY_MS);
     return true;
   }
 
   function handleDocumentPointerDown(event) {
     const path = event.composedPath?.() ?? [];
     const focused = layer.querySelector('.tag-text:focus');
+
     if (focused) {
-      if (!path.includes(focused)) {
+      const focusedBox = focused.closest('.tag-box');
+      const clickedInsideSameBox = Boolean(focusedBox && path.includes(focusedBox));
+      if (!clickedInsideSameBox) {
+        // This is either a switch to another textbox or a click outside the
+        // active textbox box. These are the only pointer save boundaries.
         flushFocusedText({ blur: true, immediate: false });
       }
       return;
@@ -1369,27 +1495,6 @@ export default function(component) {
   window.addEventListener('pointerup', finishOperation);
   window.addEventListener('pointercancel', handleTextPointerCancel);
   window.addEventListener('pointercancel', finishOperation);
-  const handleWindowBlur = () => {
-    if (flushFocusedText({ blur: true, immediate: true })) return;
-    if (dirty) syncToStreamlit();
-  };
-  const handleVisibilityChange = () => {
-    if (document.visibilityState !== 'hidden') return;
-    if (flushFocusedText({ blur: false, immediate: true })) return;
-    if (dirty) syncToStreamlit();
-  };
-  const handlePageHide = () => {
-    if (flushFocusedText({ blur: false, immediate: true })) return;
-    if (dirty) {
-      const value = saveLocal();
-      captureSmoothScrollState();
-      try { setStateValue('editor', value); } catch (_) {}
-      dirty = false;
-    }
-  };
-  window.addEventListener('blur', handleWindowBlur);
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('pagehide', handlePageHide);
   window.addEventListener('keydown', handleKeydown);
   fontSizeInput.addEventListener('input', () => setSelectedFontSize(fontSizeInput.value));
   fontSizeInput.addEventListener('change', () => setSelectedFontSize(fontSizeInput.value));
@@ -1405,6 +1510,10 @@ export default function(component) {
     stage.style.aspectRatio = `${image.naturalWidth} / ${image.naturalHeight}`;
     setZoom(zoom);
     renderBoxes();
+    // Image decoding can rebuild the textbox layer after the component state
+    // rerun. Restore again after that final layout step so focus and scroll do
+    // not jump after the first restoration.
+    restoreSmoothScrollState();
   };
   image.src = data?.image_data ?? '';
   renderBoxes();
@@ -1421,16 +1530,10 @@ export default function(component) {
   }
 
   return () => {
-    if (!flushFocusedText({ blur: false, immediate: true }) && dirty) {
-      const value = saveLocal();
-      captureSmoothScrollState();
-      try { setStateValue('editor', value); } catch (_) {}
-      dirty = false;
-    }
-    if (textCommitTimer) {
-      window.clearTimeout(textCommitTimer);
-      textCommitTimer = null;
-    }
+    // Component cleanup and unrelated Streamlit reruns are deliberately not
+    // save triggers. A pending explicit boundary timer is allowed to finish;
+    // it writes to browser storage and skips Streamlit if this node detached.
+
     layer.removeEventListener('contextmenu', handleContextMenu);
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
     clearTextGestureTimer();
@@ -1440,10 +1543,6 @@ export default function(component) {
     window.removeEventListener('pointerup', finishOperation);
     window.removeEventListener('pointercancel', handleTextPointerCancel);
     window.removeEventListener('pointercancel', finishOperation);
-    if (localSaveTimer) window.clearTimeout(localSaveTimer);
-    window.removeEventListener('blur', handleWindowBlur);
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-    window.removeEventListener('pagehide', handlePageHide);
     window.removeEventListener('keydown', handleKeydown);
     if (contextHint) contextHint.remove();
   };
@@ -1460,7 +1559,7 @@ def _register_pdf_editor_component():
     or page change. Registering here keeps the component available on every run.
     """
     return st.components.v2.component(
-        name="iars_pdf_textbox_editor_v35",
+        name="iars_pdf_textbox_editor_v36",
         html=EDITOR_HTML,
         css=EDITOR_CSS,
         js=EDITOR_JS,
