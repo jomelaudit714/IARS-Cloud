@@ -1,0 +1,30 @@
+IARS V4.5.40 TEST REPORT
+
+ROOT-CAUSE REGRESSION SUITE
+- 11 locked pytest cases passed.
+- "manual paper records" remains BEST-PRACT.
+- "process a replenishment" remains BEST-PRACT.
+- "follow the approved process" remains NONCONF.
+- "operations manual" remains NONCONF.
+- Policies and Procedures citation in 2026IAD286 remains NONCONF.
+
+ACTUAL PDF GOLDEN TESTS
+- 20 full extraction cycles: 2026IAD268.
+- 20 full extraction cycles: 2026IAD286.
+- Total full actual-PDF extraction cycles: 40.
+- 2026IAD268 No Daily Balancing/Monitoring: BEST-PRACT.
+- 2026IAD268 Late Preparation of PCV: BEST-PRACT.
+- 2026IAD286 Approver Signature with Policies and Procedures citation: NONCONF.
+- 2026IAD286 incomplete-receipt issues without policy citation: BEST-PRACT.
+
+CLASSIFICATION SIMULATION
+- 1,000 randomized genuine-citation versus ordinary-word cases passed.
+
+COMPILATION AND PACKAGE CONTROL
+- All Python modules compiled successfully.
+- Protected files hash-compared against V4.5.39: 40 unchanged.
+- Unintended protected-file changes: 0.
+- No dependency, asset, PDF Tagging, Gantt, Auth, Archive, Excel Conversion, Weekly Itinerary, or Supabase changes.
+
+LIVE LIMITATION
+- Final live Streamlit verification remains after deployment because this environment has no access to the user's running Streamlit Cloud session.

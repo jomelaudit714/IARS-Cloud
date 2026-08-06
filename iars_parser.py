@@ -1821,17 +1821,39 @@ CASH_FUND_RECEIVING_PATTERNS = [
     "received payment", "receiving payment", "receipt of funds",
 ]
 
-GOVERNING_DOCUMENT_TERMS = [
-    "memorandum", "memo", "guideline", "guidelines", "policy", "policies",
-    "procedure", "procedures", "process", "circular", "sop",
-    "standard operating procedure", "manual", "protocol", "rule", "rules",
-    "written policy", "written procedure", "written guidelines",
+# Governing-document detection must distinguish an actual citation from an
+# ordinary use of ambiguous words. For example:
+# - "manual paper records" describes the recording method; it does not cite a manual.
+# - "process a replenishment" uses process as a verb; it does not cite a process.
+# The unambiguous document names below are matched as complete words/phrases.
+GOVERNING_DOCUMENT_PATTERNS = [
+    r"\bpolic(?:y|ies)\b",
+    r"\bprocedures?\b",
+    r"\bguidelines?\b",
+    r"\bmemorand(?:um|a)\b",
+    r"\bmemo\b",
+    r"\bcirculars?\b",
+    r"\bSOPs?\b",
+    r"\bstandard\s+operating\s+procedures?\b",
+    r"\bprotocols?\b",
+    r"\bwritten\s+(?:rules?|requirements?|polic(?:y|ies)|procedures?|guidelines?)\b",
+    r"\brules?\s+and\s+regulations?\b",
 ]
 
-GOVERNING_RECOMMENDATION_DIRECTIVES = [
-    "please review", "review the", "refer to", "in accordance with",
-    "comply with", "follow the", "observe the", "adhere to",
-    "as required by", "pursuant to",
+# "manual" and "process" are ambiguous in ordinary audit narratives. They
+# qualify only when the surrounding wording identifies a governing document or
+# an approved/established operating requirement.
+GOVERNING_MANUAL_PATTERNS = [
+    r"\b(?:operations?|employee|accounting|finance|cash|revolving\s+fund|petty\s+cash|policy|procedure|quality|safety|company)\s+manual\b",
+    r"\bmanual\s+(?:on|for|of)\b",
+    r"\b(?:the|an?|approved|existing|written|prescribed)\s+manual\b",
+    r"\b(?:review|refer\s+to|follow|observe|comply\s+with|adhere\s+to|according\s+to|pursuant\s+to|under|per)\s+(?:the\s+|an?\s+)?manual\b",
+]
+
+GOVERNING_PROCESS_PATTERNS = [
+    r"\b(?:approved|established|documented|prescribed|required|standard|proper|written|existing|company)\s+process(?:es)?\b",
+    r"\bprocess(?:es)?\s+(?:on|for|of)\b",
+    r"\b(?:review|refer\s+to|follow|observe|comply\s+with|adhere\s+to|in\s+accordance\s+with|according\s+to|as\s+required\s+by|pursuant\s+to|under|per)\s+(?:the\s+|an?\s+)?(?:approved\s+|established\s+|documented\s+|prescribed\s+|proper\s+|written\s+)?process(?:es)?\b",
 ]
 
 
@@ -1883,31 +1905,33 @@ def is_missing_receiver_signature_issue(issue, narrative="", recommendation=""):
     return has_document_context and has_cash_fund_context
 
 
-def recommendation_requires_written_policy_compliance(recommendation):
-    """Return True when the recommendation cites a governing document.
+def text_cites_governing_document(value):
+    """Return True only for an actual governing-document/process citation.
 
-    The classifier receives normalized recommendation text, so wording such as
-    ``Please review No. 3 of Policies and Procedures`` may become
-    ``Review No. 3 of Policies and Procedures`` before classification.  A
-    governing-document citation is therefore sufficient; it must not depend on
-    a particular opener such as ``please review`` or ``review the``.
+    Complete-word and contextual matching prevents false positives from common
+    narrative wording such as ``manual paper records`` and ``process a
+    replenishment`` while retaining genuine citations such as ``Policies and
+    Procedures``, ``operations manual`` and ``follow the approved process``.
     """
-    rec = clean_text(recommendation).lower()
-    if not rec:
+    text = clean_text(value)
+    if not text:
         return False
-    return any(term in rec for term in GOVERNING_DOCUMENT_TERMS)
+    patterns = (
+        GOVERNING_DOCUMENT_PATTERNS
+        + GOVERNING_MANUAL_PATTERNS
+        + GOVERNING_PROCESS_PATTERNS
+    )
+    return any(re.search(pattern, text, re.I) for pattern in patterns)
+
+
+def recommendation_requires_written_policy_compliance(recommendation):
+    """Return True when the recommendation genuinely cites governing guidance."""
+    return text_cites_governing_document(recommendation)
 
 
 def narrative_or_recommendation_cites_governing_document(narrative="", recommendation=""):
-    """Return True when the narrative or recommendation cites policy guidance.
-
-    This implements the controlled IARS rule: when the narrative or
-    recommendation cites a process, policy, procedure, guideline, memorandum,
-    circular, SOP, manual, protocol, or written rule, a completeness/best-
-    practice issue is classified as written-policy nonconformity.
-    """
-    combined = clean_text(f"{narrative} {recommendation}").lower()
-    return bool(combined) and any(term in combined for term in GOVERNING_DOCUMENT_TERMS)
+    """Return True when the narrative or recommendation genuinely cites guidance."""
+    return text_cites_governing_document(f"{narrative} {recommendation}")
 
 
 def is_explicit_minimal_cash_shortage(issue, narrative=""):
@@ -2075,15 +2099,16 @@ def classify_finding(issue, recommendation, narrative="", company="", audit_titl
     if any(k in issue_lower for k in ["depleted fund", "low fund", "fund depletion", "mixing of fund", "mixed fund", "personal cash", "outside its purpose", "budget release without prior pcr"]):
         return "Ignore or Disregard Office/Operation Best Practices -3"
 
-    # Nonconformity trigger: only when the recommendation/narrative explicitly refers to process/policy/procedure/guideline/SOP/memorandum.
-    nonconf_patterns = [
-        "nonconformity", "non-conformity", "non-compliance",
-        "not following proper procedure", "policy", "policies", "procedure", "procedures",
-        "guideline", "guidelines", "sop", "memorandum", "written requirement",
-        "please review process", "please review guidelines", "please review procedure", "please review policy",
-        "review process", "review guidelines", "review procedure", "review policy",
-    ]
-    if any(k in combined for k in nonconf_patterns):
+    # Explicit nonconformity wording remains a direct trigger. Governing-document
+    # citations were already evaluated above using exact/contextual matching;
+    # do not reintroduce broad substring checks here.
+    if any(
+        phrase in combined
+        for phrase in [
+            "nonconformity", "non-conformity", "non-compliance",
+            "not following proper procedure",
+        ]
+    ):
         return "Nonconformity With The Written Policies, Guidelines, Process And Procedures -4"
 
     if "uncooperative" in combined:

@@ -1,0 +1,6 @@
+IARS V4.5.40 ROLLBACK
+
+Use the previously confirmed IARS V4.5.39 complete ZIP.
+Upload its contents to the GitHub repository root and replace V4.5.40 files.
+Reboot Streamlit and perform a hard refresh.
+No database rollback is required.
