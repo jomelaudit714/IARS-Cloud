@@ -107,7 +107,7 @@ from iars_excel_conversion import (
     render_warehouse_conversion_page,
 )
 from iars_gantt import (
-    render_gantt_dashboard_alert,
+    render_gantt_dashboard_panel,
     render_gantt_master_data_page,
     render_yearly_gantt_page,
 )
@@ -272,9 +272,14 @@ def _apply_v4477_layout_refinements() -> None:
             margin-top: .04rem !important;
             margin-bottom: .42rem !important;
         }
+        /* V4.5.44: keep Dashboard content below the fixed top card. */
+        .stApp:has(.iars-dashboard-v4477-marker)
+        div[data-testid="stElementContainer"]:has(.iars-dashboard-v4477-marker) {
+            margin-top: .80rem !important;
+        }
         .stApp:has(.iars-dashboard-v4477-marker) .iars-dashboard-welcome {
-            margin-top: -1.55rem !important;
-            margin-bottom: .30rem !important;
+            margin-top: 0 !important;
+            margin-bottom: .42rem !important;
             align-items: flex-end !important;
         }
         .stApp:has(.iars-dashboard-v4477-marker) .iars-dashboard-welcome h2 {
@@ -4679,12 +4684,17 @@ def _clear_avatar_dialog_state_on_navigation() -> None:
 
 nav_options = [
     "🏠 Dashboard",
+    "📅 Yearly Audit Gantt",
     "🗓️ Weekly Itinerary",
     "📄 Generate Extraction",
     "🏷️ PDF Tagging",
     "🗂️ Shared PDF Archive",
     "📚 Audit Workpapers",
     "📜 Policies & Memoranda",
+]
+audit_schedule_nav = [
+    "📅 Yearly Audit Gantt",
+    "🗓️ Weekly Itinerary",
 ]
 audit_report_nav = [
     "📄 Generate Extraction",
@@ -4697,16 +4707,13 @@ excel_conversion_nav = [
     "↳ Invoice",
 ]
 nav_options.extend(excel_conversion_nav)
-audit_planning_nav = ["📅 Yearly Audit Gantt"]
-nav_options.extend(audit_planning_nav)
 standalone_nav = [
     "🏠 Dashboard",
-    "🗓️ Weekly Itinerary",
     "📚 Audit Workpapers",
     "📜 Policies & Memoranda",
 ]
 if is_admin_user(auth_user):
-    audit_planning_nav.append("🧰 Gantt Master Data")
+    audit_schedule_nav.append("🧰 Gantt Master Data")
     nav_options.append("🧰 Gantt Master Data")
     nav_options.extend([
         "👥 User Management",
@@ -4736,6 +4743,20 @@ with st.sidebar:
         args=(dashboard_label,),
     )
 
+    audit_schedule_expanded = selected_page in audit_schedule_nav
+    with st.expander("🗓️ Audit Schedule", expanded=audit_schedule_expanded):
+        for schedule_index, nav_label in enumerate(audit_schedule_nav):
+            nav_key = re.sub(r"[^a-z0-9]+", "_", nav_label.lower()).strip("_")
+            is_selected = nav_label == selected_page
+            st.button(
+                nav_label,
+                key=f"audit_schedule_nav_{schedule_index}_{nav_key}",
+                use_container_width=True,
+                type="primary" if is_selected else "secondary",
+                on_click=_navigate_to_page,
+                args=(nav_label,),
+            )
+
     audit_expanded = selected_page in audit_report_nav
     with st.expander("📂 Audit Report", expanded=audit_expanded):
         for audit_index, nav_label in enumerate(audit_report_nav):
@@ -4748,28 +4769,6 @@ with st.sidebar:
                 type="primary" if is_selected else "secondary",
                 on_click=_navigate_to_page,
                 args=(nav_label,),
-            )
-
-    audit_planning_expanded = selected_page in audit_planning_nav
-    with st.expander("🗓️ Audit Planning", expanded=audit_planning_expanded):
-        gantt_label = "📅 Yearly Audit Gantt"
-        st.button(
-            gantt_label,
-            key="audit_planning_nav_yearly_gantt",
-            use_container_width=True,
-            type="primary" if selected_page == gantt_label else "secondary",
-            on_click=_navigate_to_page,
-            args=(gantt_label,),
-        )
-        if is_admin_user(auth_user):
-            gantt_master_label = "🧰 Gantt Master Data"
-            st.button(
-                gantt_master_label,
-                key="audit_planning_nav_master_data",
-                use_container_width=True,
-                type="primary" if selected_page == gantt_master_label else "secondary",
-                on_click=_navigate_to_page,
-                args=(gantt_master_label,),
             )
 
     excel_conversion_expanded = selected_page in excel_conversion_nav
@@ -4838,7 +4837,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.43",
+    version="4.5.44",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
@@ -4891,11 +4890,6 @@ if page_key == "Dashboard":
         f'</div><div class="edl-section-badge">{html.escape(role_label)}</div></div>',
         unsafe_allow_html=True,
     )
-    render_gantt_dashboard_alert(
-        auth_client,
-        auth_user,
-        admin=is_admin_user(auth_user),
-    )
     render_metric_cards(
         [
             {"label": "Employees", "value": f"{len(master_df):,}", "note": "Master Data records", "icon": "👥", "accent": "#175CD3"},
@@ -4924,27 +4918,11 @@ if page_key == "Dashboard":
         )
 
     with activity_col:
-        with st.container(border=True):
-            render_section_header(
-                "Recent Archive Activity",
-                "Latest reports saved by authorized auditors.",
-            )
-            activity_rows = []
-            for record in home_archive_records[:7]:
-                activity_rows.append(
-                    {
-                        "icon": "📄",
-                        "title": str(record.get("original_filename", "") or "Archived PDF"),
-                        "subtitle": f"{record.get('audit_reference', '') or 'No reference'} · Uploaded by {record.get('uploaded_by', '') or 'Unknown'}",
-                        "meta": str(record.get("uploaded_at", ""))[:16].replace("T", " "),
-                    }
-                )
-            render_activity_list(activity_rows)
-            if home_archive_error:
-                st.warning(f"Archive activity could not be loaded: {home_archive_error}")
-            if home_library_error:
-                st.warning(f"Document-library activity could not be loaded: {home_library_error}")
-
+        render_gantt_dashboard_panel(
+            auth_client,
+            auth_user,
+            admin=is_admin_user(auth_user),
+        )
 
 if page_key == "Warehouse":
     render_warehouse_conversion_page(auth_user)

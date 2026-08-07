@@ -1,0 +1,6 @@
+IARS V4.5.44 ROLLBACK
+
+If a live deployment issue is found, restore the complete previous confirmed package:
+IARS_V4_5_43_GANTT_CLICK_ONLY_SMOOTH_NAV_STAGE_FORMAT_COMPLETE.zip
+
+No database migration is introduced by V4.5.44, so rollback requires only restoring the previous application files and rebooting Streamlit Cloud.

@@ -1,0 +1,37 @@
+IARS V4.5.44 CHANGE MANIFEST
+Baseline: IARS_V4_5_43_GANTT_CLICK_ONLY_SMOOTH_NAV_STAGE_FORMAT_COMPLETE.zip
+
+REQUESTED CHANGES
+1. Yearly Audit Gantt FRS month cell must visibly show the actual FRS submission date.
+2. Dashboard metric cards must not overlap the fixed top Dashboard header card.
+3. Remove Recent Archive Activity from Dashboard.
+4. Administrator Dashboard right panel: show Overdue Audit / FRS notifications.
+5. Auditor Dashboard right panel: show current-month schedules assigned to that auditor.
+6. Rename sidebar Audit Planning to Audit Schedule.
+7. Place Audit Schedule above Audit Report.
+8. Move Weekly Itinerary inside Audit Schedule.
+
+FUNCTIONAL FILES MODIFIED
+- app.py
+- iars_gantt.py
+
+NEW REGRESSION TEST
+- tests/test_gantt_dashboard_sidebar_frs_v4544.py
+
+PROTECTED / NO-TOUCH MODULES
+- iars_pdf_editor.py
+- iars_parser.py
+- iars_archive.py
+- iars_auth.py
+- iars_document_library.py
+- iars_excel_conversion.py
+- iars_extract_worker.py
+- iars_theme.py
+- iars_weekly_itinerary.py
+- requirements.txt
+- packages.txt
+- assets/*
+- data/*
+- all Supabase SQL files
+
+NO DATABASE MIGRATION REQUIRED.

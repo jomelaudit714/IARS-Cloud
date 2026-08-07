@@ -1,0 +1,20 @@
+IARS V4.5.44 TEST REPORT
+
+Automated regression suite:
+- 32 tests passed.
+
+Browser layout simulations:
+- 300 FRS month-box visibility cycles: actual Submission Date remained fully visible.
+- 300 Dashboard fixed-header clearance cycles: first metric card remained below header.
+
+Stress checks:
+- 1,000 FRS label/output simulations passed.
+
+Compilation:
+- All active Python modules compiled successfully.
+
+Change-control verification:
+- Protected modules/assets/dependencies/SQL files hash-compared against V4.5.43 and remained unchanged.
+- Only app.py and iars_gantt.py were functionally changed.
+
+Live Streamlit Cloud behavior must still be confirmed after deployment.

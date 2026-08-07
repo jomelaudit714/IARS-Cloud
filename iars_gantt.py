@@ -30,7 +30,7 @@ GANTT_EDIT_QUERY_PARAM = "iars_gantt_edit"  # legacy URL key; no longer used for
 GANTT_PENDING_EDIT_KEY = "iars_gantt_pending_edit_v4530"
 GANTT_GRID_KEY = "iars_gantt_native_grid_v4532"
 GANTT_GRID_MAP_SUFFIX = "__selection_map"
-GANTT_COMPONENT_KEY = "iars_gantt_pointer_grid_v4543"
+GANTT_COMPONENT_KEY = "iars_gantt_pointer_grid_v4544"
 _GANTT_GRID_COMPONENT: Any | None = None
 
 HOLIDAY_COVERAGES = ["National", "Province of Rizal", "San Mateo, Rizal"]
@@ -1044,6 +1044,14 @@ def _render_gantt_css() -> None:
         .iars-gantt-alert ul {margin:.45rem 0 0 1.1rem;padding:0;}
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
+        .iars-gantt-dashboard-panel-title{margin:0 0 .18rem;color:#0B2B55;font-size:1.18rem;font-weight:850;}
+        .iars-gantt-dashboard-panel-subtitle{margin:0 0 .72rem;color:#667085;font-size:.78rem;line-height:1.35;}
+        .iars-gantt-dashboard-list{display:flex;flex-direction:column;gap:.48rem;}
+        .iars-gantt-dashboard-item{border:1px solid #D9E2EE;border-radius:10px;padding:.62rem .72rem;background:#FFF;}
+        .iars-gantt-dashboard-item.overdue{border-color:#F0A3A3;background:#FFF5F5;}
+        .iars-gantt-dashboard-item .title{font-size:.80rem;font-weight:800;color:#102A4E;line-height:1.25;}
+        .iars-gantt-dashboard-item .meta{font-size:.70rem;color:#667085;line-height:1.35;margin-top:.16rem;}
+        .iars-gantt-dashboard-item .stage{display:inline-block;margin-top:.28rem;font-size:.68rem;font-weight:800;color:#8B1E1E;}
 
         /* V4.5.42: constrain only the Gantt month editor to the visible
            browser height and give the popup its own vertical scrollbar. */
@@ -1062,11 +1070,12 @@ def _render_gantt_css() -> None:
            frozen without an iframe or cross-frame click navigation. */
         .iars-gantt-native-shell {border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFFFFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}
         .iars-gantt-native-scroll {width:100%;max-height:560px;overflow:auto;position:relative;overscroll-behavior:contain;scrollbar-gutter:stable;background:#FFFFFF;}
-        .iars-gantt-native-table {border-collapse:separate;border-spacing:0;table-layout:fixed;width:1564px;min-width:1564px;margin:0!important;font-size:.72rem;color:#23324A;}
+        .iars-gantt-native-table {border-collapse:separate;border-spacing:0;table-layout:fixed;width:1900px;min-width:1900px;margin:0!important;font-size:.72rem;color:#23324A;}
         .iars-gantt-native-table th,.iars-gantt-native-table td {box-sizing:border-box;width:92px;min-width:92px;max-width:92px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.32rem .34rem;overflow:hidden;vertical-align:middle;}
+        .iars-gantt-native-table th:nth-child(n+6),.iars-gantt-native-table td:nth-child(n+6){width:120px;min-width:120px;max-width:120px;padding-left:.20rem;padding-right:.20rem;}
         .iars-gantt-native-table thead th {position:sticky;top:0;z-index:100;height:54px;background:#EAF0F8;color:#0B2B55;text-align:center!important;font-weight:800;line-height:1.12;word-break:normal;overflow-wrap:anywhere;box-shadow:0 2px 0 #C8D4E3;}
         .iars-gantt-native-table thead th:nth-child(4) {font-size:.58rem!important;letter-spacing:-.035em;white-space:nowrap;overflow:visible;}
-        .iars-gantt-native-table tbody td {height:82px;background:#FFFFFF;word-break:break-word;line-height:1.20;}
+        .iars-gantt-native-table tbody td {height:108px;background:#FFFFFF;word-break:break-word;line-height:1.16;}
         .iars-gantt-native-table tbody tr:hover td {background:#F8FAFC;}
         .iars-gantt-native-table th:nth-child(1),.iars-gantt-native-table td:nth-child(1){position:sticky;left:0;}
         .iars-gantt-native-table th:nth-child(2),.iars-gantt-native-table td:nth-child(2){position:sticky;left:92px;}
@@ -1079,13 +1088,13 @@ def _render_gantt_css() -> None:
         .iars-gantt-native-table .iars-static-cell {text-align:left;font-weight:600;font-size:.66rem;}
         .iars-gantt-native-table .iars-accountability {text-align:center;font-weight:800;white-space:nowrap;font-size:.64rem;letter-spacing:-.02em;}
         .iars-gantt-native-table .iars-frequency {text-align:center;font-weight:800;white-space:nowrap;font-size:.68rem;}
-        .iars-gantt-month-box {display:flex;min-height:68px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.14rem;border:1px solid #CBD5E1;border-radius:9px;padding:.30rem .18rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.10;transition:transform .06s ease,border-color .06s ease,box-shadow .06s ease,filter .06s ease;cursor:pointer;touch-action:manipulation;}
+        .iars-gantt-month-box {display:flex;min-height:94px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.08rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .12rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.08;transition:transform .06s ease,border-color .06s ease,box-shadow .06s ease,filter .06s ease;cursor:pointer;touch-action:manipulation;}
         .iars-gantt-month-box:hover {transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);filter:brightness(.99);}
         .iars-gantt-month-box:active {transform:translateY(0) scale(.985);box-shadow:none;}
         .iars-gantt-month-box:focus-visible {outline:3px solid rgba(23,92,211,.25);outline-offset:1px;}
         .iars-gantt-month-stage {font-size:.70rem;font-weight:850;}
         .iars-gantt-month-auditor {font-size:.69rem;font-weight:800;}
-        .iars-gantt-month-date {font-size:.63rem;font-weight:650;white-space:nowrap;}
+        .iars-gantt-month-date {font-size:.55rem;font-weight:700;white-space:nowrap;letter-spacing:-.02em;}
         .iars-gantt-month-box.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
         .iars-gantt-month-box.in-progress {background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
         .iars-gantt-month-box.done {background:#DCFCE7;color:#14532D;border-color:#22C55E;}
@@ -1563,14 +1572,17 @@ def _month_cell_html(
 
     label, slug = _month_box_label(entry, holiday_rows)
     lines = label.splitlines()
-    stage = html.escape(lines[0] if lines else "＋ Schedule")
-    auditor = html.escape(lines[1] if len(lines) > 1 else "")
-    date_line = html.escape(lines[2] if len(lines) > 2 else "")
-    content = (
-        f'<span class="iars-gantt-month-stage">{stage}</span>'
-        + (f'<span class="iars-gantt-month-auditor">{auditor}</span>' if auditor else "")
-        + (f'<span class="iars-gantt-month-date">{date_line}</span>' if date_line else "")
-    )
+    content_parts: list[str] = []
+    for line_index, line in enumerate(lines):
+        safe = html.escape(line)
+        if line_index == 0:
+            css_class = "iars-gantt-month-stage"
+        elif line_index == 1 and ":" not in line:
+            css_class = "iars-gantt-month-auditor"
+        else:
+            css_class = "iars-gantt-month-date"
+        content_parts.append(f'<span class="{css_class}">{safe}</span>')
+    content = "".join(content_parts)
     if not clickable:
         return f'<div class="iars-gantt-month-box {html.escape(slug)}">{content}</div>'
     href = html.escape(_gantt_edit_href(master_id, year, month), quote=True)
@@ -1762,10 +1774,11 @@ def _get_gantt_grid_component() -> Any | None:
 .iars-gantt-v2-root{width:100%;font-family:var(--st-font);color:#23324A;}
 .iars-gantt-v2-shell{border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}
 .iars-gantt-v2-scroll{width:100%;height:100%;overflow:auto;position:relative;overscroll-behavior:contain;scrollbar-gutter:stable;background:#FFF;outline:none;}
-.iars-gantt-v2-table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:1564px;min-width:1564px;margin:0;font-size:.72rem;color:#23324A;}
+.iars-gantt-v2-table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:1900px;min-width:1900px;margin:0;font-size:.72rem;color:#23324A;}
 .iars-gantt-v2-table th,.iars-gantt-v2-table td{box-sizing:border-box;width:92px;min-width:92px;max-width:92px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.30rem .30rem;overflow:hidden;vertical-align:middle;background:#FFF;}
+.iars-gantt-v2-table th:nth-child(n+6),.iars-gantt-v2-table td:nth-child(n+6){width:120px;min-width:120px;max-width:120px;padding-left:.20rem;padding-right:.20rem;}
 .iars-gantt-v2-table thead th{position:sticky;top:0;z-index:100;height:54px;background:#EAF0F8;color:#0B2B55;text-align:center;font-weight:800;line-height:1.12;overflow-wrap:anywhere;box-shadow:0 2px 0 #C8D4E3;}
-.iars-gantt-v2-table tbody td{height:94px;line-height:1.15;}
+.iars-gantt-v2-table tbody td{height:108px;line-height:1.15;}
 .iars-gantt-v2-table tbody tr:hover td{background:#F8FAFC;}
 .iars-gantt-v2-table th:nth-child(1),.iars-gantt-v2-table td:nth-child(1){position:sticky;left:0;}
 .iars-gantt-v2-table th:nth-child(2),.iars-gantt-v2-table td:nth-child(2){position:sticky;left:92px;}
@@ -1780,13 +1793,13 @@ def _get_gantt_grid_component() -> Any | None:
 .iars-gantt-v2-static{font-weight:600;font-size:.66rem;text-align:left;white-space:normal;overflow-wrap:anywhere;}
 .iars-gantt-v2-accountability{font-weight:800;font-size:.64rem;text-align:center;white-space:nowrap;}
 .iars-gantt-v2-frequency{font-weight:800;font-size:.68rem;text-align:center;white-space:nowrap;}
-.iars-gantt-v2-month-box{display:flex;min-height:80px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.10rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .16rem;text-align:center;font-weight:750;line-height:1.10;cursor:pointer;user-select:none;transition:border-color .06s ease,box-shadow .06s ease,filter .06s ease;}
+.iars-gantt-v2-month-box{display:flex;min-height:94px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.08rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .12rem;text-align:center;font-weight:750;line-height:1.08;cursor:pointer;user-select:none;transition:border-color .06s ease,box-shadow .06s ease,filter .06s ease;}
 .iars-gantt-v2-month-box:hover{box-shadow:0 2px 7px rgba(15,23,42,.12);filter:brightness(.99);}
 .iars-gantt-v2-month-box:active{transform:scale(.988);box-shadow:none;}
 .iars-gantt-v2-month-line{display:block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:clip;}
 .iars-gantt-v2-month-line.stage{font-size:.67rem;font-weight:850;}
 .iars-gantt-v2-month-line.auditor{font-size:.66rem;font-weight:800;}
-.iars-gantt-v2-month-line.date{font-size:.60rem;font-weight:700;letter-spacing:-.01em;}
+.iars-gantt-v2-month-line.date{font-size:.55rem;font-weight:700;letter-spacing:-.02em;}
 .iars-gantt-v2-month-box.scheduled{background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
 .iars-gantt-v2-month-box.in-progress{background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
 .iars-gantt-v2-month-box.done{background:#DCFCE7;color:#14532D;border-color:#22C55E;}
@@ -1794,7 +1807,7 @@ def _get_gantt_grid_component() -> Any | None:
 .iars-gantt-v2-month-box.frs{background:#D1FAE5;color:#064E3B;border-color:#047857;}
 .iars-gantt-v2-month-box.overdue,.iars-gantt-v2-month-box.overdue-irs,.iars-gantt-v2-month-box.overdue-frs{background:#B91C1C;color:#FFF;border-color:#991B1B;}
 .iars-gantt-v2-month-box.empty{background:#FAFBFC;color:#667085;border-color:#CBD5E1;}
-.iars-gantt-v2-month-na{display:flex;align-items:center;justify-content:center;min-height:80px;color:#98A2B3;font-weight:700;}
+.iars-gantt-v2-month-na{display:flex;align-items:center;justify-content:center;min-height:94px;color:#98A2B3;font-weight:700;}
 '''
     component_js = r'''
 export default function(component) {
@@ -1803,7 +1816,7 @@ export default function(component) {
   if (!root) return;
 
   const payload = data || {};
-  const storageKey = String(payload.storage_key || 'iars-gantt-grid-v4543');
+  const storageKey = String(payload.storage_key || 'iars-gantt-grid-v4544');
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const columns = Array.isArray(payload.columns) ? payload.columns : [];
   const viewportHeight = Number(payload.viewport_height || 560);
@@ -1964,7 +1977,7 @@ export default function(component) {
 '''
     try:
         _GANTT_GRID_COMPONENT = register(
-            "iars_gantt_pointer_grid_v4543",
+            "iars_gantt_pointer_grid_v4544",
             html=component_html,
             css=component_css,
             js=component_js,
@@ -2037,8 +2050,8 @@ def _build_gantt_component_payload(
     return {
         "columns": columns,
         "rows": payload_rows,
-        "viewport_height": min(560, max(240, 58 + len(filtered) * 94)),
-        "storage_key": f"iars-gantt-v4543-{int(year)}",
+        "viewport_height": min(560, max(240, 58 + len(filtered) * 108)),
+        "storage_key": f"iars-gantt-v4544-{int(year)}",
     }
 
 def _build_native_gantt_dataframe(
@@ -2178,7 +2191,7 @@ def _render_matrix(
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
 
-    # V4.5.43: use a Components V2 grid so keyboard navigation remains a
+    # V4.5.44: use a Components V2 grid so keyboard navigation remains a
     # browser-only action.  A Python rerun/editor request is emitted only by a
     # genuine pointer click on a colored month box.
     component = _get_gantt_grid_component()
@@ -2223,7 +2236,7 @@ def _render_matrix(
             return style_matrix
 
         styled = data.style.apply(_apply_grid_styles, axis=None)
-        table_height = min(650, max(240, 58 + len(filtered) * 94))
+        table_height = min(650, max(240, 58 + len(filtered) * 108))
         st.dataframe(
             styled,
             width="stretch",
@@ -2233,7 +2246,7 @@ def _render_matrix(
             key=GANTT_GRID_KEY,
             on_select=_grid_selection_callback,
             selection_mode="single-cell",
-            row_height=88,
+            row_height=108,
         )
 
     selected = _pending_gantt_edit()
@@ -2330,6 +2343,81 @@ def render_gantt_dashboard_alert(client: Any, current_user: dict[str, Any], *, a
             f'<span>The five-working-day period is running. Weekends and active non-working holidays are excluded.</span></div>',
             unsafe_allow_html=True,
         )
+
+
+def render_gantt_dashboard_panel(client: Any, current_user: dict[str, Any], *, admin: bool) -> None:
+    """Dashboard replacement for Recent Archive Activity.
+
+    Administrators see overdue audit/report items. Auditors see the audit
+    schedules assigned to them for the current Philippine month.
+    """
+    _render_gantt_css()
+    with st.container(border=True):
+        today = _today_pht()
+        if admin:
+            st.markdown('<div class="iars-gantt-dashboard-panel-title">Overdue Audit / FRS Notifications</div>', unsafe_allow_html=True)
+            st.markdown('<div class="iars-gantt-dashboard-panel-subtitle">Audit and report deadlines that need administrator attention.</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="iars-gantt-dashboard-panel-title">{html.escape(month_name[today.month])} Audit Schedule</div>', unsafe_allow_html=True)
+            st.markdown('<div class="iars-gantt-dashboard-panel-subtitle">Monthly audit schedules assigned to your account.</div>', unsafe_allow_html=True)
+
+        setup = gantt_setup_status(client)
+        if not setup.ready:
+            st.info("Audit schedule information is not available yet.")
+            return
+        try:
+            entries = list_schedule_entries(client, today.year)
+            holidays = list_holidays(client, today.year)
+            masters = {str(row.get("id") or ""): row for row in list_master_records(client, active_only=False)}
+        except Exception as exc:
+            st.warning(f"Audit schedule information could not be loaded: {exc}")
+            return
+
+        current_name = _user_name(current_user)
+        rows: list[tuple[dict[str, Any], ReportStageInfo]] = []
+        for entry in entries:
+            info = report_stage_info(entry, holidays, today=today)
+            if admin:
+                if info.stage in {"Overdue", "Overdue: FRS"}:
+                    rows.append((entry, info))
+            else:
+                if (
+                    int(entry.get("schedule_month") or 0) == today.month
+                    and _name_key(entry.get("auditor_full_name")) == _name_key(current_name)
+                ):
+                    rows.append((entry, info))
+
+        rows.sort(key=lambda pair: (pair[1].deadline or date.max, _clean_text(pair[0].get("auditor_full_name"))))
+        if not rows:
+            if admin:
+                st.success("No overdue audit or report items at this time.")
+            else:
+                st.info(f"No audit schedule is assigned to you for {month_name[today.month]} {today.year}.")
+            return
+
+        cards: list[str] = []
+        for entry, info in rows[:10]:
+            master = masters.get(str(entry.get("master_id") or ""), {})
+            custodian = _clean_text(master.get("custodian")) or "Custodian"
+            task = _clean_text(master.get("audit_task")) or "Audit task"
+            auditor = nickname_for(entry.get("auditor_full_name"))
+            stage = _display_stage(info.stage)
+            if stage == "FRS":
+                date_meta = f"Submission Date: {_box_date(entry.get('final_report_submitted_at'))}"
+            elif info.deadline:
+                date_meta = f"Due: {_box_date(info.deadline)}"
+            else:
+                date_meta = f"Due: {_box_date(entry.get('planned_date'))}"
+            overdue_class = " overdue" if info.overdue or stage.startswith("Overdue") else ""
+            auditor_meta = f" · {html.escape(auditor)}" if admin else ""
+            cards.append(
+                f'<div class="iars-gantt-dashboard-item{overdue_class}">'
+                f'<div class="title">{html.escape(custodian)} — {html.escape(task)}</div>'
+                f'<div class="meta">{html.escape(date_meta)}{auditor_meta}</div>'
+                f'<span class="stage">{html.escape(stage)}</span>'
+                '</div>'
+            )
+        st.markdown('<div class="iars-gantt-dashboard-list">' + ''.join(cards) + '</div>', unsafe_allow_html=True)
 
 
 def render_yearly_gantt_page(
