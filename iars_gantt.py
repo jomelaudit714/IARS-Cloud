@@ -901,9 +901,9 @@ def _month_box_label(entry: dict[str, Any] | None, holiday_rows: list[dict[str, 
     display_stage = _display_stage(info.stage)
     nickname = _clean_text(entry.get("auditor_nickname")) or nickname_for(entry.get("auditor_full_name"))
     if info.stage in {"Planned", "In Progress", "Overdue"}:
-        date_label = f"Due: {_box_date(entry.get('planned_date'))}"
+        date_label = f"Due:\u00A0{_box_date(entry.get('planned_date'))}"
     elif info.stage in {"Done", "Overdue: IRS", "For FRS", "Overdue: FRS"}:
-        date_label = f"Due: {_box_date(info.deadline)}"
+        date_label = f"Due:\u00A0{_box_date(info.deadline)}"
     else:
         date_label = f"Submitted: {_box_date(entry.get('final_report_submitted_at'))}"
     return f"{display_stage}\n{nickname}\n{date_label}", _stage_slug(display_stage)
@@ -997,6 +997,18 @@ def _render_gantt_css() -> None:
         .iars-gantt-alert ul {margin:.45rem 0 0 1.1rem;padding:0;}
         .iars-gantt-notice {border:1px solid #D6A129;background:#FFF8E6;color:#594200;border-radius:14px;padding:1rem 1.1rem;margin:.5rem 0 1rem;}
         .iars-gantt-notice strong {display:block;margin-bottom:.18rem;}
+
+        /* V4.5.42: constrain only the Gantt month editor to the visible
+           browser height and give the popup its own vertical scrollbar. */
+        div[data-testid="stDialog"]:has(.iars-gantt-month-editor-marker) div[role="dialog"] {
+            max-height:calc(100vh - 24px)!important;
+            overflow-y:auto!important;
+            overflow-x:hidden!important;
+            overscroll-behavior:contain!important;
+            scrollbar-gutter:stable!important;
+        }
+        div[data-testid="stDialog"]:has(.iars-gantt-month-editor-marker) div[role="dialog"]::-webkit-scrollbar {width:10px;}
+        div[data-testid="stDialog"]:has(.iars-gantt-month-editor-marker) div[role="dialog"]::-webkit-scrollbar-thumb {background:#B7C3D4;border-radius:999px;border:2px solid transparent;background-clip:padding-box;}
 
         /* V4.5.29: one native-DOM table. The scroll viewport owns both the
            header and rows, so the complete Company-to-December header remains
@@ -1121,6 +1133,7 @@ def _open_month_editor_dialog(
 
         @decorator
         def _dialog() -> None:
+            st.markdown('<div class="iars-gantt-month-editor-marker"></div>', unsafe_allow_html=True)
             _render_month_editor(
                 client,
                 master=master,
@@ -1652,7 +1665,8 @@ def _gantt_cell_palette(slug: str) -> str:
         "empty": "background-color:#FAFBFC;color:#667085;font-weight:650;border:1px solid #CBD5E1;",
         "na": "background-color:#FFFFFF;color:#98A2B3;",
     }
-    return palettes.get(slug, palettes["empty"])
+    layout = "white-space:pre-line;line-height:1.16;word-break:normal;overflow-wrap:normal;"
+    return palettes.get(slug, palettes["empty"]) + layout
 
 
 def _build_native_gantt_dataframe(

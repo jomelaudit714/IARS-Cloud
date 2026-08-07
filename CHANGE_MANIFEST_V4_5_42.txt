@@ -1,0 +1,38 @@
+IARS V4.5.42 CHANGE MANIFEST
+
+BASE VERSION
+- V4.5.41 complete deployment.
+
+REQUESTED CHANGES
+- Give the Gantt month editor popup its own vertical scrollbar so the submit/save button remains reachable on shorter screens.
+- Display every populated month cell in this exact three-line order:
+  Status
+  Auditor nickname
+  Due: MM/DD/YY
+
+FILES MODIFIED
+- iars_gantt.py
+  * Adds a Gantt-month-editor-only dialog marker.
+  * Constrains that dialog to the visible browser height and enables internal vertical scrolling.
+  * Prevents wheel scrolling from chaining to the background Gantt page.
+  * Preserves month-cell newlines in the native Streamlit grid.
+  * Keeps "Due:" and its date together with a non-breaking space.
+- app.py
+  * Version display changed from 4.5.41 to 4.5.42.
+
+FILES ADDED
+- tests/test_gantt_dialog_scroll_and_cell_format.py
+- DEPLOY_README_V4_5_42.txt
+- CHANGE_MANIFEST_V4_5_42.txt
+- TEST_REPORT_V4_5_42.txt
+- ROLLBACK_V4_5_42.txt
+
+PROTECTED / NOT MODIFIED
+- PDF Tagging
+- Audit Extraction and locked classification/recommendation rules
+- Authentication and Profile
+- Archive
+- Excel Conversion
+- Weekly Itinerary
+- Document Library
+- Requirements, packages, assets, templates, and Supabase SQL files

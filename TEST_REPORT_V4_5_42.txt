@@ -1,0 +1,36 @@
+IARS V4.5.42 TEST REPORT
+
+TARGET CHANGES
+- The Gantt month editor popup must have its own vertical scrollbar on shorter screens.
+- Month cells must display Status, Auditor nickname, and Due date as three separate lines.
+- "Due:" must remain beside the date, not beside the auditor name.
+
+AUTOMATED TESTS
+- 17 pytest regression tests passed.
+- 1,000 month-cell formatting simulations passed.
+- Confirmed the exact overdue label structure:
+  Overdue
+  Antonio
+  Due: 01/31/26
+- Existing V4.5.41 non-null IRS/FRS reference tests remain passed.
+- Locked audit-extraction regression tests remain passed.
+
+BROWSER DOM HARNESS
+- 300 internal popup-scroll cycles passed at a 1366 x 768 viewport.
+- Maximum popup scroll-position difference: 0 px.
+- Background page scroll remained unchanged.
+- Submit button became visible after scrolling inside the popup.
+- Month-cell text rendered on exactly three visual lines.
+- "Due:" and the date rendered on the same visual line.
+
+CHANGE CONTROL
+- 43 protected files were hash-verified unchanged from V4.5.41.
+- Functional code changes are limited to iars_gantt.py and the version display in app.py.
+
+PACKAGE TESTS
+- All Python modules compiled successfully.
+- ZIP integrity passed.
+- No __pycache__, .pyc, .pyo, or pytest cache files are included.
+
+LIVE LIMITATION
+- Final rendering in the live Streamlit Cloud deployment must still be confirmed after upload because the test environment does not have access to the user's live browser session or Supabase instance.

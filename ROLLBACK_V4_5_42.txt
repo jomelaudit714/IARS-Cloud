@@ -1,0 +1,4 @@
+IARS V4.5.42 ROLLBACK
+
+Rollback baseline: IARS V4.5.41.
+To roll back, upload the complete V4.5.41 ZIP contents to the GitHub repository root, replace V4.5.42 files, and reboot Streamlit.
