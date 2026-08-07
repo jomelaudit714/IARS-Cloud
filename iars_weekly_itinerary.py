@@ -497,6 +497,7 @@ def render_weekly_itinerary_page(
     admin: bool,
     ready: bool,
     config: WeeklyItineraryConfig = WeeklyItineraryConfig(),
+    focus_record_id: str = "",
 ) -> None:
     if not ready or client is None:
         _render_setup_notice()
@@ -601,12 +602,22 @@ def render_weekly_itinerary_page(
             ]
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             labels = [_record_label(record, index) for index, record in enumerate(my_records, start=1)]
+            focus_index = next(
+                (index for index, record in enumerate(my_records) if _clean(record.get("id")) == _clean(focus_record_id)),
+                None,
+            )
+            if focus_index is not None:
+                st.session_state["weekly_itinerary_my_select_v4_4_73"] = labels[focus_index]
             selected_label = st.selectbox(
                 "Select itinerary",
                 labels,
+                index=focus_index or 0,
                 key="weekly_itinerary_my_select_v4_4_73",
             )
             selected_record = my_records[labels.index(selected_label)]
+            if focus_index is not None:
+                st.success("Opened from Notifications — showing the exact Weekly Itinerary record.")
+                render_itinerary_preview_dialog(client, selected_record, config)
             if st.button(
                 "View Itinerary",
                 use_container_width=True,

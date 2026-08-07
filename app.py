@@ -123,10 +123,9 @@ except ImportError:
 from iars_notifications import (
     NotificationSetupStatus,
     create_announcement,
+    dismiss_notification,
     list_active_notification_users,
     list_user_notifications,
-    mark_all_notifications_read,
-    mark_notification_read,
     notification_setup_status,
     notify_new_policy,
     unread_notification_count,
@@ -1733,12 +1732,23 @@ def _render_app_header_v4503(
 
 
 def _notification_nav_label(page_name: str) -> str:
-    return {
+    page_name = str(page_name or "").strip()
+    explicit = {
         "Dashboard": "🏠 Dashboard",
         "Weekly Itinerary": "🗓️ Weekly Itinerary",
         "Policies & Memoranda": "📜 Policies & Memoranda",
         "Yearly Audit Gantt": "📅 Yearly Audit Gantt",
-    }.get(str(page_name or "").strip(), "🏠 Dashboard")
+    }
+    if page_name in explicit:
+        return explicit[page_name]
+    # Future modules automatically work when their notification action_page
+    # matches the visible page name in nav_options; no notification-center
+    # rewrite is needed just to add another destination.
+    for nav_label in globals().get("nav_options", []):
+        normalized = nav_label.split(" ", 1)[1] if " " in nav_label else nav_label
+        if normalized == page_name:
+            return nav_label
+    return page_name or "🏠 Dashboard"
 
 
 def _notification_time_label(value: object) -> str:
@@ -1754,7 +1764,7 @@ def _notification_time_label(value: object) -> str:
         return text[:24]
 
 
-NOTIFICATION_LIVE_POLL_SECONDS_V4549 = 3
+NOTIFICATION_LIVE_POLL_SECONDS_V4549 = 2
 
 
 def _notification_page_title_v4549(unread: int) -> str:
@@ -1772,7 +1782,7 @@ def _render_live_notification_status_v4549(
     user: dict,
     setup: NotificationSetupStatus,
 ) -> None:
-    """Refresh only the unread badge and browser-tab title every three seconds.
+    """Refresh only the unread badge and browser-tab title every two seconds.
 
     This fragment deliberately avoids a full-app rerun. It does not touch PDF
     Tagging, Gantt, extraction, navigation, or any other workspace state.
@@ -1803,6 +1813,89 @@ def _render_live_notification_status_v4549(
         )
 
 
+NOTIFICATION_DEEPLINK_KEY_V4551 = "iars_notification_deeplink_v4551"
+NOTIFICATION_MESSAGE_KEY_V4551 = "iars_notification_message_v4551"
+
+
+def _dismiss_notification_message_v4551() -> None:
+    st.session_state.pop(NOTIFICATION_MESSAGE_KEY_V4551, None)
+
+
+@st.dialog(
+    "Notification",
+    width="medium",
+    on_dismiss=_dismiss_notification_message_v4551,
+)
+def _render_notification_message_dialog_v4551() -> None:
+    payload = st.session_state.get(NOTIFICATION_MESSAGE_KEY_V4551)
+    if not isinstance(payload, dict):
+        return
+    st.markdown(f"### {html.escape(str(payload.get('title') or 'IARS Notification'))}")
+    category = str(payload.get("category") or "Information")
+    created_label = _notification_time_label(payload.get("created_at"))
+    st.caption(category + (f" · {created_label}" if created_label else ""))
+    message = str(payload.get("message") or "").strip()
+    if message:
+        st.write(message)
+    else:
+        st.info("No additional message was included.")
+    if st.button("Close", type="primary", width="stretch", key="notification_message_close_v4551"):
+        _dismiss_notification_message_v4551()
+        st.rerun()
+
+
+def _queue_notification_open_v4551(
+    client: object,
+    user: dict,
+    row: dict,
+) -> str:
+    """Delete from this user's inbox and prepare the correct destination.
+
+    The generic contract for current/future notification sources is:
+    ``action_page`` chooses the module and ``source_type`` + ``source_id`` identify
+    the exact record inside that module.  Unknown future source types still open
+    their declared module and leave the deep-link payload available for that
+    module to consume later.
+    """
+    notification_id = str(row.get("id") or "").strip()
+    if notification_id:
+        dismiss_notification(client, notification_id, user)
+
+    source_type = str(row.get("source_type") or "").strip()
+    source_id = str(row.get("source_id") or "").strip()
+    action_page = str(row.get("action_page") or "").strip()
+
+    if source_type == "announcement" or not action_page:
+        st.session_state[NOTIFICATION_MESSAGE_KEY_V4551] = {
+            "title": str(row.get("title") or "IARS Notification"),
+            "category": str(row.get("category") or "Information"),
+            "message": str(row.get("message") or ""),
+            "created_at": row.get("created_at"),
+        }
+        return "message"
+
+    st.session_state[NOTIFICATION_DEEPLINK_KEY_V4551] = {
+        "action_page": action_page,
+        "source_type": source_type,
+        "source_id": source_id,
+        "title": str(row.get("title") or "IARS Notification"),
+    }
+    _navigate_to_page(_notification_nav_label(action_page))
+    return "navigate"
+
+
+def _consume_notification_deeplink_v4551(source_type: str, action_page: str) -> str:
+    payload = st.session_state.get(NOTIFICATION_DEEPLINK_KEY_V4551)
+    if not isinstance(payload, dict):
+        return ""
+    if str(payload.get("source_type") or "") != source_type:
+        return ""
+    if str(payload.get("action_page") or "") != action_page:
+        return ""
+    st.session_state.pop(NOTIFICATION_DEEPLINK_KEY_V4551, None)
+    return str(payload.get("source_id") or "").strip()
+
+
 @st.fragment
 def _render_notification_center_v4549(
     client: object,
@@ -1810,7 +1903,7 @@ def _render_notification_center_v4549(
     auth_config: object,
     setup: NotificationSetupStatus,
 ) -> None:
-    """Render a lazy notification popover and refresh its data when opened."""
+    """Render notifications; one Open & Delete action replaces Open + Read."""
     popover = st.popover(
         "🔔",
         key="notification_center_trigger",
@@ -1830,22 +1923,7 @@ def _render_notification_center_v4549(
         notifications = list_user_notifications(client, user, limit=80)
         unread = unread_notification_count(notifications)
         st.session_state["iars_live_notification_unread_v4549"] = unread
-
-        header_left, header_right = st.columns([1.6, 1])
-        with header_left:
-            st.caption(f"{unread} unread · {len(notifications)} recent")
-        with header_right:
-            if st.button(
-                "Mark all read",
-                key="notification_mark_all_v4549",
-                width="stretch",
-                disabled=unread == 0,
-            ):
-                try:
-                    mark_all_notifications_read(client, notifications, user)
-                    st.rerun(scope="fragment")
-                except Exception as exc:
-                    st.error(f"Unable to mark notifications as read: {exc}")
+        st.caption(f"{unread} unread · {len(notifications)} notification(s)")
 
         if is_admin_user(user):
             with st.expander("Send Information / Announcement", expanded=False):
@@ -1907,38 +1985,28 @@ def _render_notification_center_v4549(
 
         for index, row in enumerate(notifications[:30]):
             notification_id = str(row.get("id") or "")
-            is_read = bool(row.get("is_read"))
             title = str(row.get("title") or "IARS Notification")
             category = str(row.get("category") or "Information")
-            message = str(row.get("message") or "")
+            message = str(row.get("message") or "").strip()
             created_label = _notification_time_label(row.get("created_at"))
             with st.container(border=True):
-                prefix = "✓" if is_read else "●"
-                st.markdown(f"**{prefix} {title}**")
+                st.markdown(f"**● {title}**")
                 st.caption(f"{category}" + (f" · {created_label}" if created_label else ""))
                 if message:
-                    st.write(message)
-                action_col, read_col = st.columns([1.15, 1])
-                action_page = str(row.get("action_page") or "").strip()
-                with action_col:
-                    if action_page and st.button(
-                        "Open",
-                        key=f"notification_open_{index}_{notification_id}",
-                        width="stretch",
-                    ):
-                        if not is_read:
-                            mark_notification_read(client, notification_id, user)
-                        _navigate_to_page(_notification_nav_label(action_page))
+                    preview = message if len(message) <= 150 else message[:147].rstrip() + "..."
+                    st.write(preview)
+                if st.button(
+                    "Open & Delete",
+                    key=f"notification_open_delete_{index}_{notification_id}",
+                    width="stretch",
+                    type="primary" if not bool(row.get("is_read")) else "secondary",
+                ):
+                    try:
+                        _queue_notification_open_v4551(client, user, row)
                         st.rerun()
-                with read_col:
-                    if st.button(
-                        "Mark as read" if not is_read else "Read",
-                        key=f"notification_read_{index}_{notification_id}",
-                        width="stretch",
-                        disabled=is_read,
-                    ):
-                        mark_notification_read(client, notification_id, user)
-                        st.rerun(scope="fragment")
+                    except Exception as exc:
+                        st.error(f"Unable to open notification: {exc}")
+
 
 def _navigate_to_page(nav_label: str) -> None:
     """Update navigation before rerender so the correct item is highlighted immediately."""
@@ -3772,6 +3840,7 @@ def render_policy_folder_library_page(
     ready: bool,
     current_user: dict,
     admin: bool,
+    focus_record_id: str = "",
 ) -> None:
     """Render Policies & Memoranda as company/group folders."""
     render_section_header(
@@ -3795,6 +3864,12 @@ def render_policy_folder_library_page(
 
     records_cache_key = "iars_doc_library_records_Policies_Memoranda_cache_v4_4_69"
     folders_cache_key = "iars_policy_company_folders_cache_v4_4_69"
+    if focus_record_id:
+        # A live policy notification can arrive while this session still has the
+        # 120-second folder cache. Force one fresh read so Open & Delete resolves
+        # the newly uploaded document immediately.
+        _invalidate_session_cache(records_cache_key)
+        _invalidate_session_cache(folders_cache_key)
 
     try:
         records = _session_ttl_cache(
@@ -3836,6 +3911,24 @@ def render_policy_folder_library_page(
             str(record.get("folder_id", "") or ""),
             "Unfiled / General",
         )
+
+    if focus_record_id:
+        target_record = next(
+            (record for record in records if str(record.get("id", "") or "") == str(focus_record_id)),
+            None,
+        )
+        if target_record:
+            try:
+                st.session_state[POLICY_ACTIVE_FOLDER_KEY] = (
+                    str(target_record.get("folder_id", "") or "") or "__unfiled__"
+                )
+                st.session_state[POLICY_PREVIEW_RECORD_ID_KEY] = str(target_record.get("id", "") or "")
+                st.session_state[POLICY_PREVIEW_BYTES_KEY] = download_document(
+                    client, config, str(target_record.get("storage_path", "") or "")
+                )
+                st.session_state[POLICY_DIALOG_MODE_KEY] = "preview"
+            except Exception as exc:
+                st.warning(f"The notified document could not be opened automatically: {exc}")
 
     success_message = st.session_state.pop("iars_policy_folder_success_v4_4_69", "")
     if success_message:
@@ -4169,6 +4262,7 @@ def render_document_library_page(
     ready: bool,
     current_user: dict,
     admin: bool,
+    focus_record_id: str = "",
 ) -> None:
     is_templates = collection == COLLECTION_TEMPLATES
     if not is_templates:
@@ -4178,6 +4272,7 @@ def render_document_library_page(
             ready=ready,
             current_user=current_user,
             admin=admin,
+            focus_record_id=focus_record_id,
         )
         return
 
@@ -5218,7 +5313,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.50",
+    version="4.5.51",
     page_title=page_key,
     unread_notifications=0,
 )
@@ -5233,6 +5328,8 @@ _render_notification_center_v4549(
     auth_config,
     _notification_setup_v4549,
 )
+if st.session_state.get(NOTIFICATION_MESSAGE_KEY_V4551):
+    _render_notification_message_dialog_v4551()
 render_profile_menu(auth_client, auth_user, auth_config)
 st.markdown('<div class="iars-workspace-lift-anchor-v4529" aria-hidden="true"></div>', unsafe_allow_html=True)
 
@@ -5330,11 +5427,15 @@ if page_key == "Invoice":
 
 
 if page_key == "Yearly Audit Gantt":
+    _gantt_notification_focus_v4551 = _consume_notification_deeplink_v4551(
+        "gantt_schedule", "Yearly Audit Gantt"
+    )
     render_yearly_gantt_page(
         auth_client,
         auth_user,
         admin=is_admin_user(auth_user),
         auditor_options=auditor_options,
+        focus_entry_id=_gantt_notification_focus_v4551,
     )
 
 
@@ -5347,6 +5448,9 @@ if page_key == "Gantt Master Data" and is_admin_user(auth_user):
 
 
 if page_key == "Weekly Itinerary":
+    _weekly_notification_focus_v4551 = _consume_notification_deeplink_v4551(
+        "weekly_itinerary", "Weekly Itinerary"
+    )
     render_section_header(
         "Weekly Itinerary",
         "Upload your weekly itinerary image for administrator approval and review your submission history.",
@@ -5358,6 +5462,7 @@ if page_key == "Weekly Itinerary":
         admin=is_admin_user(auth_user),
         ready=weekly_itinerary_ready,
         config=weekly_itinerary_config,
+        focus_record_id=_weekly_notification_focus_v4551,
     )
 
 
@@ -6043,6 +6148,9 @@ if page_key == "Audit Workpapers":
 
 
 if page_key == "Policies & Memoranda":
+    _policy_notification_focus_v4551 = _consume_notification_deeplink_v4551(
+        "document_library", "Policies & Memoranda"
+    )
     st.markdown('<div class="iars-policies-v4479-marker"></div>', unsafe_allow_html=True)
     render_document_library_page(
         collection=COLLECTION_POLICIES,
@@ -6051,6 +6159,7 @@ if page_key == "Policies & Memoranda":
         ready=document_library_ready,
         current_user=auth_user,
         admin=is_admin_user(auth_user),
+        focus_record_id=_policy_notification_focus_v4551,
     )
 
 

@@ -1,0 +1,6 @@
+ROLLBACK V4.5.51
+
+Application rollback baseline:
+IARS_V4_5_50_AUDITOR_CURRENT_MONTH_BACKLOG_GANTT_COMPLETE.zip
+
+The V4.5.51 SQL change is additive (deleted_at column on iars_notification_reads) and may safely remain if the app is rolled back to V4.5.50. No database rollback is required.

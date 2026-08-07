@@ -14,6 +14,11 @@ import re
 import pandas as pd
 import streamlit as st
 
+try:
+    from iars_notifications import notify_gantt_schedule
+except Exception:  # deployment-compatibility guard
+    notify_gantt_schedule = None
+
 
 GANTT_MASTER_TABLE = "iars_gantt_master"
 GANTT_SCHEDULE_TABLE = "iars_gantt_schedule"
@@ -289,6 +294,43 @@ def list_schedule_entries(
     return _response_rows(query.order("schedule_month").execute())
 
 
+def get_schedule_entry_by_id(client: Any, entry_id: str) -> dict[str, Any] | None:
+    entry_id = _clean_text(entry_id)
+    if not entry_id:
+        return None
+    try:
+        rows = _response_rows(
+            client.table(GANTT_SCHEDULE_TABLE)
+            .select("*")
+            .eq("id", entry_id)
+            .limit(1)
+            .execute()
+        )
+        if rows:
+            return rows[0]
+    except Exception:
+        pass
+    # Compatibility fallback when an insert response did not expose the UUID and
+    # the notification stored master_id:year:month as its source key.
+    parts = entry_id.rsplit(":", 2)
+    if len(parts) == 3:
+        master_id, year_text, month_text = parts
+        try:
+            rows = _response_rows(
+                client.table(GANTT_SCHEDULE_TABLE)
+                .select("*")
+                .eq("master_id", master_id)
+                .eq("schedule_year", int(year_text))
+                .eq("schedule_month", int(month_text))
+                .limit(1)
+                .execute()
+            )
+            return rows[0] if rows else None
+        except Exception:
+            pass
+    return None
+
+
 def list_holidays(client: Any, year: int | None = None, *, active_only: bool = True) -> list[dict[str, Any]]:
     query = client.table(GANTT_HOLIDAY_TABLE).select("*")
     if active_only:
@@ -510,7 +552,7 @@ def admin_save_schedule_entry(
     remarks: str,
     actor: str,
     holiday_rows: Iterable[dict[str, Any]] = (),
-) -> None:
+) -> dict[str, Any]:
     """Create or edit any monthly schedule from the Admin/Supervisor dialog.
 
     The Admin/Supervisor may select every visible workflow status.  Report
@@ -642,14 +684,36 @@ def admin_save_schedule_entry(
 
     entry_id = _clean_text((entry or {}).get("id"))
     if entry_id:
-        client.table(GANTT_SCHEDULE_TABLE).update(payload).eq("id", entry_id).execute()
-        return
+        response = client.table(GANTT_SCHEDULE_TABLE).update(payload).eq("id", entry_id).execute()
+        rows = _response_rows(response)
+        return {**(entry or {}), **payload, **(rows[0] if rows else {}), "id": entry_id}
 
     payload["created_by"] = actor
-    client.table(GANTT_SCHEDULE_TABLE).upsert(
+    response = client.table(GANTT_SCHEDULE_TABLE).upsert(
         payload,
         on_conflict="master_id,schedule_year,schedule_month",
     ).execute()
+    rows = _response_rows(response)
+    if rows:
+        return {**payload, **rows[0]}
+    # PostgREST normally returns the upserted row.  Resolve it explicitly when
+    # a deployment/client configuration returns an empty response so the
+    # notification deep link still gets the real schedule id.
+    try:
+        found = _response_rows(
+            client.table(GANTT_SCHEDULE_TABLE)
+            .select("*")
+            .eq("master_id", master_id)
+            .eq("schedule_year", int(schedule_year))
+            .eq("schedule_month", int(schedule_month))
+            .limit(1)
+            .execute()
+        )
+        if found:
+            return {**payload, **found[0]}
+    except Exception:
+        pass
+    return dict(payload)
 
 
 def mark_audit_in_progress(
@@ -1329,7 +1393,7 @@ def _render_month_editor(
         save_label = "Create Monthly Record" if entry is None else "Save Monthly Changes"
         if st.button(save_label, type="primary", key=f"gantt_admin_save_{unique}", use_container_width=True):
             try:
-                admin_save_schedule_entry(
+                saved_entry = admin_save_schedule_entry(
                     client,
                     entry=entry,
                     master_id=master_id,
@@ -1344,6 +1408,15 @@ def _render_month_editor(
                     actor=current_user_name,
                     holiday_rows=holiday_rows,
                 )
+                if callable(notify_gantt_schedule):
+                    notify_gantt_schedule(
+                        client,
+                        saved_entry,
+                        stage=selected_status,
+                        custodian=_clean_text(master.get("custodian")),
+                        audit_task=_clean_text(master.get("audit_task")),
+                        actor=current_user_name,
+                    )
                 st.success(f"Monthly record saved as {selected_status}.")
                 _finish_month_editor()
             except Exception as exc:
@@ -2493,6 +2566,7 @@ def render_yearly_gantt_page(
     *,
     admin: bool,
     auditor_options: list[str],
+    focus_entry_id: str = "",
 ) -> None:
     _render_gantt_css()
     current_name = _user_name(current_user)
@@ -2511,8 +2585,26 @@ def render_yearly_gantt_page(
         return
 
     default_year = _today_pht().year
+    focus_entry = get_schedule_entry_by_id(client, focus_entry_id) if focus_entry_id else None
+    focus_year = 0
+    focus_month = 0
+    focus_master_id = ""
+    if focus_entry:
+        try:
+            focus_year = int(focus_entry.get("schedule_year") or 0)
+            focus_month = int(focus_entry.get("schedule_month") or 0)
+        except (TypeError, ValueError):
+            focus_year = 0
+            focus_month = 0
+        focus_master_id = _clean_text(focus_entry.get("master_id"))
+
     years = list(range(default_year - 1, default_year + 4))
-    year = int(st.selectbox("Schedule Year", years, index=1, key="iars_gantt_year_v4520"))
+    if focus_year and focus_year not in years:
+        years = sorted(set(years + [focus_year]))
+    if focus_year:
+        st.session_state["iars_gantt_year_v4520"] = focus_year
+    default_index = years.index(default_year) if default_year in years else 0
+    year = int(st.selectbox("Schedule Year", years, index=default_index, key="iars_gantt_year_v4520"))
     try:
         masters, entries, holidays = _load_gantt_data(client, year)
     except Exception as exc:
@@ -2527,6 +2619,27 @@ def render_yearly_gantt_page(
         current_user_name=current_name,
         today=today,
     )
+    if focus_entry and focus_year == year:
+        assigned_to_current = _name_key(focus_entry.get("auditor_full_name")) == _name_key(current_name)
+        if admin or assigned_to_current:
+            if not any(_clean_text(row.get("id")) == _clean_text(focus_entry.get("id")) for row in visible_entries):
+                visible_entries = [*visible_entries, focus_entry]
+            focus_master = next(
+                (row for row in masters if _clean_text(row.get("id")) == focus_master_id),
+                None,
+            )
+            if focus_master and focus_month in MONTHS:
+                st.session_state["iars_gantt_filter_custodian_v4520"] = _clean_text(focus_master.get("custodian")) or "All"
+                if admin:
+                    st.session_state["iars_gantt_filter_auditor_v4520"] = "All"
+                st.session_state["iars_gantt_filter_status_v4520"] = "All"
+                st.session_state["iars_gantt_filter_month_v4520"] = month_name[focus_month]
+                st.session_state[GANTT_PENDING_EDIT_KEY] = {
+                    "master_id": focus_master_id,
+                    "year": int(year),
+                    "month": int(focus_month),
+                }
+
     stages = [report_stage_info(entry, holidays).stage for entry in visible_entries]
     metric_cols = st.columns(5)
     metric_cols[0].metric("Assigned" if not admin else "Scheduled", len(visible_entries))

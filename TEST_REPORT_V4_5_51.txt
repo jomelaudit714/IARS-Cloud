@@ -1,0 +1,29 @@
+IARS V4.5.51 TEST REPORT
+Baseline: IARS V4.5.50
+
+AUTOMATED REGRESSION
+- PYTHONPATH=. pytest -q
+- Result: 41 passed, 0 failed.
+- Includes locked extraction-rule tests, V4.5.50 auditor Gantt visibility tests, live-notification structure tests, notification targeting/deletion tests, and V4.5.51 deep-link tests.
+
+SOURCE / COMPILE VALIDATION
+- Python compileall: PASS across 18 Python files.
+- app.py version marker: v4.5.51 confirmed.
+
+NOTIFICATION DELIVERY SIMULATION
+- 5,000 mixed Weekly-Itinerary / Gantt targeted delivery simulations: PASS.
+  Each event was created, resolved to the intended signed-in user identity, counted unread, then removed by per-user Open/Delete state.
+- 2,000 broadcast per-user delete-isolation simulations: PASS.
+  Deleting a broadcast notification for User A did not remove it for User B.
+- Gantt exact UUID and master_id:year:month fallback deep-link resolution: PASS.
+
+CHANGE-CONTROL HASH CHECK
+- V4.5.50 baseline files: 71.
+- Existing files intentionally changed: 6 total (4 runtime + 2 notification tests).
+- Protected existing files checked: 65.
+- Protected-file hash mismatches: 0.
+- Removed baseline files: 0.
+- Core protected files confirmed byte-for-byte unchanged: iars_pdf_editor.py, iars_parser.py, iars_excel_conversion.py, iars_auth.py, iars_archive.py, iars_document_library.py, iars_theme.py, requirements.txt, packages.txt, data/Master_Data.xlsx.
+
+IMPORTANT TEST-SCOPE NOTE
+This environment does not have access to the user's live Streamlit Cloud session or live Supabase project, so the actual cross-browser/alt-tab cloud smoke test cannot be executed here. The implementation is verified through unit/regression tests and database-client simulations. After deployment, use the two-account smoke test in DEPLOY_README_V4_5_51.txt to confirm the live network path in the production environment.

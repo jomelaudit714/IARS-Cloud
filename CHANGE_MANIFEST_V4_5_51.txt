@@ -1,0 +1,45 @@
+IARS V4.5.51 — LIVE SOURCE NOTIFICATIONS + OPEN & DELETE DEEP LINKS
+Baseline: IARS V4.5.50 Auditor Current Month / Backlog Gantt
+
+USER-REQUESTED CHANGES
+1. Weekly Itinerary Approved / Returned-for-Revision notifications are created at the exact admin action and resolve the recipient through id/username/email/full-name aliases.
+2. Admin Gantt monthly create/save/update creates a targeted notification for the assigned auditor.
+3. Live notification polling remains isolated from the full app and is tightened from 3 seconds to 2 seconds.
+4. Per-notification controls are simplified to one button: Open & Delete.
+5. Open & Delete removes the notification only from the signed-in user's inbox; broadcast notifications remain available to other users.
+6. Announcement/Information: opens a full-message dialog and deletes the notification from that user's inbox.
+7. Weekly Itinerary: opens the Weekly Itinerary module and the exact itinerary record/image referenced by the notification.
+8. Yearly Audit Gantt: opens Yearly Audit Gantt and the exact schedule row/month editor referenced by the notification.
+9. Policies & Memoranda: opens the exact newly added document; the policy cache is refreshed only for this deep-link path.
+10. Future notification sources use the generic action_page + source_type + source_id contract; navigation resolves matching future nav labels automatically.
+
+EXISTING RUNTIME FILES INTENTIONALLY CHANGED
+- app.py
+- iars_notifications.py
+- iars_weekly_itinerary.py
+- iars_gantt.py
+
+TEST FILES INTENTIONALLY UPDATED/ADDED
+- tests/test_live_notifications_v4549.py
+- tests/test_notifications_v4548.py
+- tests/test_notification_actions_v4551.py (new)
+
+NEW DATABASE MIGRATION
+- SUPABASE_NOTIFICATIONS_V4_5_51.sql
+  Adds only iars_notification_reads.deleted_at and an index.
+  No existing data is deleted.
+
+PROTECTED / NO-TOUCH AREAS
+- iars_pdf_editor.py and PDF Tagging save/scroll behavior
+- iars_parser.py and locked extraction/classification/recommendation/frequency rules
+- iars_excel_conversion.py and Warehouse/LOGP/Invoice conversion rules
+- iars_auth.py and login/profile/avatar behavior
+- iars_archive.py
+- iars_document_library.py
+- iars_theme.py
+- Master Data and assets
+- requirements.txt, packages.txt, existing Streamlit config/dependencies
+- Existing Supabase migrations/tables except the additive V4.5.51 notification-state migration
+
+GANTT PROTECTION
+The V4.5.50 auditor current-month/backlog visibility rule remains unchanged. The Gantt edits in V4.5.51 are limited to notification creation and notification deep-link opening.

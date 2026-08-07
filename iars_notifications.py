@@ -51,17 +51,37 @@ def notification_user_name(user: Any) -> str:
     return _clean(user.get("full_name") or user.get("username") or "IARS User", 160)
 
 
+def notification_user_aliases(user: Any) -> set[str]:
+    """Identity aliases accepted by targeted notifications.
+
+    Gantt assignments are stored by full name while Weekly Itinerary normally
+    stores the account/user id.  Matching all stable aliases lets both sources
+    arrive live without requiring a page refresh or a lookup table join.
+    """
+    if not isinstance(user, dict):
+        return {"unknown-user"}
+    aliases: set[str] = set()
+    if str(user.get("role", "")).strip().casefold() == "admin":
+        aliases.add("admin")
+    for field in ("id", "user_id", "sub", "username", "email", "full_name"):
+        value = _clean(user.get(field), 180).casefold()
+        if value:
+            aliases.add(value)
+    aliases.add(notification_user_key(user).casefold())
+    return aliases
+
+
 def notification_setup_status(client: Any) -> NotificationSetupStatus:
     if client is None:
         return NotificationSetupStatus(False, "Supabase is not connected.")
     try:
         client.table(NOTIFICATION_TABLE).select("id").limit(1).execute()
-        client.table(NOTIFICATION_READ_TABLE).select("notification_id").limit(1).execute()
+        client.table(NOTIFICATION_READ_TABLE).select("notification_id,read_at,deleted_at").limit(1).execute()
         return NotificationSetupStatus(True, "")
     except Exception as exc:
         return NotificationSetupStatus(
             False,
-            "Notification tables are not ready. Run SUPABASE_NOTIFICATIONS_V4_5_48.sql in Supabase, then refresh IARS. "
+            "Notification state is not ready. Run SUPABASE_NOTIFICATIONS_V4_5_51.sql in Supabase, then refresh IARS. "
             f"Details: {exc}",
         )
 
@@ -174,8 +194,65 @@ def notify_itinerary_status(
         action_page="Weekly Itinerary",
         source_type="weekly_itinerary",
         source_id=record_id,
-        event_key=f"itinerary:{record_id}:rev{revision}:{normalized}",
+        event_key=(
+            f"itinerary:{record_id}:{_clean(record.get('updated_at'), 80)}:{normalized}"
+            if _clean(record.get("updated_at"), 80)
+            else f"itinerary:{record_id}:rev{revision}:{normalized}"
+        ),
         created_by=admin_name,
+    )
+
+
+def notify_gantt_schedule(
+    client: Any,
+    record: dict[str, Any],
+    *,
+    stage: str,
+    custodian: str,
+    audit_task: str,
+    actor: str,
+) -> dict[str, Any] | None:
+    """Notify the assigned auditor immediately when Admin saves a Gantt month.
+
+    ``source_id`` is the actual schedule-row id, which is also the deep-link key
+    used by Yearly Audit Gantt.  The recipient is the assigned auditor full name;
+    ``notification_user_aliases`` resolves that safely against the signed-in user.
+    """
+    recipient = _clean(record.get("auditor_full_name"), 180)
+    if not recipient:
+        return None
+    record_id = _clean(record.get("id"), 180)
+    master_id = _clean(record.get("master_id"), 180)
+    year = _clean(record.get("schedule_year"), 10)
+    month = _clean(record.get("schedule_month"), 2)
+    updated_at = _clean(record.get("updated_at"), 80)
+    clean_stage = _clean(stage, 80) or "Scheduled"
+    clean_custodian = _clean(custodian, 180) or "Custodian"
+    clean_task = _clean(audit_task, 240) or "Audit task"
+    month_label = month
+    try:
+        from calendar import month_name
+        month_label = month_name[int(month)] or month
+    except Exception:
+        pass
+    message = (
+        f"Your {month_label} {year} audit schedule for {clean_custodian} — "
+        f"{clean_task} was updated to {clean_stage} by {actor}."
+    )
+    source_id = record_id or f"{master_id}:{year}:{month}"
+    event_token = updated_at or datetime.now(timezone.utc).isoformat()
+    return create_notification(
+        client,
+        title="Audit Schedule Updated",
+        message=message,
+        category="Yearly Audit Gantt",
+        target_type="user",
+        recipient_key=recipient,
+        action_page="Yearly Audit Gantt",
+        source_type="gantt_schedule",
+        source_id=source_id,
+        event_key=f"gantt:{source_id}:{event_token}",
+        created_by=actor,
     )
 
 
@@ -244,29 +321,41 @@ def list_user_notifications(client: Any, user: dict[str, Any], *, limit: int = 8
         )
     except Exception:
         return []
+    aliases = notification_user_aliases(user)
     eligible = [
         row for row in rows
         if _clean(row.get("target_type"), 20).casefold() == "all"
         or (
             _clean(row.get("target_type"), 20).casefold() == "user"
-            and _clean(row.get("recipient_key"), 180).casefold() == user_key.casefold()
+            and _clean(row.get("recipient_key"), 180).casefold() in aliases
         )
-    ][: max(1, int(limit))]
+    ]
     ids = [_clean(row.get("id"), 180) for row in eligible if _clean(row.get("id"), 180)]
     read_ids: set[str] = set()
+    deleted_ids: set[str] = set()
     if ids:
         try:
             read_rows = _response_rows(
                 client.table(NOTIFICATION_READ_TABLE)
-                .select("notification_id")
+                .select("notification_id,read_at,deleted_at")
                 .eq("user_key", user_key)
                 .in_("notification_id", ids)
                 .execute()
             )
-            read_ids = {_clean(row.get("notification_id"), 180) for row in read_rows}
+            read_ids = {
+                _clean(row.get("notification_id"), 180)
+                for row in read_rows if row.get("read_at")
+            }
+            deleted_ids = {
+                _clean(row.get("notification_id"), 180)
+                for row in read_rows if row.get("deleted_at")
+            }
         except Exception:
             read_ids = set()
-    return [{**row, "is_read": _clean(row.get("id"), 180) in read_ids} for row in eligible]
+            deleted_ids = set()
+    visible = [row for row in eligible if _clean(row.get("id"), 180) not in deleted_ids]
+    visible = visible[: max(1, int(limit))]
+    return [{**row, "is_read": _clean(row.get("id"), 180) in read_ids} for row in visible]
 
 
 def unread_notification_count(notifications: Iterable[dict[str, Any]]) -> int:
@@ -281,6 +370,24 @@ def mark_notification_read(client: Any, notification_id: str, user: dict[str, An
         "notification_id": notification_id,
         "user_key": notification_user_key(user),
         "read_at": datetime.now(timezone.utc).isoformat(),
+    }
+    client.table(NOTIFICATION_READ_TABLE).upsert(
+        payload,
+        on_conflict="notification_id,user_key",
+    ).execute()
+
+
+def dismiss_notification(client: Any, notification_id: str, user: dict[str, Any]) -> None:
+    """Delete a notification from one user's inbox without deleting broadcasts globally."""
+    notification_id = _clean(notification_id, 180)
+    if not notification_id:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "notification_id": notification_id,
+        "user_key": notification_user_key(user),
+        "read_at": now,
+        "deleted_at": now,
     }
     client.table(NOTIFICATION_READ_TABLE).upsert(
         payload,
