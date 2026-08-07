@@ -1,0 +1,22 @@
+IARS V4.5.49 TEST REPORT
+
+AUTOMATED REGRESSION
+- 22/22 pytest tests passed, including all V4.5.48 notification tests and locked audit-extraction tests.
+
+LIVE NOTIFICATION LOGIC
+- 1,000 randomized live-poll simulations passed.
+- Verified the live polling function never calls st.rerun(), so it cannot trigger a full-app rerun.
+- Verified polling interval is 3 seconds.
+- Verified each poll reads current notifications, recalculates unread count, updates Session State, updates page title, and redraws only the fixed badge marker.
+- Verified notification popover uses its own fragment and refreshes data when opened.
+- Verified mark-read actions request fragment-only reruns.
+
+STATIC / PACKAGE
+- All Python modules compile successfully.
+- Protected existing-file hash comparison performed against V4.5.48.
+- Only app.py changed among baseline runtime files.
+- ZIP extraction and integrity test passed.
+- No __pycache__, .pyc, or pytest cache included.
+
+LIVE LIMITATION
+- Final Streamlit Cloud timing depends on the browser keeping the IARS session active. Streamlit fragments are designed to rerun at run_every intervals without user interaction while the session remains active.

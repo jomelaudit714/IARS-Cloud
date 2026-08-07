@@ -1,0 +1,5 @@
+IARS V4.5.49 ROLLBACK
+
+Rollback baseline: IARS V4.5.48.
+To roll back, restore the complete V4.5.48 deployment and reboot Streamlit.
+No database rollback is needed because V4.5.49 introduces no database changes.

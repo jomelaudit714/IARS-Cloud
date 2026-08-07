@@ -1411,6 +1411,40 @@ def _apply_v4503_root_cause_fixes() -> None:
             font-weight: 850 !important;
             box-sizing: border-box !important;
         }
+        /* V4.5.49: live unread badge is rendered by an isolated polling
+           fragment. It overlays the fixed bell without moving page layout. */
+        .iars-live-notification-badge-v4549 {
+            position: fixed !important;
+            top: 10px !important;
+            right: 223px !important;
+            z-index: 100028 !important;
+            min-width: 20px !important;
+            height: 20px !important;
+            padding: 0 5px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border-radius: 999px !important;
+            border: 2px solid #0A2C59 !important;
+            background: #D92D20 !important;
+            color: #fff !important;
+            font-size: .62rem !important;
+            line-height: 1 !important;
+            font-weight: 850 !important;
+            box-sizing: border-box !important;
+            pointer-events: none !important;
+        }
+        div[data-testid="stElementContainer"]:has(.iars-live-notification-badge-v4549),
+        div[data-testid="stElementContainer"]:has(.iars-live-notification-clear-v4549) {
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+        .iars-live-notification-clear-v4549 {
+            display: none !important;
+        }
         .st-key-notification_center_trigger {
             position: fixed !important;
             top: 17px !important;
@@ -1720,42 +1754,96 @@ def _notification_time_label(value: object) -> str:
         return text[:24]
 
 
-def _render_notification_center_v4548(
+NOTIFICATION_LIVE_POLL_SECONDS_V4549 = 3
+
+
+def _notification_page_title_v4549(unread: int) -> str:
+    unread = max(0, int(unread or 0))
+    return (
+        f"({unread}) Internal Audit Report System"
+        if unread
+        else "Internal Audit Report System | EDL GROUP OF COMPANIES"
+    )
+
+
+@st.fragment(run_every=NOTIFICATION_LIVE_POLL_SECONDS_V4549)
+def _render_live_notification_status_v4549(
+    client: object,
+    user: dict,
+    setup: NotificationSetupStatus,
+) -> None:
+    """Refresh only the unread badge and browser-tab title every three seconds.
+
+    This fragment deliberately avoids a full-app rerun. It does not touch PDF
+    Tagging, Gantt, extraction, navigation, or any other workspace state.
+    """
+    unread = 0
+    if setup.ready:
+        notifications = list_user_notifications(client, user, limit=80)
+        unread = unread_notification_count(notifications)
+
+    st.session_state["iars_live_notification_unread_v4549"] = unread
+    st.set_page_config(page_title=_notification_page_title_v4549(unread))
+
+    # The fixed header bell remains outside this fragment. Only this small badge
+    # is replaced on each polling cycle, so the rest of the page never reruns.
+    if unread:
+        badge_text = str(unread if unread < 100 else "99+")
+        st.markdown(
+            f'<span class="iars-live-notification-badge-v4549" '
+            f'aria-label="{unread} unread notifications">{html.escape(badge_text)}</span>',
+            unsafe_allow_html=True,
+        )
+    else:
+        # A zero-size marker makes the previous fragment badge disappear when
+        # Streamlit clears and redraws this fragment.
+        st.markdown(
+            '<span class="iars-live-notification-clear-v4549" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
+
+
+@st.fragment
+def _render_notification_center_v4549(
     client: object,
     user: dict,
     auth_config: object,
     setup: NotificationSetupStatus,
-    notifications: list[dict],
 ) -> None:
-    unread = unread_notification_count(notifications)
-    with st.popover(
+    """Render a lazy notification popover and refresh its data when opened."""
+    popover = st.popover(
         "🔔",
         key="notification_center_trigger",
         help=None,
         width="content",
-        on_change="ignore",
-    ):
+        on_change="rerun",
+    )
+    if not popover.open:
+        return
+
+    with popover:
         st.markdown("## Notifications")
         if not setup.ready:
             st.warning(setup.message)
             return
 
-        header_left, header_mid, header_right = st.columns([1.4, 1, 1])
+        notifications = list_user_notifications(client, user, limit=80)
+        unread = unread_notification_count(notifications)
+        st.session_state["iars_live_notification_unread_v4549"] = unread
+
+        header_left, header_right = st.columns([1.6, 1])
         with header_left:
             st.caption(f"{unread} unread · {len(notifications)} recent")
-        with header_mid:
-            if st.button("Refresh", key="notification_refresh_v4548", width="stretch"):
-                st.rerun()
         with header_right:
             if st.button(
                 "Mark all read",
-                key="notification_mark_all_v4548",
+                key="notification_mark_all_v4549",
                 width="stretch",
                 disabled=unread == 0,
             ):
                 try:
                     mark_all_notifications_read(client, notifications, user)
-                    st.rerun()
+                    st.rerun(scope="fragment")
                 except Exception as exc:
                     st.error(f"Unable to mark notifications as read: {exc}")
 
@@ -1764,7 +1852,7 @@ def _render_notification_center_v4548(
                 audience = st.selectbox(
                     "Audience",
                     ["All Users", "Specific User"],
-                    key="notification_announcement_audience_v4548",
+                    key="notification_announcement_audience_v4549",
                 )
                 recipient_key = ""
                 if audience == "Specific User":
@@ -1777,24 +1865,24 @@ def _render_notification_center_v4548(
                         selected_person = st.selectbox(
                             "Recipient",
                             labels,
-                            key="notification_announcement_recipient_v4548",
+                            key="notification_announcement_recipient_v4549",
                         )
                         recipient_key = people[labels.index(selected_person)]["key"]
                 announcement_title = st.text_input(
                     "Title",
                     placeholder="Example: Audit Department Advisory",
-                    key="notification_announcement_title_v4548",
+                    key="notification_announcement_title_v4549",
                 )
                 announcement_message = st.text_area(
                     "Information",
                     placeholder="Enter the information users need to know.",
-                    key="notification_announcement_message_v4548",
+                    key="notification_announcement_message_v4549",
                 )
                 if st.button(
                     "Send Notification",
                     type="primary",
                     width="stretch",
-                    key="notification_announcement_send_v4548",
+                    key="notification_announcement_send_v4549",
                 ):
                     if not announcement_title.strip() or not announcement_message.strip():
                         st.error("Enter both a title and the information to send.")
@@ -1808,7 +1896,7 @@ def _render_notification_center_v4548(
                         )
                         if created:
                             st.success("Notification sent.")
-                            st.rerun()
+                            st.rerun(scope="fragment")
                         else:
                             st.error("Unable to send the notification. Check the notification database setup.")
 
@@ -1850,7 +1938,7 @@ def _render_notification_center_v4548(
                         disabled=is_read,
                     ):
                         mark_notification_read(client, notification_id, user)
-                        st.rerun()
+                        st.rerun(scope="fragment")
 
 def _navigate_to_page(nav_label: str) -> None:
     """Update navigation before rerender so the correct item is highlighted immediately."""
@@ -2141,19 +2229,7 @@ elif _pending_page_transition:
 auth_config = read_auth_config(st.secrets)
 auth_client, auth_user = render_auth_gate(auth_config)
 
-_notification_setup_v4548 = notification_setup_status(auth_client)
-_notification_records_v4548 = (
-    list_user_notifications(auth_client, auth_user, limit=80)
-    if _notification_setup_v4548.ready
-    else []
-)
-_notification_unread_v4548 = unread_notification_count(_notification_records_v4548)
-_notification_page_title_v4548 = (
-    f"({_notification_unread_v4548}) Internal Audit Report System"
-    if _notification_unread_v4548
-    else "Internal Audit Report System | EDL GROUP OF COMPANIES"
-)
-st.set_page_config(page_title=_notification_page_title_v4548)
+_notification_setup_v4549 = notification_setup_status(auth_client)
 
 _sidebar_expand_token = st.session_state.pop(SIDEBAR_EXPAND_ONCE_KEY, "")
 if _sidebar_expand_token:
@@ -5142,16 +5218,20 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.48",
+    version="4.5.49",
     page_title=page_key,
-    unread_notifications=_notification_unread_v4548,
+    unread_notifications=0,
 )
-_render_notification_center_v4548(
+_render_live_notification_status_v4549(
+    auth_client,
+    auth_user,
+    _notification_setup_v4549,
+)
+_render_notification_center_v4549(
     auth_client,
     auth_user,
     auth_config,
-    _notification_setup_v4548,
-    _notification_records_v4548,
+    _notification_setup_v4549,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
 st.markdown('<div class="iars-workspace-lift-anchor-v4529" aria-hidden="true"></div>', unsafe_allow_html=True)
@@ -6155,7 +6235,7 @@ if page_key == "Settings":
     )
     render_metric_cards(
         [
-            {"label": "IARS Version", "value": "4.5.43", "note": "Gantt Click-Safe Smooth Grid", "icon": "⚙️", "accent": "#C78B12"},
+            {"label": "IARS Version", "value": "4.5.49", "note": "Live Notification Polling", "icon": "⚙️", "accent": "#C78B12"},
             {"label": "PDF Archive", "value": "Connected" if archive_ready else "Offline", "note": archive_config.bucket if archive_ready else "Check Secrets", "icon": "🗂️", "accent": "#178A52" if archive_ready else "#D92D20"},
             {"label": "Document Library", "value": "Connected" if document_library_ready else "Setup", "note": document_config.bucket, "icon": "📚", "accent": "#6941C6" if document_library_ready else "#D92D20"},
             {"label": "Session Timeout", "value": f"{auth_config.session_timeout_minutes} min", "note": "Automatic security timeout", "icon": "🔐", "accent": "#2563EB"},

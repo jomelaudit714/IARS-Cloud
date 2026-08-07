@@ -1,0 +1,39 @@
+IARS V4.5.49 CHANGE MANIFEST
+
+BASELINE
+- V4.5.48 complete notification-center deployment.
+
+REQUESTED CHANGE
+- Notification count and browser-tab count must update automatically without manual refresh, including while the user is on another browser tab.
+
+EXISTING FILES MODIFIED
+- app.py only
+  * Added isolated @st.fragment(run_every=3) live notification polling.
+  * Browser tab title now updates during the notification fragment rerun.
+  * Added fixed dynamic unread badge overlay on the existing notification bell.
+  * Notification popover now lazy-refreshes its own contents when opened.
+  * Mark-as-read and Mark-all-read use fragment-only reruns.
+  * Removed the manual Refresh button from the notification popover.
+  * Header and Settings version updated to 4.5.49.
+
+FILES ADDED
+- tests/test_live_notifications_v4549.py
+- DEPLOY_README_V4_5_49.txt
+- CHANGE_MANIFEST_V4_5_49.txt
+- TEST_REPORT_V4_5_49.txt
+- ROLLBACK_V4_5_49.txt
+
+PROTECTED EXISTING FILES
+- iars_notifications.py
+- iars_weekly_itinerary.py
+- iars_pdf_editor.py
+- iars_parser.py
+- iars_gantt.py
+- iars_auth.py
+- iars_archive.py
+- iars_excel_conversion.py
+- iars_document_library.py
+- iars_theme.py
+- requirements.txt / packages.txt
+- assets/*
+- all existing Supabase SQL files
