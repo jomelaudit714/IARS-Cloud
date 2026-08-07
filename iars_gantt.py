@@ -30,6 +30,8 @@ GANTT_EDIT_QUERY_PARAM = "iars_gantt_edit"  # legacy URL key; no longer used for
 GANTT_PENDING_EDIT_KEY = "iars_gantt_pending_edit_v4530"
 GANTT_GRID_KEY = "iars_gantt_native_grid_v4532"
 GANTT_GRID_MAP_SUFFIX = "__selection_map"
+GANTT_COMPONENT_KEY = "iars_gantt_pointer_grid_v4543"
+_GANTT_GRID_COMPONENT: Any | None = None
 
 HOLIDAY_COVERAGES = ["National", "Province of Rizal", "San Mateo, Rizal"]
 HOLIDAY_TYPES = [
@@ -895,18 +897,63 @@ def _stage_slug(stage: str) -> str:
 
 
 def _month_box_label(entry: dict[str, Any] | None, holiday_rows: list[dict[str, Any]]) -> tuple[str, str]:
+    """Return the exact user-facing month-cell lines for the current workflow stage.
+
+    V4.5.43 locks the date label to the date itself and no longer reuses one
+    generic Due line for every report stage.  The source dates are left intact;
+    only their display labels change.
+    """
     if not entry:
         return "＋ Schedule", "empty"
+
     info = report_stage_info(entry, holiday_rows)
     display_stage = _display_stage(info.stage)
     nickname = _clean_text(entry.get("auditor_nickname")) or nickname_for(entry.get("auditor_full_name"))
+    audit_date = _box_date(entry.get("accomplished_date"))
+
     if info.stage in {"Planned", "In Progress", "Overdue"}:
-        date_label = f"Due:\u00A0{_box_date(entry.get('planned_date'))}"
-    elif info.stage in {"Done", "Overdue: IRS", "For FRS", "Overdue: FRS"}:
-        date_label = f"Due:\u00A0{_box_date(info.deadline)}"
-    else:
-        date_label = f"Submitted: {_box_date(entry.get('final_report_submitted_at'))}"
-    return f"{display_stage}\n{nickname}\n{date_label}", _stage_slug(display_stage)
+        lines = [
+            display_stage,
+            nickname,
+            f"Due:\u00A0{_box_date(entry.get('planned_date'))}",
+        ]
+    elif info.stage == "Done":
+        lines = [
+            display_stage,
+            nickname,
+            f"Audit Date:\u00A0{audit_date}",
+        ]
+    elif info.stage == "Overdue: IRS":
+        lines = [
+            display_stage,
+            nickname,
+            f"Audit Date:\u00A0{audit_date}",
+            f"Due:\u00A0{_box_date(info.deadline)}",
+        ]
+    elif info.stage == "For FRS":
+        lines = [
+            display_stage,
+            nickname,
+            f"Audit Date:\u00A0{audit_date}",
+            f"Due:\u00A0{_box_date(info.deadline)}",
+        ]
+    elif info.stage == "Overdue: FRS":
+        # The approved V4.5.43 display specification intentionally keeps this
+        # overdue box to three lines: stage, audit date, and FRS due date.
+        lines = [
+            display_stage,
+            f"Audit Date:\u00A0{audit_date}",
+            f"Due:\u00A0{_box_date(info.deadline)}",
+        ]
+    else:  # FRS
+        lines = [
+            display_stage,
+            nickname,
+            f"Audit Date:\u00A0{audit_date}",
+            f"Submission Date:\u00A0{_box_date(entry.get('final_report_submitted_at'))}",
+        ]
+
+    return "\n".join(line for line in lines if line), _stage_slug(display_stage)
 
 
 def _query_params_as_dict() -> dict[str, Any]:
@@ -1669,6 +1716,331 @@ def _gantt_cell_palette(slug: str) -> str:
     return palettes.get(slug, palettes["empty"]) + layout
 
 
+
+def _gantt_component_click_callback() -> None:
+    """Open a month editor only for a real pointer click from the V2 grid.
+
+    Keyboard arrow navigation is intentionally kept entirely in the browser and
+    never calls Streamlit, so moving the focus rectangle cannot open a dialog or
+    rerun the page.
+    """
+    try:
+        state = st.session_state.get(GANTT_COMPONENT_KEY)
+        clicked = getattr(state, "cell_click", None)
+        if clicked is None and hasattr(state, "get"):
+            clicked = state.get("cell_click")
+        if not isinstance(clicked, dict):
+            return
+        master_id = _clean_text(clicked.get("master_id"))
+        year = int(clicked.get("year"))
+        month = int(clicked.get("month"))
+        if not master_id or month not in MONTHS:
+            return
+        st.session_state[GANTT_PENDING_EDIT_KEY] = {
+            "master_id": master_id,
+            "year": year,
+            "month": month,
+        }
+    except Exception:
+        return
+
+
+def _get_gantt_grid_component() -> Any | None:
+    """Return the V2 interactive Gantt grid when supported by Streamlit."""
+    global _GANTT_GRID_COMPONENT
+    if _GANTT_GRID_COMPONENT is not None:
+        return _GANTT_GRID_COMPONENT
+
+    components = getattr(st, "components", None)
+    v2 = getattr(components, "v2", None)
+    register = getattr(v2, "component", None)
+    if not callable(register):
+        return None
+
+    component_html = '<div class="iars-gantt-v2-root"></div>'
+    component_css = r'''
+.iars-gantt-v2-root{width:100%;font-family:var(--st-font);color:#23324A;}
+.iars-gantt-v2-shell{border:1px solid #D9E2EE;border-radius:14px;overflow:hidden;background:#FFF;box-shadow:0 1px 2px rgba(16,24,40,.04);}
+.iars-gantt-v2-scroll{width:100%;height:100%;overflow:auto;position:relative;overscroll-behavior:contain;scrollbar-gutter:stable;background:#FFF;outline:none;}
+.iars-gantt-v2-table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:1564px;min-width:1564px;margin:0;font-size:.72rem;color:#23324A;}
+.iars-gantt-v2-table th,.iars-gantt-v2-table td{box-sizing:border-box;width:92px;min-width:92px;max-width:92px;border-right:1px solid #D9E2EE;border-bottom:1px solid #D9E2EE;padding:.30rem .30rem;overflow:hidden;vertical-align:middle;background:#FFF;}
+.iars-gantt-v2-table thead th{position:sticky;top:0;z-index:100;height:54px;background:#EAF0F8;color:#0B2B55;text-align:center;font-weight:800;line-height:1.12;overflow-wrap:anywhere;box-shadow:0 2px 0 #C8D4E3;}
+.iars-gantt-v2-table tbody td{height:94px;line-height:1.15;}
+.iars-gantt-v2-table tbody tr:hover td{background:#F8FAFC;}
+.iars-gantt-v2-table th:nth-child(1),.iars-gantt-v2-table td:nth-child(1){position:sticky;left:0;}
+.iars-gantt-v2-table th:nth-child(2),.iars-gantt-v2-table td:nth-child(2){position:sticky;left:92px;}
+.iars-gantt-v2-table th:nth-child(3),.iars-gantt-v2-table td:nth-child(3){position:sticky;left:184px;}
+.iars-gantt-v2-table th:nth-child(4),.iars-gantt-v2-table td:nth-child(4){position:sticky;left:276px;}
+.iars-gantt-v2-table th:nth-child(5),.iars-gantt-v2-table td:nth-child(5){position:sticky;left:368px;box-shadow:2px 0 0 #C8D4E3;}
+.iars-gantt-v2-table thead th:nth-child(-n+5){z-index:130;background:#EAF0F8;}
+.iars-gantt-v2-table tbody td:nth-child(-n+5){z-index:40;background:#FFF;}
+.iars-gantt-v2-table tbody tr:hover td:nth-child(-n+5){background:#F8FAFC;}
+.iars-gantt-v2-cell{position:relative;text-align:center;outline:none;}
+.iars-gantt-v2-cell:focus-visible{box-shadow:inset 0 0 0 2px #D39A16,inset 0 0 0 4px rgba(211,154,22,.18);}
+.iars-gantt-v2-static{font-weight:600;font-size:.66rem;text-align:left;white-space:normal;overflow-wrap:anywhere;}
+.iars-gantt-v2-accountability{font-weight:800;font-size:.64rem;text-align:center;white-space:nowrap;}
+.iars-gantt-v2-frequency{font-weight:800;font-size:.68rem;text-align:center;white-space:nowrap;}
+.iars-gantt-v2-month-box{display:flex;min-height:80px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.10rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .16rem;text-align:center;font-weight:750;line-height:1.10;cursor:pointer;user-select:none;transition:border-color .06s ease,box-shadow .06s ease,filter .06s ease;}
+.iars-gantt-v2-month-box:hover{box-shadow:0 2px 7px rgba(15,23,42,.12);filter:brightness(.99);}
+.iars-gantt-v2-month-box:active{transform:scale(.988);box-shadow:none;}
+.iars-gantt-v2-month-line{display:block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:clip;}
+.iars-gantt-v2-month-line.stage{font-size:.67rem;font-weight:850;}
+.iars-gantt-v2-month-line.auditor{font-size:.66rem;font-weight:800;}
+.iars-gantt-v2-month-line.date{font-size:.60rem;font-weight:700;letter-spacing:-.01em;}
+.iars-gantt-v2-month-box.scheduled{background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
+.iars-gantt-v2-month-box.in-progress{background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
+.iars-gantt-v2-month-box.done{background:#DCFCE7;color:#14532D;border-color:#22C55E;}
+.iars-gantt-v2-month-box.for-frs{background:#ECFEFF;color:#164E63;border-color:#0891B2;}
+.iars-gantt-v2-month-box.frs{background:#D1FAE5;color:#064E3B;border-color:#047857;}
+.iars-gantt-v2-month-box.overdue,.iars-gantt-v2-month-box.overdue-irs,.iars-gantt-v2-month-box.overdue-frs{background:#B91C1C;color:#FFF;border-color:#991B1B;}
+.iars-gantt-v2-month-box.empty{background:#FAFBFC;color:#667085;border-color:#CBD5E1;}
+.iars-gantt-v2-month-na{display:flex;align-items:center;justify-content:center;min-height:80px;color:#98A2B3;font-weight:700;}
+'''
+    component_js = r'''
+export default function(component) {
+  const { data, setTriggerValue, parentElement } = component;
+  const root = parentElement.querySelector('.iars-gantt-v2-root');
+  if (!root) return;
+
+  const payload = data || {};
+  const storageKey = String(payload.storage_key || 'iars-gantt-grid-v4543');
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const columns = Array.isArray(payload.columns) ? payload.columns : [];
+  const viewportHeight = Number(payload.viewport_height || 560);
+
+  root.replaceChildren();
+  const shell = document.createElement('div');
+  shell.className = 'iars-gantt-v2-shell';
+  const scroll = document.createElement('div');
+  scroll.className = 'iars-gantt-v2-scroll';
+  scroll.style.height = `${viewportHeight}px`;
+  scroll.setAttribute('role', 'region');
+  scroll.setAttribute('aria-label', 'Yearly Audit Gantt');
+
+  const table = document.createElement('table');
+  table.className = 'iars-gantt-v2-table';
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  columns.forEach((column) => {
+    const th = document.createElement('th');
+    th.textContent = String(column.label || column.name || '');
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  const cellMatrix = [];
+
+  function focusCell(rowIndex, colIndex) {
+    if (rowIndex < 0 || rowIndex >= cellMatrix.length) return;
+    const row = cellMatrix[rowIndex] || [];
+    if (colIndex < 0 || colIndex >= row.length) return;
+    const target = row[colIndex];
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  rows.forEach((rowData, rowIndex) => {
+    const tr = document.createElement('tr');
+    const rowCells = [];
+    const cells = Array.isArray(rowData.cells) ? rowData.cells : [];
+    cells.forEach((cellData, colIndex) => {
+      const td = document.createElement('td');
+      td.className = 'iars-gantt-v2-cell';
+      td.tabIndex = 0;
+      td.dataset.row = String(rowIndex);
+      td.dataset.col = String(colIndex);
+      td.addEventListener('pointerdown', (event) => {
+        if (Number(event.button ?? 0) === 0) td.focus({ preventScroll: true });
+      });
+      td.addEventListener('keydown', (event) => {
+        let nextRow = rowIndex;
+        let nextCol = colIndex;
+        if (event.key === 'ArrowLeft') nextCol -= 1;
+        else if (event.key === 'ArrowRight') nextCol += 1;
+        else if (event.key === 'ArrowUp') nextRow -= 1;
+        else if (event.key === 'ArrowDown') nextRow += 1;
+        else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          return;
+        } else {
+          return;
+        }
+        event.preventDefault();
+        focusCell(nextRow, nextCol);
+      });
+
+      const kind = String(cellData.kind || 'static');
+      if (kind === 'month') {
+        if (cellData.visible === false) {
+          const na = document.createElement('div');
+          na.className = 'iars-gantt-v2-month-na';
+          na.textContent = '—';
+          td.appendChild(na);
+        } else {
+          const box = document.createElement('div');
+          box.className = `iars-gantt-v2-month-box ${String(cellData.slug || 'empty')}`;
+          box.setAttribute('role', 'presentation');
+          const lines = Array.isArray(cellData.lines) ? cellData.lines : [];
+          lines.forEach((value, lineIndex) => {
+            const span = document.createElement('span');
+            span.className = 'iars-gantt-v2-month-line ' + (lineIndex === 0 ? 'stage' : (lineIndex === 1 && lines.length >= 3 && !String(value).includes(':') ? 'auditor' : 'date'));
+            span.textContent = String(value || '');
+            box.appendChild(span);
+          });
+
+          let pointerArmed = false;
+          box.addEventListener('pointerdown', (event) => {
+            if (Number(event.button ?? 0) === 0) pointerArmed = true;
+          });
+          box.addEventListener('pointercancel', () => { pointerArmed = false; });
+          box.addEventListener('click', (event) => {
+            const genuinePointer = pointerArmed || Number(event.detail || 0) > 0;
+            pointerArmed = false;
+            td.focus({ preventScroll: true });
+            if (!genuinePointer || !cellData.clickable) return;
+            event.preventDefault();
+            setTriggerValue('cell_click', {
+              master_id: String(rowData.master_id || ''),
+              year: Number(cellData.year || 0),
+              month: Number(cellData.month || 0),
+            });
+          });
+          td.appendChild(box);
+        }
+      } else {
+        const div = document.createElement('div');
+        div.className = kind === 'accountability'
+          ? 'iars-gantt-v2-accountability'
+          : (kind === 'frequency' ? 'iars-gantt-v2-frequency' : 'iars-gantt-v2-static');
+        div.textContent = String(cellData.text || '');
+        td.appendChild(div);
+      }
+      rowCells.push(td);
+      tr.appendChild(td);
+    });
+    cellMatrix.push(rowCells);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  scroll.appendChild(table);
+  shell.appendChild(scroll);
+  root.appendChild(shell);
+
+  window.__iarsGanttScrollState = window.__iarsGanttScrollState || {};
+  let saved = window.__iarsGanttScrollState[storageKey] || null;
+  if (!saved) {
+    try {
+      saved = JSON.parse(window.sessionStorage.getItem(storageKey) || 'null');
+    } catch (_) {
+      saved = null;
+    }
+  }
+  if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+    requestAnimationFrame(() => {
+      scroll.scrollLeft = saved.left;
+      scroll.scrollTop = saved.top;
+    });
+  }
+  let saveFrame = null;
+  scroll.addEventListener('scroll', () => {
+    if (saveFrame) cancelAnimationFrame(saveFrame);
+    saveFrame = requestAnimationFrame(() => {
+      const position = { left: scroll.scrollLeft, top: scroll.scrollTop };
+      window.__iarsGanttScrollState[storageKey] = position;
+      try {
+        window.sessionStorage.setItem(storageKey, JSON.stringify(position));
+      } catch (_) {}
+    });
+  }, { passive: true });
+
+  return () => {
+    if (saveFrame) cancelAnimationFrame(saveFrame);
+  };
+}
+'''
+    try:
+        _GANTT_GRID_COMPONENT = register(
+            "iars_gantt_pointer_grid_v4543",
+            html=component_html,
+            css=component_css,
+            js=component_js,
+            isolate_styles=True,
+        )
+    except Exception:
+        return None
+    return _GANTT_GRID_COMPONENT
+
+
+def _build_gantt_component_payload(
+    filtered: list[dict[str, Any]],
+    entries: list[dict[str, Any]],
+    holiday_rows: list[dict[str, Any]],
+    *,
+    year: int,
+    admin: bool,
+    current_user_name: str,
+    done_counts: dict[str, int],
+) -> dict[str, Any]:
+    """Build structured data for the click-only Gantt component."""
+    lookup = _entry_lookup(entries)
+    current_key = _name_key(current_user_name)
+    columns = [
+        {"name": "Company", "label": "Company"},
+        {"name": "Custodian", "label": "Custodian"},
+        {"name": "Audit Task", "label": "Audit Task"},
+        {"name": "Accountability", "label": "Accountability"},
+        {"name": "Frequency", "label": "Frequency"},
+        *[{"name": month_name[month], "label": month_name[month]} for month in MONTHS],
+    ]
+    payload_rows: list[dict[str, Any]] = []
+    for master in filtered:
+        master_id = str(master.get("id") or "")
+        cells: list[dict[str, Any]] = [
+            {"kind": "static", "text": _clean_text(master.get("company_department"))},
+            {"kind": "static", "text": _clean_text(master.get("custodian"))},
+            {"kind": "static", "text": _clean_text(master.get("audit_task"))},
+            {"kind": "accountability", "text": _format_accountability(master.get("accountability"))},
+            {"kind": "frequency", "text": f"{done_counts.get(master_id, 0)}×"},
+        ]
+        for month in MONTHS:
+            entry = lookup.get((master_id, month))
+            assigned_to_current = bool(entry) and _name_key(entry.get("auditor_full_name")) == current_key
+            visible_entry = entry if (admin or assigned_to_current) else None
+            clickable = bool(admin or assigned_to_current)
+            if visible_entry is None and not clickable:
+                cells.append({
+                    "kind": "month",
+                    "visible": False,
+                    "clickable": False,
+                    "year": int(year),
+                    "month": int(month),
+                    "lines": [],
+                    "slug": "na",
+                })
+                continue
+            label, slug = _month_box_label(visible_entry, holiday_rows)
+            cells.append({
+                "kind": "month",
+                "visible": True,
+                "clickable": clickable,
+                "year": int(year),
+                "month": int(month),
+                "lines": label.splitlines(),
+                "slug": slug,
+            })
+        payload_rows.append({"master_id": master_id, "cells": cells})
+
+    return {
+        "columns": columns,
+        "rows": payload_rows,
+        "viewport_height": min(560, max(240, 58 + len(filtered) * 94)),
+        "storage_key": f"iars-gantt-v4543-{int(year)}",
+    }
+
 def _build_native_gantt_dataframe(
     filtered: list[dict[str, Any]],
     entries: list[dict[str, Any]],
@@ -1805,33 +2177,64 @@ def _render_matrix(
 
     lookup = _entry_lookup(entries)
     done_counts = done_frequency_by_master(masters, entries)
-    data, style_matrix, selection_map = _build_native_gantt_dataframe(
-        filtered,
-        entries,
-        holiday_rows,
-        year=year,
-        admin=admin,
-        current_user_name=current_user_name,
-        done_counts=done_counts,
-    )
-    st.session_state[_grid_map_key(GANTT_GRID_KEY)] = selection_map
 
-    def _apply_grid_styles(_: pd.DataFrame) -> pd.DataFrame:
-        return style_matrix
+    # V4.5.43: use a Components V2 grid so keyboard navigation remains a
+    # browser-only action.  A Python rerun/editor request is emitted only by a
+    # genuine pointer click on a colored month box.
+    component = _get_gantt_grid_component()
+    component_rendered = False
+    if component is not None:
+        payload = _build_gantt_component_payload(
+            filtered,
+            entries,
+            holiday_rows,
+            year=year,
+            admin=admin,
+            current_user_name=current_user_name,
+            done_counts=done_counts,
+        )
+        try:
+            component(
+                data=payload,
+                key=GANTT_COMPONENT_KEY,
+                on_cell_click_change=_gantt_component_click_callback,
+                width="stretch",
+                height=int(payload["viewport_height"]) + 2,
+            )
+            component_rendered = True
+        except Exception:
+            component_rendered = False
 
-    styled = data.style.apply(_apply_grid_styles, axis=None)
-    table_height = min(650, max(240, 58 + len(filtered) * 78))
-    st.dataframe(
-        styled,
-        width="stretch",
-        height=table_height,
-        hide_index=True,
-        column_config=_native_gantt_column_config(),
-        key=GANTT_GRID_KEY,
-        on_select=_grid_selection_callback,
-        selection_mode="single-cell",
-        row_height=72,
-    )
+    if not component_rendered:
+        # Compatibility fallback for test/older Streamlit environments.  The
+        # production requirements pin Streamlit 1.58, where V2 is available.
+        data, style_matrix, selection_map = _build_native_gantt_dataframe(
+            filtered,
+            entries,
+            holiday_rows,
+            year=year,
+            admin=admin,
+            current_user_name=current_user_name,
+            done_counts=done_counts,
+        )
+        st.session_state[_grid_map_key(GANTT_GRID_KEY)] = selection_map
+
+        def _apply_grid_styles(_: pd.DataFrame) -> pd.DataFrame:
+            return style_matrix
+
+        styled = data.style.apply(_apply_grid_styles, axis=None)
+        table_height = min(650, max(240, 58 + len(filtered) * 94))
+        st.dataframe(
+            styled,
+            width="stretch",
+            height=table_height,
+            hide_index=True,
+            column_config=_native_gantt_column_config(),
+            key=GANTT_GRID_KEY,
+            on_select=_grid_selection_callback,
+            selection_mode="single-cell",
+            row_height=88,
+        )
 
     selected = _pending_gantt_edit()
     if selected:
@@ -1862,8 +2265,8 @@ def _render_matrix(
                 st.warning("You can open only the monthly audit schedules assigned to your account.")
 
     st.caption(
-        f"Showing all {len(filtered)} matching custodian record(s). Click one January–December cell to edit it. "
-        "The native grid keeps the header visible during vertical scrolling and pins Company through Frequency during horizontal scrolling."
+        f"Showing all {len(filtered)} matching custodian record(s). Click the colored January–December schedule box to edit it. "
+        "Arrow keys only move the focus inside the Gantt and do not open the schedule editor."
     )
     return filtered
 

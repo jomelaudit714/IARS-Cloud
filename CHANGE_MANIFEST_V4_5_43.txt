@@ -1,0 +1,43 @@
+IARS V4.5.43 CHANGE MANIFEST
+
+BASE VERSION
+- V4.5.42 complete deployment.
+
+REQUESTED CHANGES
+- Keep the existing Gantt month-editor internal vertical scrollbar.
+- Lock each Gantt status box to its approved date labels and line order.
+- Allow focus/navigation across Gantt cells with arrow keys without opening the schedule editor.
+- Open the schedule popup only after an actual pointer click on a colored month schedule box.
+- Improve Gantt smoothness by eliminating Streamlit reruns caused only by keyboard cell navigation.
+
+FILES MODIFIED
+- iars_gantt.py
+  * Adds the exact workflow-specific month-cell labels for Scheduled, In Progress, Overdue, Done, Overdue: IRS, For FRS, Overdue: FRS, and FRS.
+  * Preserves the V4.5.42 internally scrollable month-editor dialog.
+  * Uses a Streamlit Components V2 Gantt grid under Streamlit 1.58.
+  * Arrow-key navigation is handled entirely in browser JavaScript and does not call Python or rerun Streamlit.
+  * Enter/Space on a focused cell do not open the schedule editor.
+  * Only a genuine pointer click on a month schedule box emits the cell_click trigger.
+  * Grid horizontal/vertical scroll position is remembered across component rerenders.
+  * Keeps the native Streamlit dataframe as a compatibility fallback only.
+- app.py
+  * Version display changed from 4.5.42 to 4.5.43.
+
+FILES ADDED
+- tests/test_gantt_click_safe_stage_formats_v4543.py
+- DEPLOY_README_V4_5_43.txt
+- CHANGE_MANIFEST_V4_5_43.txt
+- TEST_REPORT_V4_5_43.txt
+- ROLLBACK_V4_5_43.txt
+
+PROTECTED / NOT FUNCTIONALLY MODIFIED
+- PDF Tagging
+- Audit Extraction and locked classification/recommendation rules
+- Authentication and Profile
+- Archive
+- Excel Conversion
+- Weekly Itinerary
+- Document Library
+- Requirements and packages
+- Assets and templates
+- Supabase SQL files and database schema

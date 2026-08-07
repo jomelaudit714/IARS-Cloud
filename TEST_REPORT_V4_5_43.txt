@@ -1,0 +1,34 @@
+IARS V4.5.43 TEST REPORT
+
+SOURCE REQUIREMENTS VERIFIED
+- Scheduled / In Progress / Overdue: Status, Auditor, Due date.
+- Done: Status, Auditor, Audit Date.
+- Overdue: IRS: Status, Auditor, Audit Date, Due date.
+- For FRS: Status, Auditor, Audit Date, Due date.
+- Overdue: FRS: Status, Audit Date, Due date, matching the supplied specification.
+- FRS: Status, Auditor, Audit Date, Submission Date.
+- The month-editor popup retains its own internal vertical scrollbar.
+- Arrow keys move focus only; they do not open the schedule editor.
+- The schedule editor opens only from a real pointer click on a colored month box.
+
+AUTOMATED PYTHON REGRESSION
+- 27 pytest tests passed.
+- Includes locked audit-extraction, Gantt non-null reference, popup-scroll, legacy month-format, and new V4.5.43 Gantt tests.
+- 1,000 Python callback simulations passed for valid month click payloads.
+
+BROWSER DOM STRESS HARNESS
+- 1,200 arrow-key navigation moves passed with 0 schedule triggers.
+- 400 Enter/Space activation attempts on focused month cells passed with 0 schedule triggers.
+- 400 actual pointer clicks produced exactly 400 cell_click triggers.
+- 120 repeated grid rerender/scroll-restoration cycles passed with exact scroll-position retention.
+- Requested status/date line structures rendered exactly in the browser harness.
+- Sticky header behavior remained present in computed browser styles.
+
+PACKAGE / STATIC TESTS
+- All Python modules compile successfully.
+- Components V2 JavaScript passes Node syntax checking.
+- Final ZIP integrity is verified after packaging.
+- Cache/compiled files are excluded from the deployment ZIP.
+
+LIVE LIMITATION
+- Final behavior in the user's live Streamlit Cloud session and live Supabase data can only be confirmed after deployment. Local tests validate the code path and browser interaction model, not the user's deployed environment.

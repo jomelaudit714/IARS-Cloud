@@ -1,0 +1,5 @@
+IARS V4.5.43 ROLLBACK
+
+Rollback baseline: IARS V4.5.42.
+To roll back, upload the complete V4.5.42 ZIP contents to the GitHub repository root, replace V4.5.43 files, and reboot Streamlit.
+No database rollback is required because V4.5.43 includes no Supabase schema migration.
