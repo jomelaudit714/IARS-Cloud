@@ -1,0 +1,41 @@
+IARS V4.5.48 TEST REPORT
+
+BASELINE
+- Exact V4.5.47 GitHub deployment ZIP supplied by the user.
+
+TARGET NOTIFICATION TESTS
+- 15/15 pytest tests passed (notification suite + locked Audit Extraction rules).
+- 500 repeated Weekly Itinerary status workflow simulations passed:
+  * Approved -> correct auditor notification.
+  * Returned for Revision -> correct auditor notification with remarks.
+  * Primary itinerary status update remains successful even when notification tables are unavailable.
+- 1,000 notification identity/unread-count simulations passed.
+- Policy / Memorandum notification hook statically verified after successful upload.
+- Browser-tab unread title expression statically verified: (N) Internal Audit Report System.
+- Admin all-user / specific-user announcement behavior tested.
+- Mark as Read / Mark All as Read tested.
+- Duplicate itinerary event protection tested.
+
+REGRESSION / CHANGE CONTROL
+- Baseline contained 401 files.
+- 399 pre-existing files are byte-for-byte unchanged.
+- Only 2 pre-existing files changed: app.py and iars_weekly_itinerary.py.
+- No baseline files were removed.
+- iars_pdf_editor.py unchanged.
+- iars_parser.py unchanged; 11/11 locked Audit Extraction tests passed.
+- iars_gantt.py unchanged.
+- iars_auth.py unchanged.
+- iars_archive.py unchanged.
+- iars_excel_conversion.py unchanged.
+- iars_document_library.py unchanged.
+- iars_theme.py unchanged.
+- requirements.txt and packages.txt unchanged.
+- All existing assets and existing SQL files unchanged.
+
+PACKAGE CONTROLS
+- All Python source files compiled successfully.
+- ZIP extraction/integrity verified.
+- No __pycache__, .pyc, or pytest-cache files included in the clean deployment ZIP.
+
+LIVE LIMITATION
+- Final notification UI positioning and live Supabase behavior must be confirmed after running the SQL migration and deploying to Streamlit Cloud.

@@ -12,6 +12,8 @@ from uuid import uuid4
 import pandas as pd
 import streamlit as st
 
+from iars_notifications import notify_itinerary_status
+
 
 DEFAULT_BUCKET = "iars-weekly-itineraries"
 DEFAULT_TABLE = "weekly_itineraries"
@@ -341,7 +343,15 @@ def update_itinerary_status(
     }
     response = client.table(config.table).update(payload).eq("id", record_id).execute()
     rows = _response_data(response)
-    return dict(rows[0] if rows else {**record, **payload})
+    updated_record = {**record, **(dict(rows[0]) if rows else {}), **payload}
+    notify_itinerary_status(
+        client,
+        updated_record,
+        status=normalized_status,
+        admin_name=current_user_name(admin_user),
+        remarks=remarks,
+    )
+    return updated_record
 
 
 def _status_label(status: Any) -> str:

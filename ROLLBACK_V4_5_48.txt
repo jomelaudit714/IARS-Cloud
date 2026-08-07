@@ -1,0 +1,6 @@
+IARS V4.5.48 ROLLBACK
+
+Application rollback baseline: V4.5.47 exact GitHub deployment ZIP supplied by the user.
+To roll back application code, restore V4.5.47 app.py and iars_weekly_itinerary.py and remove iars_notifications.py.
+
+The two notification tables are additive and can safely remain in Supabase after an application rollback. They do not alter existing IARS tables.

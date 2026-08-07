@@ -1,0 +1,38 @@
+IARS V4.5.48 CHANGE MANIFEST
+
+BASE VERSION
+- V4.5.47 exact GitHub deployment ZIP supplied by the user.
+
+ALLOWED EXISTING FILE CHANGES
+- app.py
+  * Header notification bell and unread badge.
+  * Browser-tab unread count.
+  * Notification center UI, read actions, admin announcement composer.
+  * New Policy / Memorandum notification hook.
+  * Version 4.5.48.
+- iars_weekly_itinerary.py
+  * Sends a non-blocking notification after Approved or Returned for Revision status is successfully saved.
+
+NEW FILES
+- iars_notifications.py
+- SUPABASE_NOTIFICATIONS_V4_5_48.sql
+- tests/test_notifications_v4548.py
+- DEPLOY_README_V4_5_48.txt
+- CHANGE_MANIFEST_V4_5_48.txt
+- TEST_REPORT_V4_5_48.txt
+- ROLLBACK_V4_5_48.txt
+
+PROTECTED / NOT MODIFIED
+- iars_pdf_editor.py
+- iars_parser.py
+- iars_gantt.py
+- iars_auth.py
+- iars_archive.py
+- iars_excel_conversion.py
+- iars_document_library.py
+- iars_theme.py
+- requirements.txt
+- packages.txt
+- all existing assets
+- all existing SQL files
+- data/Master_Data.xlsx

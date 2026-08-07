@@ -120,6 +120,18 @@ try:
 except ImportError:
     from iars_gantt import render_gantt_dashboard_alert as render_gantt_dashboard_panel
 
+from iars_notifications import (
+    NotificationSetupStatus,
+    create_announcement,
+    list_active_notification_users,
+    list_user_notifications,
+    mark_all_notifications_read,
+    mark_notification_read,
+    notification_setup_status,
+    notify_new_policy,
+    unread_notification_count,
+)
+
 
 SIDEBAR_EXPAND_ONCE_KEY = "iars_force_sidebar_expand_once"
 
@@ -1358,6 +1370,98 @@ def _apply_v4503_root_cause_fixes() -> None:
             margin-top: 0 !important;
         }
 
+        /* V4.5.48 Notification Center. The visible bell is part of the fixed
+           header while the transparent Streamlit popover trigger overlays it. */
+        .edl-notification-chip {
+            position: relative !important;
+            z-index: 2 !important;
+            width: 46px !important;
+            height: 46px !important;
+            min-width: 46px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border: 1px solid rgba(228,174,47,.65) !important;
+            border-radius: 12px !important;
+            background: rgba(255,255,255,.10) !important;
+            color: #fff !important;
+            font-size: 1.16rem !important;
+            pointer-events: none !important;
+        }
+        .edl-notification-chip.has-unread {
+            background: rgba(255,255,255,.15) !important;
+            border-color: rgba(246,212,107,.95) !important;
+        }
+        .edl-notification-badge {
+            position: absolute !important;
+            top: -7px !important;
+            right: -7px !important;
+            min-width: 20px !important;
+            height: 20px !important;
+            padding: 0 5px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border-radius: 999px !important;
+            border: 2px solid #0A2C59 !important;
+            background: #D92D20 !important;
+            color: white !important;
+            font-size: .62rem !important;
+            line-height: 1 !important;
+            font-weight: 850 !important;
+            box-sizing: border-box !important;
+        }
+        .st-key-notification_center_trigger {
+            position: fixed !important;
+            top: 17px !important;
+            right: 230px !important;
+            width: 46px !important;
+            height: 46px !important;
+            min-width: 46px !important;
+            min-height: 46px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            z-index: 100025 !important;
+            pointer-events: auto !important;
+        }
+        .st-key-notification_center_trigger [data-testid="stPopover"],
+        .st-key-notification_center_trigger [data-testid="stPopover"] > div {
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .st-key-notification_center_trigger [data-testid="stPopover"] > button,
+        .st-key-notification_center_trigger button {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            border-radius: 12px !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            color: transparent !important;
+            font-size: 0 !important;
+            opacity: 0 !important;
+            cursor: pointer !important;
+            pointer-events: auto !important;
+        }
+        .st-key-notification_center_trigger button:hover,
+        .st-key-notification_center_trigger button:focus,
+        .st-key-notification_center_trigger button:active {
+            background: transparent !important;
+            box-shadow: none !important;
+            transform: none !important;
+            outline: none !important;
+        }
+
         /* The invisible Streamlit popover button exactly covers the visual
            user card. It stays clickable on Dashboard and every other module. */
         .st-key-profile_menu_trigger {
@@ -1469,6 +1573,19 @@ def _apply_v4503_root_cause_fixes() -> None:
                 right: 16px !important;
                 top: 2px !important;
             }
+            .st-key-notification_center_trigger {
+                right: 204px !important;
+                top: 16px !important;
+                width: 42px !important;
+                min-width: 42px !important;
+                height: 42px !important;
+                min-height: 42px !important;
+            }
+            .edl-notification-chip {
+                width: 42px !important;
+                min-width: 42px !important;
+                height: 42px !important;
+            }
             .st-key-profile_menu_trigger {
                 right: 20px !important;
                 top: 10px !important;
@@ -1524,6 +1641,7 @@ def _render_app_header_v4503(
     *,
     version: str,
     page_title: str = "Dashboard",
+    unread_notifications: int = 0,
 ) -> None:
     """Render the fixed EDL header using Philippine Standard Time."""
     name_raw = str(user.get("full_name") or user.get("username") or "IARS User")
@@ -1558,17 +1676,181 @@ def _render_app_header_v4503(
     else:
         avatar_html = f'<div class="edl-user-avatar">{html.escape(initials)}</div>'
 
+    unread_value = max(0, int(unread_notifications or 0))
+    badge_html = (
+        f'<span class="edl-notification-badge">{html.escape(str(min(unread_value, 99)) if unread_value < 100 else "99+")}</span>'
+        if unread_value
+        else ""
+    )
+    bell_class = "edl-notification-chip has-unread" if unread_value else "edl-notification-chip"
+
     st.markdown(
         '<div id="iars-fixed-header-v4503" class="edl-topbar iars-fixed-header-v4503">'
         f'<div class="edl-topbar-title"><h1>{html.escape(page_title)}</h1><p>{html.escape(subtitle)}</p></div>'
         '<div class="edl-topbar-spacer"></div>'
         f'<div class="edl-topbar-date">{html.escape(date_text)} · v{html.escape(version)}</div>'
+        f'<div class="{bell_class}" aria-label="Notifications" title="Notifications">🔔{badge_html}</div>'
         f'<div class="edl-user-chip" aria-label="Edit Profile" title="Edit Profile">{avatar_html}'
         f'<div><strong>{name}</strong><span>{role}</span></div><div class="edl-user-chevron">⌄</div></div></div>'
         '<div class="iars-fixed-header-spacer-v4503" aria-hidden="true"></div>',
         unsafe_allow_html=True,
     )
 
+
+
+def _notification_nav_label(page_name: str) -> str:
+    return {
+        "Dashboard": "🏠 Dashboard",
+        "Weekly Itinerary": "🗓️ Weekly Itinerary",
+        "Policies & Memoranda": "📜 Policies & Memoranda",
+        "Yearly Audit Gantt": "📅 Yearly Audit Gantt",
+    }.get(str(page_name or "").strip(), "🏠 Dashboard")
+
+
+def _notification_time_label(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(PHILIPPINE_TIMEZONE).strftime("%b %d, %Y · %I:%M %p")
+    except Exception:
+        return text[:24]
+
+
+def _render_notification_center_v4548(
+    client: object,
+    user: dict,
+    auth_config: object,
+    setup: NotificationSetupStatus,
+    notifications: list[dict],
+) -> None:
+    unread = unread_notification_count(notifications)
+    with st.popover(
+        "🔔",
+        key="notification_center_trigger",
+        help=None,
+        width="content",
+        on_change="ignore",
+    ):
+        st.markdown("## Notifications")
+        if not setup.ready:
+            st.warning(setup.message)
+            return
+
+        header_left, header_mid, header_right = st.columns([1.4, 1, 1])
+        with header_left:
+            st.caption(f"{unread} unread · {len(notifications)} recent")
+        with header_mid:
+            if st.button("Refresh", key="notification_refresh_v4548", width="stretch"):
+                st.rerun()
+        with header_right:
+            if st.button(
+                "Mark all read",
+                key="notification_mark_all_v4548",
+                width="stretch",
+                disabled=unread == 0,
+            ):
+                try:
+                    mark_all_notifications_read(client, notifications, user)
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Unable to mark notifications as read: {exc}")
+
+        if is_admin_user(user):
+            with st.expander("Send Information / Announcement", expanded=False):
+                audience = st.selectbox(
+                    "Audience",
+                    ["All Users", "Specific User"],
+                    key="notification_announcement_audience_v4548",
+                )
+                recipient_key = ""
+                if audience == "Specific User":
+                    people = list_active_notification_users(client, auth_config.users_table, user)
+                    labels = [
+                        f"{row['name']} (@{row['username']})" if row.get("username") else row["name"]
+                        for row in people
+                    ]
+                    if labels:
+                        selected_person = st.selectbox(
+                            "Recipient",
+                            labels,
+                            key="notification_announcement_recipient_v4548",
+                        )
+                        recipient_key = people[labels.index(selected_person)]["key"]
+                announcement_title = st.text_input(
+                    "Title",
+                    placeholder="Example: Audit Department Advisory",
+                    key="notification_announcement_title_v4548",
+                )
+                announcement_message = st.text_area(
+                    "Information",
+                    placeholder="Enter the information users need to know.",
+                    key="notification_announcement_message_v4548",
+                )
+                if st.button(
+                    "Send Notification",
+                    type="primary",
+                    width="stretch",
+                    key="notification_announcement_send_v4548",
+                ):
+                    if not announcement_title.strip() or not announcement_message.strip():
+                        st.error("Enter both a title and the information to send.")
+                    else:
+                        created = create_announcement(
+                            client,
+                            title=announcement_title,
+                            message=announcement_message,
+                            created_by=str(user.get("full_name") or user.get("username") or "Administrator"),
+                            recipient_key=recipient_key,
+                        )
+                        if created:
+                            st.success("Notification sent.")
+                            st.rerun()
+                        else:
+                            st.error("Unable to send the notification. Check the notification database setup.")
+
+        st.divider()
+        if not notifications:
+            st.info("No notifications yet.")
+            return
+
+        for index, row in enumerate(notifications[:30]):
+            notification_id = str(row.get("id") or "")
+            is_read = bool(row.get("is_read"))
+            title = str(row.get("title") or "IARS Notification")
+            category = str(row.get("category") or "Information")
+            message = str(row.get("message") or "")
+            created_label = _notification_time_label(row.get("created_at"))
+            with st.container(border=True):
+                prefix = "✓" if is_read else "●"
+                st.markdown(f"**{prefix} {title}**")
+                st.caption(f"{category}" + (f" · {created_label}" if created_label else ""))
+                if message:
+                    st.write(message)
+                action_col, read_col = st.columns([1.15, 1])
+                action_page = str(row.get("action_page") or "").strip()
+                with action_col:
+                    if action_page and st.button(
+                        "Open",
+                        key=f"notification_open_{index}_{notification_id}",
+                        width="stretch",
+                    ):
+                        if not is_read:
+                            mark_notification_read(client, notification_id, user)
+                        _navigate_to_page(_notification_nav_label(action_page))
+                        st.rerun()
+                with read_col:
+                    if st.button(
+                        "Mark as read" if not is_read else "Read",
+                        key=f"notification_read_{index}_{notification_id}",
+                        width="stretch",
+                        disabled=is_read,
+                    ):
+                        mark_notification_read(client, notification_id, user)
+                        st.rerun()
 
 def _navigate_to_page(nav_label: str) -> None:
     """Update navigation before rerender so the correct item is highlighted immediately."""
@@ -1858,6 +2140,20 @@ elif _pending_page_transition:
 
 auth_config = read_auth_config(st.secrets)
 auth_client, auth_user = render_auth_gate(auth_config)
+
+_notification_setup_v4548 = notification_setup_status(auth_client)
+_notification_records_v4548 = (
+    list_user_notifications(auth_client, auth_user, limit=80)
+    if _notification_setup_v4548.ready
+    else []
+)
+_notification_unread_v4548 = unread_notification_count(_notification_records_v4548)
+_notification_page_title_v4548 = (
+    f"({_notification_unread_v4548}) Internal Audit Report System"
+    if _notification_unread_v4548
+    else "Internal Audit Report System | EDL GROUP OF COMPANIES"
+)
+st.set_page_config(page_title=_notification_page_title_v4548)
 
 _sidebar_expand_token = st.session_state.pop(SIDEBAR_EXPAND_ONCE_KEY, "")
 if _sidebar_expand_token:
@@ -3633,6 +3929,7 @@ def render_policy_folder_library_page(
                         folder_id=str(selected_folder.get("id", "") or ""),
                         folder_name=selected_folder_name,
                     )
+                    notify_new_policy(client, record, uploaded_by=uploader_name)
                     _invalidate_session_cache(records_cache_key)
                     st.session_state["iars_policy_folder_success_v4_4_69"] = (
                         f'{record.get("original_filename", uploaded_document.name)} was uploaded to "{selected_folder_name}".'
@@ -4845,8 +5142,16 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.47",
+    version="4.5.48",
     page_title=page_key,
+    unread_notifications=_notification_unread_v4548,
+)
+_render_notification_center_v4548(
+    auth_client,
+    auth_user,
+    auth_config,
+    _notification_setup_v4548,
+    _notification_records_v4548,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
 st.markdown('<div class="iars-workspace-lift-anchor-v4529" aria-hidden="true"></div>', unsafe_allow_html=True)
