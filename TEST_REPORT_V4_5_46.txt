@@ -1,0 +1,10 @@
+IARS V4.5.46 TEST REPORT
+
+- Full bundled pytest regression suite: 35 passed.
+- 1,000 save-to-render FRS simulations: actual final_report_submitted_at retained and rendered.
+- Browser DOM width test at 120px month-cell width: Report Submitted, Antonio, Audit Date, and Submitted date all fit without clipping.
+- Protected-file hash comparison against V4.5.45: 44 protected files unchanged.
+- Python compilation: passed.
+- ZIP integrity: passed after packaging.
+
+Live Streamlit Cloud behavior must still be confirmed after deployment.

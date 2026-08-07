@@ -907,7 +907,11 @@ def _month_box_label(entry: dict[str, Any] | None, holiday_rows: list[dict[str, 
         return "＋ Schedule", "empty"
 
     info = report_stage_info(entry, holiday_rows)
-    display_stage = _display_stage(info.stage)
+    # Keep the workflow/database stage as FRS, but use a clearer user-facing
+    # label inside the completed-report month box.  Do not change the status
+    # dropdown or database value.
+    display_stage = "Report Submitted" if info.stage == "FRS" else _display_stage(info.stage)
+    style_stage = _display_stage(info.stage)
     nickname = _clean_text(entry.get("auditor_nickname")) or nickname_for(entry.get("auditor_full_name"))
     audit_date = _box_date(entry.get("accomplished_date"))
 
@@ -945,15 +949,23 @@ def _month_box_label(entry: dict[str, Any] | None, holiday_rows: list[dict[str, 
             f"Audit Date:\u00A0{audit_date}",
             f"Due:\u00A0{_box_date(info.deadline)}",
         ]
-    else:  # FRS
+    else:  # FRS / completed final report
+        # ``report_stage_info`` returns the actual FRS submission date as its
+        # deadline for this terminal stage.  Use it as a defensive fallback in
+        # case a partially shaped row omits final_report_submitted_at.  The
+        # shorter "Submitted" label also keeps the actual date visible inside
+        # compact month cells instead of clipping it after the label.
+        submission_date = _box_date(entry.get("final_report_submitted_at") or info.deadline)
         lines = [
             display_stage,
             nickname,
             f"Audit Date:\u00A0{audit_date}",
-            f"Submission Date:\u00A0{_box_date(entry.get('final_report_submitted_at'))}",
+            f"Submitted:\u00A0{submission_date}",
         ]
 
-    return "\n".join(line for line in lines if line), _stage_slug(display_stage)
+    # Styling still follows the real workflow stage so Report Submitted keeps
+    # the approved green FRS palette.
+    return "\n".join(line for line in lines if line), _stage_slug(style_stage)
 
 
 def _query_params_as_dict() -> dict[str, Any]:
@@ -1094,7 +1106,7 @@ def _render_gantt_css() -> None:
         .iars-gantt-month-box:focus-visible {outline:3px solid rgba(23,92,211,.25);outline-offset:1px;}
         .iars-gantt-month-stage {font-size:.70rem;font-weight:850;}
         .iars-gantt-month-auditor {font-size:.69rem;font-weight:800;}
-        .iars-gantt-month-date {font-size:.55rem;font-weight:700;white-space:nowrap;letter-spacing:-.02em;}
+        .iars-gantt-month-date {font-size:.50rem;font-weight:700;white-space:nowrap;letter-spacing:-.035em;}
         .iars-gantt-month-box.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
         .iars-gantt-month-box.in-progress {background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
         .iars-gantt-month-box.done {background:#DCFCE7;color:#14532D;border-color:#22C55E;}
@@ -1799,7 +1811,7 @@ def _get_gantt_grid_component() -> Any | None:
 .iars-gantt-v2-month-line{display:block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:clip;}
 .iars-gantt-v2-month-line.stage{font-size:.67rem;font-weight:850;}
 .iars-gantt-v2-month-line.auditor{font-size:.66rem;font-weight:800;}
-.iars-gantt-v2-month-line.date{font-size:.55rem;font-weight:700;letter-spacing:-.02em;}
+.iars-gantt-v2-month-line.date{font-size:.50rem;font-weight:700;letter-spacing:-.035em;}
 .iars-gantt-v2-month-box.scheduled{background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
 .iars-gantt-v2-month-box.in-progress{background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
 .iars-gantt-v2-month-box.done{background:#DCFCE7;color:#14532D;border-color:#22C55E;}

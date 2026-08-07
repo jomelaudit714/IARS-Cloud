@@ -1,0 +1,4 @@
+ROLLBACK BASELINE
+IARS_V4_5_45_GANTT_IMPORT_COMPATIBILITY_COMPLETE.zip
+
+If rollback is required, restore all V4.5.45 files together, reboot Streamlit, and hard refresh the browser.

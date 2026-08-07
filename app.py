@@ -4845,7 +4845,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.45",
+    version="4.5.46",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)

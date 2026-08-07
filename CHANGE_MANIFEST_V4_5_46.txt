@@ -1,0 +1,21 @@
+IARS V4.5.46 CHANGE MANIFEST
+
+BASELINE
+- IARS_V4_5_45_GANTT_IMPORT_COMPATIBILITY_COMPLETE.zip
+
+REQUESTED CHANGES
+1. In Yearly Audit Gantt month cells, terminal FRS status is displayed as "Report Submitted".
+2. The actual final-report submission date is always rendered in the completed-report box.
+3. The completed-report date line uses the compact label "Submitted: MM/DD/YY" so the date remains visible in the compact month cell.
+
+FUNCTIONAL FILES MODIFIED
+- iars_gantt.py
+- app.py (version display only: 4.5.46)
+
+TESTS UPDATED/ADDED
+- tests/test_gantt_dashboard_sidebar_frs_v4544.py
+- tests/test_gantt_click_safe_stage_formats_v4543.py
+- tests/test_gantt_report_submitted_v4546.py
+
+PROTECTED MODULES
+- PDF Tagging, Audit Extraction, Auth/Profile, Archive, Excel Conversion, Weekly Itinerary, Document Library, requirements, assets, Supabase SQL, and other unrelated files were hash-verified unchanged from V4.5.45.
