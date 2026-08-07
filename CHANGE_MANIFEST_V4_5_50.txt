@@ -1,0 +1,39 @@
+IARS V4.5.50 CHANGE MANIFEST
+Baseline: IARS V4.5.49 LIVE NOTIFICATION NO REFRESH COMPLETE
+
+Requested change: Auditor/User Yearly Audit Gantt operational visibility only.
+
+LOCKED RULES IMPLEMENTED
+1. Current Philippine month schedules assigned to the signed-in auditor remain visible for the entire current month, regardless of workflow stage, including FRS / Report Submitted.
+2. When the calendar moves to the next month, a prior-month row whose stage is FRS / Report Submitted is hidden from the auditor view.
+3. Prior-month and prior-year rows remain visible while unfinished or requiring action/report submission, including Scheduled/Overdue, In Progress, Done waiting for IRS, Overdue: IRS, For FRS, and Overdue: FRS.
+4. Future-month/future-year schedules are hidden from the auditor operational view until they become current.
+5. Filtering is display-only: no master/schedule records are deleted or changed.
+6. Admin/Supervisor Yearly Audit Gantt remains full and unchanged.
+7. All January-December columns remain visible; only auditor row/schedule visibility is narrowed.
+8. Frequency count continues to use the complete selected-year schedule set, so hiding completed rows does not reduce historical Done frequency.
+
+EXISTING RUNTIME FILES MODIFIED
+- app.py: version label only (4.5.50)
+- iars_gantt.py: isolated auditor operational-visibility filter + preserved full-entry frequency source
+
+TEST FILES
+- tests/test_live_notifications_v4549.py: version assertion advanced to 4.5.50; live-notification behavior assertions unchanged.
+- tests/test_auditor_operational_gantt_v4550.py: new regression tests for current-month, backlog, FRS rollover, future rows, and auditor ownership.
+
+PROTECTED RUNTIME MODULES UNCHANGED
+- iars_pdf_editor.py
+- iars_parser.py
+- iars_notifications.py
+- iars_weekly_itinerary.py
+- iars_auth.py
+- iars_archive.py
+- iars_excel_conversion.py
+- iars_document_library.py
+- iars_theme.py
+- iars_extract_worker.py
+- requirements.txt / packages.txt
+- existing SQL migrations
+- all assets and Master Data files
+
+No Supabase migration required.

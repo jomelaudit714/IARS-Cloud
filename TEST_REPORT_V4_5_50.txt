@@ -1,0 +1,29 @@
+IARS V4.5.50 TEST REPORT
+
+Baseline: V4.5.49 live notification release.
+Scope: Auditor/User Yearly Audit Gantt current-month + unresolved backlog visibility.
+
+RESULTS
+- Pytest regression suite: 29 passed / 0 failed.
+- Operational visibility randomized simulation: 5,000 cases passed.
+- Python compilation: 17 Python files compiled successfully.
+- Current-month FRS / Report Submitted retained: PASS.
+- Prior-month FRS hidden after month rollover: PASS.
+- Prior-month unfinished/overdue audit tasks retained: PASS.
+- Prior-month Done waiting for IRS retained: PASS.
+- Prior-month For FRS / Overdue: FRS retained: PASS.
+- Future-month schedules hidden for auditor: PASS.
+- Other auditor schedules hidden: PASS.
+- Previous-year unresolved backlog retained; previous-year FRS hidden: PASS.
+- Admin path remains unfiltered by the new auditor helper: PASS by code-path regression.
+- Live notification fragment regression tests retained and passed.
+- Locked audit extraction regression tests retained and passed.
+- Full-frequency source preserved while auditor rows are filtered: PASS by code-path regression.
+
+CHANGE CONTROL
+- Existing files changed: app.py, iars_gantt.py, tests/test_live_notifications_v4549.py.
+- New test: tests/test_auditor_operational_gantt_v4550.py.
+- 63 baseline files remained byte-for-byte unchanged before release-document additions.
+- No existing files removed.
+- No dependency changes.
+- No SQL changes required.

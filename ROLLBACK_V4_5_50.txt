@@ -1,0 +1,4 @@
+IARS V4.5.50 ROLLBACK NOTE
+If rollback is needed, redeploy the complete V4.5.49 package:
+IARS_V4_5_49_LIVE_NOTIFICATION_NO_REFRESH_COMPLETE.zip
+No database rollback is required because V4.5.50 has no Supabase migration.

@@ -1505,6 +1505,7 @@ def _filter_masters(
     month_filter: int | None,
     sort_by: str,
     sort_desc: bool,
+    frequency_entries: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     lookup = _entry_lookup(entries)
     current_key = _name_key(current_user_name)
@@ -2182,6 +2183,7 @@ def _render_matrix(
     month_filter: int | None,
     sort_by: str,
     sort_desc: bool,
+    frequency_entries: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     filtered = _filter_masters(
         masters,
@@ -2201,7 +2203,7 @@ def _render_matrix(
         return []
 
     lookup = _entry_lookup(entries)
-    done_counts = done_frequency_by_master(masters, entries)
+    done_counts = done_frequency_by_master(masters, frequency_entries if frequency_entries is not None else entries)
 
     # V4.5.44: use a Components V2 grid so keyboard navigation remains a
     # browser-only action.  A Python rerun/editor request is emitted only by a
@@ -2301,6 +2303,59 @@ def _load_gantt_data(client: Any, year: int) -> tuple[list[dict[str, Any]], list
         list_schedule_entries(client, year),
         list_holidays(client, year, active_only=True),
     )
+
+
+def _auditor_operational_entries(
+    entries: Iterable[dict[str, Any]],
+    holiday_rows: list[dict[str, Any]],
+    *,
+    schedule_year: int,
+    current_user_name: str,
+    today: date | None = None,
+) -> list[dict[str, Any]]:
+    """Return only auditor rows that still belong in the operational Gantt view.
+
+    Rules locked in V4.5.50:
+    - Current Philippine month: keep every schedule assigned to the auditor, even
+      when the final report (FRS / Report Submitted) is already complete.
+    - Earlier months/years: keep only unfinished work.  Once the report reaches
+      FRS, the row leaves the auditor view beginning the next month.
+    - Future months/years: do not show them yet.
+
+    This is a presentation filter only.  No schedule/master record is deleted or
+    modified, and administrator/supervisor views continue to receive the full set.
+    """
+    today = today or _today_pht()
+    current_key = _name_key(current_user_name)
+    selected_year = int(schedule_year)
+    visible: list[dict[str, Any]] = []
+
+    for entry in entries:
+        if _name_key(entry.get("auditor_full_name")) != current_key:
+            continue
+        try:
+            schedule_month = int(entry.get("schedule_month") or 0)
+        except (TypeError, ValueError):
+            continue
+        if schedule_month not in MONTHS:
+            continue
+
+        if selected_year > today.year:
+            continue
+        if selected_year == today.year and schedule_month > today.month:
+            continue
+
+        # Keep the whole current month, including already-submitted FRS rows.
+        if selected_year == today.year and schedule_month == today.month:
+            visible.append(entry)
+            continue
+
+        # Previous months/years remain only while action/report submission is
+        # still pending.  FRS is the terminal stage and disappears next month.
+        if report_stage_info(entry, holiday_rows, today=today).stage != "FRS":
+            visible.append(entry)
+
+    return visible
 
 
 def _alert_line(entry: dict[str, Any], masters: dict[str, dict[str, Any]], info: ReportStageInfo) -> str:
@@ -2464,9 +2519,14 @@ def render_yearly_gantt_page(
         st.error(f"Unable to load the Yearly Audit Gantt: {exc}")
         return
 
-    visible_entries = entries if admin else [
-        entry for entry in entries if _name_key(entry.get("auditor_full_name")) == _name_key(current_name)
-    ]
+    today = _today_pht()
+    visible_entries = entries if admin else _auditor_operational_entries(
+        entries,
+        holidays,
+        schedule_year=year,
+        current_user_name=current_name,
+        today=today,
+    )
     stages = [report_stage_info(entry, holidays).stage for entry in visible_entries]
     metric_cols = st.columns(5)
     metric_cols[0].metric("Assigned" if not admin else "Scheduled", len(visible_entries))
@@ -2508,7 +2568,14 @@ def render_yearly_gantt_page(
     )
     sort_desc = st.toggle("Descending order", value=False, key="iars_gantt_sort_desc_v4520")
     month_filter = None if month_label == "All" else list(month_name).index(month_label)
-    st.caption("Month filter affects custodian rows only. All January–December columns remain visible for every matching row.")
+    if admin:
+        st.caption("Month filter affects custodian rows only. All January–December columns remain visible for every matching row.")
+    else:
+        st.caption(
+            f"Auditor view: {month_name[today.month]} {today.year} schedules stay visible for the whole month, "
+            "including Report Submitted. Earlier unfinished/overdue tasks stay visible until FRS is submitted; "
+            "completed prior-month FRS rows and future schedules are hidden. All January–December columns remain visible."
+        )
     st.markdown(
         '<div class="iars-gantt-legend" aria-label="Gantt status color legend">'
         '<span class="iars-gantt-chip scheduled">Scheduled</span>'
@@ -2524,7 +2591,7 @@ def render_yearly_gantt_page(
     _render_matrix(
         client,
         masters,
-        entries,
+        entries if admin else visible_entries,
         holidays,
         year=year,
         admin=admin,
@@ -2536,6 +2603,7 @@ def render_yearly_gantt_page(
         month_filter=month_filter,
         sort_by=sort_by,
         sort_desc=sort_desc,
+        frequency_entries=entries,
     )
 
     st.divider()
