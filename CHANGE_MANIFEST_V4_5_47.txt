@@ -1,0 +1,11 @@
+IARS V4.5.47 CHANGE MANIFEST
+
+BASE VERSION
+- V4.5.46
+
+FILES MODIFIED
+- iars_gantt.py: larger date text and slightly taller month boxes/rows.
+- app.py: version display only, 4.5.47.
+
+PROTECTED
+- All other functional modules and dependencies remain unchanged from V4.5.46.

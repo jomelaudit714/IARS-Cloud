@@ -1087,7 +1087,7 @@ def _render_gantt_css() -> None:
         .iars-gantt-native-table th:nth-child(n+6),.iars-gantt-native-table td:nth-child(n+6){width:120px;min-width:120px;max-width:120px;padding-left:.20rem;padding-right:.20rem;}
         .iars-gantt-native-table thead th {position:sticky;top:0;z-index:100;height:54px;background:#EAF0F8;color:#0B2B55;text-align:center!important;font-weight:800;line-height:1.12;word-break:normal;overflow-wrap:anywhere;box-shadow:0 2px 0 #C8D4E3;}
         .iars-gantt-native-table thead th:nth-child(4) {font-size:.58rem!important;letter-spacing:-.035em;white-space:nowrap;overflow:visible;}
-        .iars-gantt-native-table tbody td {height:108px;background:#FFFFFF;word-break:break-word;line-height:1.16;}
+        .iars-gantt-native-table tbody td {height:118px;background:#FFFFFF;word-break:break-word;line-height:1.16;}
         .iars-gantt-native-table tbody tr:hover td {background:#F8FAFC;}
         .iars-gantt-native-table th:nth-child(1),.iars-gantt-native-table td:nth-child(1){position:sticky;left:0;}
         .iars-gantt-native-table th:nth-child(2),.iars-gantt-native-table td:nth-child(2){position:sticky;left:92px;}
@@ -1100,13 +1100,13 @@ def _render_gantt_css() -> None:
         .iars-gantt-native-table .iars-static-cell {text-align:left;font-weight:600;font-size:.66rem;}
         .iars-gantt-native-table .iars-accountability {text-align:center;font-weight:800;white-space:nowrap;font-size:.64rem;letter-spacing:-.02em;}
         .iars-gantt-native-table .iars-frequency {text-align:center;font-weight:800;white-space:nowrap;font-size:.68rem;}
-        .iars-gantt-month-box {display:flex;min-height:94px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.08rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .12rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.08;transition:transform .06s ease,border-color .06s ease,box-shadow .06s ease,filter .06s ease;cursor:pointer;touch-action:manipulation;}
+        .iars-gantt-month-box {display:flex;min-height:104px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.08rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .12rem;text-align:center;text-decoration:none!important;font-weight:750;line-height:1.08;transition:transform .06s ease,border-color .06s ease,box-shadow .06s ease,filter .06s ease;cursor:pointer;touch-action:manipulation;}
         .iars-gantt-month-box:hover {transform:translateY(-1px);box-shadow:0 2px 7px rgba(15,23,42,.12);filter:brightness(.99);}
         .iars-gantt-month-box:active {transform:translateY(0) scale(.985);box-shadow:none;}
         .iars-gantt-month-box:focus-visible {outline:3px solid rgba(23,92,211,.25);outline-offset:1px;}
         .iars-gantt-month-stage {font-size:.70rem;font-weight:850;}
         .iars-gantt-month-auditor {font-size:.69rem;font-weight:800;}
-        .iars-gantt-month-date {font-size:.50rem;font-weight:700;white-space:nowrap;letter-spacing:-.035em;}
+        .iars-gantt-month-date {font-size:.60rem;font-weight:700;white-space:nowrap;letter-spacing:-.035em;}
         .iars-gantt-month-box.scheduled {background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
         .iars-gantt-month-box.in-progress {background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
         .iars-gantt-month-box.done {background:#DCFCE7;color:#14532D;border-color:#22C55E;}
@@ -1805,13 +1805,13 @@ def _get_gantt_grid_component() -> Any | None:
 .iars-gantt-v2-static{font-weight:600;font-size:.66rem;text-align:left;white-space:normal;overflow-wrap:anywhere;}
 .iars-gantt-v2-accountability{font-weight:800;font-size:.64rem;text-align:center;white-space:nowrap;}
 .iars-gantt-v2-frequency{font-weight:800;font-size:.68rem;text-align:center;white-space:nowrap;}
-.iars-gantt-v2-month-box{display:flex;min-height:94px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.08rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .12rem;text-align:center;font-weight:750;line-height:1.08;cursor:pointer;user-select:none;transition:border-color .06s ease,box-shadow .06s ease,filter .06s ease;}
+.iars-gantt-v2-month-box{display:flex;min-height:104px;width:100%;box-sizing:border-box;flex-direction:column;align-items:center;justify-content:center;gap:.08rem;border:1px solid #CBD5E1;border-radius:9px;padding:.24rem .12rem;text-align:center;font-weight:750;line-height:1.08;cursor:pointer;user-select:none;transition:border-color .06s ease,box-shadow .06s ease,filter .06s ease;}
 .iars-gantt-v2-month-box:hover{box-shadow:0 2px 7px rgba(15,23,42,.12);filter:brightness(.99);}
 .iars-gantt-v2-month-box:active{transform:scale(.988);box-shadow:none;}
 .iars-gantt-v2-month-line{display:block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:clip;}
 .iars-gantt-v2-month-line.stage{font-size:.67rem;font-weight:850;}
 .iars-gantt-v2-month-line.auditor{font-size:.66rem;font-weight:800;}
-.iars-gantt-v2-month-line.date{font-size:.50rem;font-weight:700;letter-spacing:-.035em;}
+.iars-gantt-v2-month-line.date{font-size:.60rem;font-weight:700;letter-spacing:-.035em;}
 .iars-gantt-v2-month-box.scheduled{background:#EAF2FF;color:#1E3A8A;border-color:#3B82F6;}
 .iars-gantt-v2-month-box.in-progress{background:#FFF4E5;color:#7C2D12;border-color:#F59E0B;}
 .iars-gantt-v2-month-box.done{background:#DCFCE7;color:#14532D;border-color:#22C55E;}
