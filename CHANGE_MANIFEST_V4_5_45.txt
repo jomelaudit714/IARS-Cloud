@@ -1,0 +1,25 @@
+IARS V4.5.45 CHANGE MANIFEST
+
+BASELINE
+- IARS V4.5.44 complete deployment.
+
+REQUESTED / OBSERVED ISSUE
+- Streamlit app failed at app.py import line while importing Gantt dashboard symbols.
+
+ROOT CAUSE CONTROL
+- V4.5.44 app.py hard-required render_gantt_dashboard_panel.
+- If GitHub/Streamlit briefly had app.py V4.5.44 with an older iars_gantt.py (for example V4.5.43), Python raised ImportError and the entire app failed before startup.
+
+FUNCTIONAL CHANGE
+- app.py now imports the stable Gantt page functions normally.
+- Dashboard panel import is guarded: use render_gantt_dashboard_panel when available; otherwise fall back to render_gantt_dashboard_alert instead of crashing.
+- Packaged iars_gantt.py remains the V4.5.44 implementation, so a complete V4.5.45 deployment shows the requested new dashboard panel.
+
+PROTECTED MODULES
+- Audit Extraction/parser rules: unchanged.
+- PDF Tagging: unchanged.
+- Auth/Profile: unchanged.
+- Archive: unchanged.
+- Excel Conversion: unchanged.
+- Weekly Itinerary implementation: unchanged.
+- Requirements/Supabase/assets: unchanged.

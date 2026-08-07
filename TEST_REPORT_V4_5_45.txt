@@ -1,0 +1,8 @@
+IARS V4.5.45 TEST REPORT
+
+- Python compilation: PASS
+- ZIP integrity: PASS
+- Current Gantt module export check: PASS
+- Compatibility import with V4.5.44 Gantt module: PASS
+- Compatibility import with V4.5.43 Gantt module: PASS (fallback used)
+- Protected-file hash comparison against V4.5.44: PASS for all files outside app.py and release metadata

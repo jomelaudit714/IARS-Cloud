@@ -107,10 +107,18 @@ from iars_excel_conversion import (
     render_warehouse_conversion_page,
 )
 from iars_gantt import (
-    render_gantt_dashboard_panel,
     render_gantt_master_data_page,
     render_yearly_gantt_page,
 )
+
+# V4.5.45 deployment-compatibility guard:
+# A mixed GitHub deployment (new app.py with an older iars_gantt.py) must not
+# crash the whole application. Prefer the new dashboard panel when present,
+# otherwise fall back to the older dashboard alert until iars_gantt.py catches up.
+try:
+    from iars_gantt import render_gantt_dashboard_panel
+except ImportError:
+    from iars_gantt import render_gantt_dashboard_alert as render_gantt_dashboard_panel
 
 
 SIDEBAR_EXPAND_ONCE_KEY = "iars_force_sidebar_expand_once"
@@ -4837,7 +4845,7 @@ selected_page = st.session_state["main_navigation"]
 page_key = selected_page.split(" ", 1)[1] if " " in selected_page else selected_page
 _render_app_header_v4503(
     auth_user,
-    version="4.5.44",
+    version="4.5.45",
     page_title=page_key,
 )
 render_profile_menu(auth_client, auth_user, auth_config)
